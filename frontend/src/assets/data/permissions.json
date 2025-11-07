@@ -1,0 +1,6 @@
+{
+  "role": ["create", "update", "delete", "view"],
+  "user": ["create", "update", "delete", "view"],
+  "product": ["create", "update", "delete", "view"],
+  "library": ["create", "update", "delete", "view"]
+}

@@ -1,0 +1,687 @@
+import Child from "../../models/library/Child.js";
+import MPN from "../../models/library/MPN.js";
+import XLSX from "xlsx";
+import path from "path";
+import { mapRowToSchemaforMPN } from "../../utils/mapRowToSchema.js";
+import Category from "../../models/Category.js";
+import Suppliers from "../../models/Suppliers.js";
+import UOM from "../../models/UOM.js";
+
+const fieldMap = {
+  "MPN": "MPN",
+  "Manufacturer": "Manufacturer",
+  "Description": "Description",
+  "UOM": "UOM",
+  "Storage Location": "StorageLocation",
+  "RFQ Unit Price": "RFQUnitPrice",
+  "MOQ": "MOQ",
+  "RFQ Date": "RFQDate",
+  "Supplier": "Supplier",
+  "Lead time_WK": "LeadTime_WK",
+  "Category": "Category",
+};
+
+
+function mapRowToSchema(row) {
+  const mapped = {};
+  for (const key in row) {
+    if (fieldMap[key]) {
+      mapped[fieldMap[key]] = row[key];
+    }
+  }
+  return mapped;
+}
+
+
+
+/**
+ * Add new MPN
+ */
+export const addMpn = async (req, res) => {
+  try {
+    const mpn = new MPN(req.body);
+    await mpn.save();
+    return res.status(201).json({ success: true, message: "MPN created", data: mpn });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Update MPN
+ */
+export const updateMpn = async (req, res) => {
+  try {
+    const mpn = await MPN.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!mpn) return res.status(404).json({ success: false, message: "MPN not found" });
+    return res.json({ success: true, message: "MPN updated", data: mpn });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Delete MPN
+ */
+export const deleteMpn = async (req, res) => {
+  try {
+    const mpn = await MPN.findByIdAndDelete(req.params.id);
+    if (!mpn) return res.status(404).json({ success: false, message: "MPN not found" });
+    // Optionally also delete its children
+    // await Child.deleteMany({ mpn: mpn._id });
+    await Child.updateMany(
+      { mpn: mpn._id },
+      { $set: { isDeleted: true } } // <-- mark as deleted
+    );
+    return res.json({ success: true, message: "MPN deleted" });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Get MPN by ID
+ */
+export const getMpnById = async (req, res) => {
+  try {
+    const mpn = await MPN.findById(req.params.id);
+    if (!mpn) return res.status(404).json({ success: false, message: "MPN not found" });
+    return res.json({ success: true, data: mpn });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Get all MPN with filters
+ */
+// export const getAllMpn = async (req, res) => {
+//   try {
+//     const filters = req.query || {};
+//     const mpns = await MPN.find(filters).populate("children");
+//     return res.json({ success: true, data: mpns });
+//   } catch (err) {
+//     return res.status(400).json({ success: false, message: err.message });
+//   }
+// };
+
+// export const getAllMpn = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 10, search = "" } = req.query;
+
+//     const query = {};
+//     if (search) {
+//       // Search by MPN, Manufacturer, or Description
+//       query.$or = [
+//         { MPN: { $regex: search, $options: "i" } },
+//         { Manufacturer: { $regex: search, $options: "i" } },
+//         { Description: { $regex: search, $options: "i" } },
+//       ];
+//     }
+
+//     const total = await MPN.countDocuments(query);
+
+//     const mpns = await MPN.find(query)
+//       .skip((page - 1) * limit)
+//       .limit(parseInt(limit))
+//       .lean();
+
+//     return res.json({
+//       success: true,
+//       data: mpns,
+//       total,
+//       page: parseInt(page),
+//       limit: parseInt(limit),
+//     });
+//   } catch (err) {
+//     return res.status(400).json({ success: false, message: err.message });
+//   }
+// };
+
+// export const getAllMpn = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 10, search = "" } = req.query;
+
+//     const query = {};
+
+//    if (search) {
+//   const regex = new RegExp(search, 'i'); // 'i' = case-insensitive
+//   query.$or = [
+//     { MPN: regex },
+//     { Manufacturer: regex },
+//     { Description: regex }
+//   ];
+// }
+
+
+//     const total = await MPN.countDocuments(query);
+
+//     const mpns = await MPN.find(query)
+//       .populate("UOM", "code")
+//       .populate("Supplier", "companyName")
+//       .populate("Category", "name")
+//       .sort({ createdAt: -1 }) // latest first
+//       .skip((page - 1) * limit)
+//       .limit(parseInt(limit))
+//       .lean();
+
+//     return res.json({
+//       success: true,
+//       data: mpns,
+//       total,
+//       page: parseInt(page),
+//       limit: parseInt(limit),
+//     });
+//   } catch (err) {
+//     return res.status(400).json({ success: false, message: err.message });
+//   }
+// };
+
+import mongoose from "mongoose"; // make sure this is imported where your controllers live
+
+
+export const getAllMpn = async (req, res) => {
+  try {
+    let { page, limit, search = "", category, status } = req.query;
+
+    // 🔁 Decide: paginate or return all
+    const hasPaging = page !== undefined || limit !== undefined;
+
+    // Build query
+    const query = {};
+
+    if (typeof search === "string" && search.trim()) {
+      const regex = new RegExp(search.trim(), "i");
+      query.$or = [{ MPN: regex }, { Manufacturer: regex }, { Description: regex }];
+    }
+
+    if (category && category !== "all" && mongoose.Types.ObjectId.isValid(category)) {
+      query.Category = new mongoose.Types.ObjectId(category);
+    }
+
+    if (status && status !== "all") {
+      // NOTE: field name "Status" vs "status" as per your schema
+      query.Status = status;
+    }
+
+    // ⚙️ Common find (without skip/limit)
+    const baseFind = MPN.find(query)
+      .populate("UOM", "code")
+      .populate("Supplier", "companyName")
+      .populate("Category", "name")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (hasPaging) {
+      // 📄 Paginated response
+      const pageNum  = Math.max(parseInt(page, 10) || 1, 1);
+      const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
+
+      const [totalItems, items] = await Promise.all([
+        MPN.countDocuments(query),
+        baseFind.skip((pageNum - 1) * limitNum).limit(limitNum),
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        data: items,
+        pagination: {
+          mode: "paged",
+          currentPage: pageNum,
+          itemsPerPage: limitNum,
+          totalItems,
+          totalPages: Math.ceil(totalItems / limitNum),
+        },
+      });
+    } else {
+      // 📦 Return ALL records (no pagination)
+      const items = await baseFind;
+      return res.status(200).json({
+        success: true,
+        data: items,
+        pagination: {
+          mode: "all",
+          totalItems: items.length,
+        },
+      });
+    }
+  } catch (err) {
+    console.error("❌ getAllMpn Error:", err);
+    return res.status(400).json({ success: false, message: err.message || "Error fetching MPNs" });
+  }
+};
+
+// export const getAllMpn = async (req, res) => {
+//   try {
+//     const {
+//       page = 1,
+//       limit = 10,
+//       search = "",
+//       category,          // e.g. "68ee7ca0e27c1446454dfcb2"
+//       status             // e.g. "Active"
+//     } = req.query;
+
+//     const query = {};
+
+//     // 🔎 generic search across key text fields
+//     if (search) {
+//       const regex = new RegExp(search, "i");
+//       query.$or = [
+//         { MPN: regex },
+//         { Manufacturer: regex },
+//         { Description: regex }
+//       ];
+//     }
+
+//     // 🏷️ filter by Category (ObjectId) if provided
+//     if (category && category !== "all" && mongoose.Types.ObjectId.isValid(category)) {
+//       query.Category = new mongoose.Types.ObjectId(category);
+//     }
+
+//     // ✅ filter by Status if provided
+//     // NOTE: if your schema uses lowercase `status`, change "Status" to "status" below.
+//     if (status) {
+//       query.Status = status; // or query.status = status; depending on your schema field
+//     }
+
+//     const pageNum = Number(page) || 1;
+//     const limitNum = Number(limit) || 10;
+
+//     const [total, mpns] = await Promise.all([
+//       MPN.countDocuments(query),
+//       MPN.find(query)
+//         .populate("UOM", "code")
+//         .populate("Supplier", "companyName")
+//         .populate("Category", "name")
+//         .sort({ createdAt: -1 })
+//         .skip((pageNum - 1) * limitNum)
+//         .limit(limitNum)
+//         .lean()
+//     ]);
+
+//     return res.json({
+//       success: true,
+//       data: mpns,
+//       total,
+//       page: pageNum,
+//       limit: limitNum
+//     });
+//   } catch (err) {
+//     return res.status(400).json({ success: false, message: err.message });
+//   }
+// };
+
+
+
+
+/**
+ * Import MPN data from Excel
+ */
+// export const importMpn = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ success: false, message: "No file uploaded" });
+//     }
+
+//     const workbook = XLSX.readFile(req.file.path);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const rows = XLSX.utils.sheet_to_json(sheet);
+
+//     let results = { inserted: 0, updated: 0, errors: [] };
+
+//     for (const row of rows) {
+//       try {
+//         const mappedRow = mapRowToSchema(row); // Excel → Schema format
+
+//         if (!mappedRow.MPN) {
+//           results.errors.push({ row, error: "Missing MPN" });
+//           continue;
+//         }
+
+//         const existing = await MPN.findOne({ MPN: mappedRow.MPN });
+
+//         if (existing) {
+//           await MPN.updateOne(
+//             { MPN: mappedRow.MPN },
+//             { $set: mappedRow }
+//           );
+//           results.updated++;
+//         } else {
+//           await MPN.create(mappedRow);
+//           results.inserted++;
+//         }
+//       } catch (err) {
+//         results.errors.push({ row, error: err.message });
+//       }
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "MPN data import completed",
+//       summary: results,
+//     });
+//   } catch (err) {
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+
+
+// export const importMpn = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ success: false, message: "No file uploaded" });
+//     }
+
+//     const workbook = XLSX.readFile(req.file.path);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const rows = XLSX.utils.sheet_to_json(sheet);
+
+//     let results = { inserted: 0, updated: 0, errors: [] };
+
+//     for (const row of rows) {
+//       try {
+//         const mappedRow = mapRowToSchemaforMPN(row);
+//         console.log('-------mappedRow', mappedRow)
+//         if (!mappedRow.MPN) {
+//           results.errors.push({ row, error: "Missing MPN" });
+//           continue;
+//         }
+
+//         // ---- Convert names to IDs ----
+//         if (mappedRow.UOM) {
+//           const uomDoc = await UOM.findOne({
+//             code: { $regex: new RegExp(`^${mappedRow.UOM}$`, "i") } // case-insensitive match
+//           });
+//           if (uomDoc) mappedRow.UOM = uomDoc._id;
+//           else mappedRow.UOM = null;
+//         }
+
+
+//         if (mappedRow.Supplier) {
+//           const supplierDoc = await Suppliers.findOne({ companyName: mappedRow.Supplier });
+//           if (supplierDoc) mappedRow.Supplier = supplierDoc._id;
+//           else mappedRow.Supplier = null;
+//         }
+
+//         if (mappedRow.Category) {
+//           const categoryDoc = await Category.findOne({ name: mappedRow.Category });
+//           if (categoryDoc) mappedRow.Category = categoryDoc._id;
+//           else mappedRow.Category = null;
+//         }
+
+
+//         const existing = await MPN.findOne({ MPN: mappedRow.MPN });
+
+//         if (existing) {
+//           await MPN.updateOne(
+//             { MPN: mappedRow.MPN },
+//             { $set: mappedRow }
+//           );
+//           results.updated++;
+//         } else {
+//           await MPN.create(mappedRow);
+//           results.inserted++;
+//         }
+//       } catch (err) {
+//         results.errors.push({ row, error: err.message });
+//       }
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "MPN data import completed",
+//       summary: results,
+//     });
+//   } catch (err) {
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+
+export const importMpn = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+    }
+
+    const workbook = XLSX.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    let results = { inserted: 0, updated: 0, errors: [] };
+
+    for (const row of rows) {
+      try {
+        const mappedRow = mapRowToSchemaforMPN(row);
+        console.log('-------mappedRow', mappedRow);
+
+        if (!mappedRow.MPN) {
+          results.errors.push({ row, error: "Missing MPN" });
+          continue;
+        }
+
+        // --- Convert names to IDs or set null ---
+        if (mappedRow.UOM) {
+          const uomDoc = await UOM.findOne({
+            code: { $regex: new RegExp(`^${mappedRow.UOM}$`, "i") },
+          });
+          mappedRow.UOM = uomDoc ? uomDoc._id : null;
+        } else {
+          mappedRow.UOM = null;
+        }
+
+        if (mappedRow.Supplier) {
+          const supplierDoc = await Suppliers.findOne({ companyName: mappedRow.Supplier });
+          mappedRow.Supplier = supplierDoc ? supplierDoc._id : null;
+        } else {
+          mappedRow.Supplier = null;
+        }
+
+        if (mappedRow.Category) {
+          const categoryDoc = await Category.findOne({ name: mappedRow.Category });
+          mappedRow.Category = categoryDoc ? categoryDoc._id : null;
+        } else {
+          mappedRow.Category = null;
+        }
+
+        // --- Insert or update ---
+        const existing = await MPN.findOne({ MPN: mappedRow.MPN });
+
+        if (existing) {
+          await MPN.updateOne({ MPN: mappedRow.MPN }, { $set: mappedRow });
+          results.updated++;
+        } else {
+          await MPN.create(mappedRow);
+          results.inserted++;
+        }
+      } catch (err) {
+        results.errors.push({ row, error: err.message });
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: "MPN data import completed",
+      summary: results,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Export MPN data to Excel
+ */
+// export const exportMpn = async (req, res) => {
+//   try {
+//     const mpns = await MPN.find().lean();
+
+//     const excelData = mpns.map(item => ({
+//       MPN: item.MPN,
+//       Manufacturer: item.Manufacturer,
+//       Description: item.Description,
+//       UOM: item.UOM,
+//       StorageLocation: item.StorageLocation,
+//       RFQUnitPrice: item.RFQUnitPrice,
+//       MOQ: item.MOQ,
+//       RFQDate: item.RFQDate ? item.RFQDate.toISOString().split("T")[0] : "",
+//       Supplier: item.Supplier,
+//       LeadTime_WK: item.LeadTime_WK,
+//       Category: item.Category,
+//       Status: item.Status,
+//       Note: item.note
+//     }));
+
+//     const worksheet = XLSX.utils.json_to_sheet(excelData);
+//     const workbook = XLSX.utils.book_new();
+//     XLSX.utils.book_append_sheet(workbook, worksheet, "MPNs");
+
+//     // Generate buffer
+//     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+//     // Set headers
+//     res.setHeader("Content-Disposition", "attachment; filename=mpn_export.xlsx");
+//     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+//     return res.send(buffer);
+
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// }
+
+
+
+export const exportMpn = async (req, res) => {
+  try {
+    const mpns = await MPN.find()
+      .populate("UOM", "code")
+      .populate("Supplier", "companyName")
+      .populate("Category", "name")
+      .lean();
+
+    // 1) Column schema: header order, keys, and base width hints
+    const COLUMNS = [
+      { header: "MPN", key: "MPN", min: 12 },
+      { header: "Manufacturer", key: "Manufacturer", min: 14 },
+      { header: "Description", key: "Description", min: 24, max: 60 },
+      { header: "UOM", key: "UOM", min: 6 },
+      { header: "Storage Location", key: "StorageLocation", min: 16 },
+      { header: "RFQ Unit Price", key: "RFQUnitPrice", min: 14 },
+      { header: "MOQ", key: "MOQ", min: 8 },
+      { header: "RFQ Date", key: "RFQDate", min: 12 },
+      { header: "Supplier", key: "Supplier", min: 16 },
+      { header: "Lead Time (wk)", key: "LeadTime_WK", min: 12 },
+      { header: "Category", key: "Category", min: 14 },
+      { header: "Status", key: "Status", min: 12 },
+      { header: "Note", key: "note", min: 24, max: 60 },
+    ];
+
+    // 2) Map DB docs -> rows with proper JS types
+    const rows = (mpns || []).map((item) => ({
+      MPN: item.MPN ?? "",
+      Manufacturer: item.Manufacturer ?? "",
+      Description: item.Description ?? "",
+      UOM: item.UOM?.code ?? item.UOM ?? "",
+      StorageLocation: item.StorageLocation ?? "",
+      RFQUnitPrice: item.RFQUnitPrice ?? "",
+      MOQ: item.MOQ ?? "",
+      RFQDate: item.RFQDate ? new Date(item.RFQDate) : "",
+      Supplier: item.Supplier?.companyName ?? item.Supplier ?? "",
+      LeadTime_WK: item.LeadTime_WK ?? "",
+      Category: item.Category?.name ?? item.Category ?? "",
+      Status: item.Status ?? "",
+      note: item.note ?? "",
+    }));
+
+
+    // 3) Build a dataset in the exact header order
+    const headers = COLUMNS.map((c) => c.header);
+    const keyByHeader = Object.fromEntries(COLUMNS.map((c) => [c.header, c.key]));
+
+    const ordered = rows.map((r) =>
+      headers.reduce((acc, h) => {
+        acc[h] = r[keyByHeader[h]];
+        return acc;
+      }, {})
+    );
+
+    // 4) Create worksheet: preserve dates & numbers
+    const ws = XLSX.utils.json_to_sheet(ordered, {
+      header: headers,
+      skipHeader: false,
+      cellDates: true,       // keep Date cells as dates
+    });
+
+    // 5) Apply a date number format to the RFQ Date column
+    // Find its 1-based column index
+    const rfqDateColIdx = headers.indexOf("RFQ Date") + 1; // 1..N
+    if (rfqDateColIdx > 0) {
+      const range = XLSX.utils.decode_range(ws["!ref"]);
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) { // skip header (row 0)
+        const addr = XLSX.utils.encode_cell({ r: R, c: rfqDateColIdx - 1 });
+        const cell = ws[addr];
+        if (cell && cell.t === "d") {
+          // set display format to DD/MM/YYYY
+          cell.z = "dd/mm/yyyy";
+        }
+      }
+    }
+
+    // 6) Auto column widths (based on header + cell text length)
+    const autoCols = headers.map((h, cIdx) => {
+      const baseMin = COLUMNS[cIdx]?.min ?? 10;
+      const baseMax = COLUMNS[cIdx]?.max ?? 40;
+
+      const range = XLSX.utils.decode_range(ws["!ref"]);
+      let maxLen = String(h).length;
+
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        const cellAddr = XLSX.utils.encode_cell({ r: R, c: cIdx });
+        const cell = ws[cellAddr];
+
+        let v = "";
+        if (cell) {
+          if (cell.t === "n") v = String(cell.v);
+          else if (cell.t === "d") v = XLSX.SSF.format(cell.z || "dd/mm/yyyy", cell.v);
+          else v = String(cell.v ?? "");
+        }
+        maxLen = Math.max(maxLen, v.length);
+      }
+
+      // padding + clamp
+      const wch = Math.min(Math.max(maxLen + 2, baseMin), baseMax);
+      return { wch };
+    });
+    ws["!cols"] = autoCols;
+
+    // 7) Freeze header row & enable AutoFilter
+    const totalCols = headers.length;
+    const lastColLetter = XLSX.utils.encode_col(totalCols - 1);
+    const lastRowNumber =
+      XLSX.utils.decode_range(ws["!ref"]).e.r + 1; // 1-based
+
+    ws["!autofilter"] = { ref: `A1:${lastColLetter}1` };
+    // Freeze top row (supported in modern SheetJS)
+    ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft" };
+
+    // 8) Build workbook and return buffer
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "MPNs");
+
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx", cellDates: true });
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=mpn_export_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    return res.send(buffer);
+  } catch (err) {
+    console.error("exportMpn error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
