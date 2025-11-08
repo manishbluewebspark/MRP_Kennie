@@ -3,11 +3,11 @@ const dev = {
 };
 
 const prod = {
-  API_ENDPOINT_URL: "http://13.204.207.229/api"  // Live backend
+  API_ENDPOINT_URL: "http://13.204.207.229/api/api"  // Live backend
 };
 
 const test = {
-  API_ENDPOINT_URL: "http://13.204.207.229/api" // Staging backend
+  API_ENDPOINT_URL: "https://staging.yourdomain.com/api" // Staging backend
 };
 
 const getEnv = () => {
