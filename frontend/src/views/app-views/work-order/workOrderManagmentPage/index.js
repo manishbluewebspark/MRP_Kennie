@@ -15,6 +15,7 @@ import { fetchSystemSettings } from "store/slices/systemSettingsSlice";
 import dayjs from 'dayjs'
 import ProjectService from "services/ProjectService";
 import MoveToProductionModal from "./MoveToProductionModal";
+import SystemSettingsService from "services/SystemSettingsService";
 const { confirm } = Modal;
 
 const fmt = (d) => (d ? dayjs(d).format("DD/MM/YYYY") : "-");
@@ -54,8 +55,9 @@ const DeliveryOrderPage = () => {
     const [isProductSettingmodalVisible, setIsProductSettingmodalVisible] = useState(false);
     const [importWorkOrderModalVisible, setImportWorkOrderModalVisible] = useState(false);
     const { workOrderSettings } = useSelector(
-        (state) => state.systemSettings.workOrderSettings
+        (state) => state.systemSettings
     );
+  
     const [selectedRecord, setSelectedRecord] = useState(null);
     const [isDrawerVisible, setIsDrawerVisible] = useState(false);
     const { projects } = useSelector(
@@ -64,8 +66,8 @@ const DeliveryOrderPage = () => {
     const [isProductionvisible, setisProductionvisible] = useState(false);
     const [projectData, setProjectData] = useState([])
     const [moveToProdId, setMoveToProdId] = useState(null)
-    console.log('---fff', projects)
-const [moving, setMoving] = useState(false);
+    console.log('---workOrderSettings', workOrderSettings)
+    const [moving, setMoving] = useState(false);
 
 
     const handleMoveToProduction = (id) => {
@@ -88,12 +90,12 @@ const [moving, setMoving] = useState(false);
         //     key: "customer",
         //     render: (text) => <span style={{ fontSize: '13px' }}>{text || 'N/A'}</span>
         // },
-        {
-            title: "Project No",
-            dataIndex: "projectNo",
-            key: "projectNo",
-            render: (text) => <Tag color="blue">{text}</Tag>
-        },
+        // {
+        //     title: "Project No",
+        //     dataIndex: "projectNo",
+        //     key: "projectNo",
+        //     render: (text) => <Tag color="blue">{text}</Tag>
+        // },
         {
             title: "Drawing No",
             dataIndex: ["drawing", "drawingNumber"],
@@ -398,7 +400,15 @@ const [moving, setMoving] = useState(false);
     };
 
     const handleSave = async (settings) => {
-        console.log('---------save', settings)
+
+        const payload = {
+            produtionSettings: settings
+        }
+        const res = await SystemSettingsService.addOrUpdateSystemSettings(payload);
+        console.log('------produtionSettings',res)
+        if (res.data?.success) {
+          dispatch(fetchSystemSettings())
+        }
         setIsProductSettingmodalVisible(false);
     }
 
@@ -435,7 +445,7 @@ const [moving, setMoving] = useState(false);
 
     const handleConfirm = async () => {
         if (!moveToProdId) return;
-       setMoving(true);
+        setMoving(true);
 
         try {
             await WorkOrderService.moveToProduction(moveToProdId, {}); // body optional
@@ -446,7 +456,7 @@ const [moving, setMoving] = useState(false);
         } catch (e) {
             message.error(e?.response?.data?.message || e.message || "Failed to move");
         } finally {
-         setMoving(false);
+            setMoving(false);
 
         }
     };
@@ -527,7 +537,7 @@ const [moving, setMoving] = useState(false);
                 onCancel={handleCancel}
                 onCreate={handleCreate}
                 editingWorkOrder={editingWorkOrder}
-                workOrderSettings={workOrderSettings}
+                workOrderSettings={workOrderSettings?.workOrderSettings}
                 projectData={projectData}
             />
 
@@ -543,6 +553,7 @@ const [moving, setMoving] = useState(false);
                 visible={isProductSettingmodalVisible}
                 onCancel={() => setIsProductSettingmodalVisible(false)}
                 onSave={handleSave}
+                produtionSettings={workOrderSettings?.produtionSettings}
             />
 
             <ImportWorkOrderModal

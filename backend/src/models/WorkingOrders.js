@@ -46,11 +46,11 @@ const workOrderSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
-    projectNo: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    // projectNo: {
+    //   type: String,
+    //   required: true,
+    //   trim: true,
+    // },
     poNumber: {
       type: String,
       trim: true,

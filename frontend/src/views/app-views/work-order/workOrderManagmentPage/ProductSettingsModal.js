@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Form, Input, InputNumber, Card, Divider, Alert, Typography } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 
 const { Title, Text, Paragraph } = Typography;
 
-const WorkOrderSettingsModal = ({ visible, onCancel, onSave }) => {
+const WorkOrderSettingsModal = ({ visible, onCancel, onSave, produtionSettings }) => {
+    console.log('------produtionSettings',produtionSettings)
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
 
@@ -25,6 +26,14 @@ const WorkOrderSettingsModal = ({ visible, onCancel, onSave }) => {
         form.resetFields();
         onCancel();
     };
+
+    useEffect(() => {
+    if (!visible) return;
+    form.setFieldsValue({
+      productLeadTime: produtionSettings?.productLeadTime ?? 2,
+      alertThreshold: produtionSettings?.alertThreshold ?? 2,
+    });
+  }, [visible, produtionSettings, form]);
 
     return (
         <Modal
@@ -49,7 +58,7 @@ const WorkOrderSettingsModal = ({ visible, onCancel, onSave }) => {
                 {/* Product Lead Time Section */}
                 <Card size="small" style={{ marginBottom: 16, border: '1px solid #d9d9d9' }}>
                     <Title level={5} style={{ marginBottom: 8 }}>
-                        Product Lead Time (Weeks)
+                        Production Lead Time (Weeks)
                     </Title>
                     <Form.Item
                         name="productLeadTime"

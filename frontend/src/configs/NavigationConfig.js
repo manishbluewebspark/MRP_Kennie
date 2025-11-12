@@ -928,7 +928,7 @@ const docsNavTree = [{
   title: 'sidenav.docs',
   icon: BookOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   submenu: [
     {
       key: 'docs-documentation',
@@ -955,7 +955,7 @@ const adminNavTree = [{
   title: 'admin.admin',
   icon: DashboardOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   permissions: ["view:role"],
   submenu: [
     {
@@ -976,7 +976,7 @@ const salesNavTree = [{
   title: 'sales.sales',
   icon: DashboardOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   submenu: [
     {
       key: 'sales-create-quote',
@@ -1023,7 +1023,7 @@ const workingOrderNavTree = [{
   title: 'work-order.work-order',
   icon: FileTextOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   submenu: [
     {
       key: 'work-order-managment',
@@ -1050,7 +1050,7 @@ const libraryNavTree = [{
   title: 'library.library',
   icon: DatabaseOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   submenu: [
     {
       key: 'library-mpn',
@@ -1079,7 +1079,7 @@ const settingsNavTree = [{
   title: 'settings.settings',
   icon: SettingOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   // permissions: ["view:role"],
   submenu: [
     {
@@ -1154,7 +1154,7 @@ const inventoryNavTree = [{
   title: 'inventory.inventory',
   icon: DashboardOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   submenu: [
     {
       key: 'inventory-list',
@@ -1181,7 +1181,7 @@ const purchaseNavTree = [{
   title: 'purchase.purchase',
   icon: DashboardOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   submenu: [
     {
       key: 'purchase-order',
@@ -1224,7 +1224,7 @@ const productionNavTree = [{
   title: 'production.production',
   icon: DashboardOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
+  isGroupTitle: false,
   submenu: [
     {
       key: 'production',
@@ -1240,10 +1240,10 @@ const productionNavTree = [{
 const navigationConfig = [
   // ...adminNavTree,
   ...salesNavTree,
-  // ...workingOrderNavTree,
-  // ...inventoryNavTree,
-  // ...purchaseNavTree,
-  // ...productionNavTree,
+  ...workingOrderNavTree,
+  ...inventoryNavTree,
+    ...productionNavTree,
+  ...purchaseNavTree,
   ...libraryNavTree,
   ...settingsNavTree,
   // ...dashBoardNavTree,

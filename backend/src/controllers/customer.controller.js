@@ -1,9 +1,25 @@
 import Customer from "../models/Customer.js";
 
+const normalizeEmail = (e) => (e ? String(e).trim().toLowerCase() : null);
 
 // Create Customer
 export const createCustomer = async (req, res) => {
   try {
+
+    const emailLower = normalizeEmail(req?.body?.email);
+    if (emailLower) {
+      const exists = await Customer.findOne({ email: emailLower }).lean();
+      if (exists) {
+        return res.status(404).json({
+          success: false,
+          code: 'EMAIL_EXISTS',
+          message: 'A customer with this email already exists.',
+        });
+      }
+    }
+
+
+
     const customer = new Customer({
       ...req.body,
       createdBy: req.user.id, // Assuming req.user is set by auth middleware
@@ -19,16 +35,34 @@ export const createCustomer = async (req, res) => {
 // Update Customer
 export const updateCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    });
-    if (!customer) return res.status(404).json({ success: false, message: "Customer not found" });
-    return res.json({ success: true, data: customer });
+    const { id } = req.params;
+    const { email, ...updateData } = req.body;
+
+    // 1️⃣ Check if customer exists
+    const customer = await Customer.findById(id);
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    // 2️⃣ If email is being updated, check if already used by another customer
+    if (email && email !== customer.email) {
+      const existingEmail = await Customer.findOne({ email });
+      if (existingEmail) {
+        return res.status(400).json({ success: false, message: "Email already in use" });
+      }
+      updateData.email = email; // safely update email if unique
+    }
+
+    // 3️⃣ Perform update
+    const updatedCustomer = await Customer.findByIdAndUpdate(id, updateData, { new: true });
+
+    return res.json({ success: true, data: updatedCustomer });
   } catch (err) {
     console.error("Update Customer Error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 // Delete Customer
 export const deleteCustomer = async (req, res) => {

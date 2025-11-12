@@ -5,9 +5,9 @@ const { Schema, model } = mongoose;
 const PurchaseOrderItemSchema = new Schema({
   idNumber: { type: String, required: true }, // e.g., 123456
   description: { type: String, required: true },
-  mpn: { type: String },
+  mpn: { type: mongoose.Schema.Types.ObjectId, ref: "MPNLibrary", required: true },
   manufacturer: { type: String },
-  uom: { type: String }, // unit of measure
+  uom: { type: mongoose.Schema.Types.ObjectId, ref: "UOM", required: true }, // unit of measure
   qty: { type: Number, required: true, default: 0 },
   unitPrice: { type: Number, required: true, default: 0 },
   discount: { type: Number, required: true, default: 0 }, // %
@@ -18,12 +18,12 @@ const PurchaseOrderSchema = new Schema(
   {
     poNumber: { type: String, required: true, unique: true },
     poDate: { type: Date, required: true, default: Date.now },
-    supplier: { type: mongoose.Schema.Types.ObjectId, ref: "Suppliers", required: true },
+    supplier: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier", required: true },
     referenceNo: { type: String },
     needDate: { type: Date },
-    workOrderNo: { type: String },
+    workOrderNo: { type: mongoose.Schema.Types.ObjectId, ref: "WorkOrder", required: true },
     shipToAddress: { type: String },
-    termsAndConditions: { type: String },
+    termsConditions: { type: String },
 
     items: [PurchaseOrderItemSchema],
 
@@ -34,7 +34,7 @@ const PurchaseOrderSchema = new Schema(
       finalAmount: { type: Number, default: 0 },
     },
 
-    status: { type: String, enum: ["Draft", "Confirmed", "Cancelled"], default: "Draft" },
+    status: { type: String, enum: ["Pending", "Confirmed", "Cancelled","Emailed","Draft", "Closed"], default: "Pending" },
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }

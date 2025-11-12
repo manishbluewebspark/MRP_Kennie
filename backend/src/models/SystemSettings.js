@@ -8,6 +8,10 @@ const systemSettingsSchema = new mongoose.Schema(
       workOrderAlertTrigger: { type: Number, default: 0 }, // days before commit date
       noCommitDateAlertTrigger: { type: Number, default: 0 }, // days after PO sent
     },
+    produtionSettings: {
+      alertThreshold: { type: Number, default: 0 }, // weeks before committed date
+      productLeadTime: { type: Number, default: 0 }, // days before need date
+    },
     gstSettings: {
       gstPercentage: { type: Number, default: 0 },
     },

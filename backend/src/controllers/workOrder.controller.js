@@ -149,9 +149,9 @@ export const createWorkOrder = async (req, res) => {
     if (!workOrderNo) {
       return res.status(400).json({ success: false, message: 'workOrderNo is required' });
     }
-    if (!projectNo) {
-      return res.status(400).json({ success: false, message: 'projectNo is required' });
-    }
+    // if (!projectNo) {
+    //   return res.status(400).json({ success: false, message: 'projectNo is required' });
+    // }
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'At least one item is required' });
     }
@@ -702,4 +702,8 @@ export const getAllProductionWordOrders = async (req, res) => {
     });
   }
 };
+
+export const getTotalMPNNeeded = async(req,res)=>{
+  
+}
 

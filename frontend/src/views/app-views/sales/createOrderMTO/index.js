@@ -252,6 +252,7 @@ const MTOList = () => {
   // Modal flows
   const handleCloseQuoteModal = () => {
     setQuoteModalVisible(false);
+    setSelectedQuoteType(null)
   };
 
   const handleQuoteTypeSelect = (type) => {

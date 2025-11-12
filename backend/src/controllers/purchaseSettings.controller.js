@@ -42,7 +42,7 @@ export const getPurchaseSettingById = async (req, res) => {
  */
 export const addOrUpdatePurchaseSetting = async (req, res) => {
   try {
-    const { addresses, termsConditions, status } = req.body;
+    const { addresses, defaultTerms, status } = req.body;
 
     // Fetch the first (and only) existing document
     let existing = await PurchaseSettings.findOne();
@@ -50,7 +50,7 @@ export const addOrUpdatePurchaseSetting = async (req, res) => {
     if (existing) {
       // Update existing
       existing.addresses = addresses || existing.addresses;
-      existing.termsConditions = termsConditions || existing.termsConditions;
+      existing.defaultTerms = defaultTerms || existing.defaultTerms;
       existing.status = status || existing.status;
       await existing.save();
 
@@ -63,7 +63,7 @@ export const addOrUpdatePurchaseSetting = async (req, res) => {
       // Create new only once
       const newSetting = await PurchaseSettings.create({
         addresses,
-        termsConditions,
+        defaultTerms,
         status: status || "Active",
       });
 

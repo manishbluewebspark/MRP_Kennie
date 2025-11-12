@@ -1,5 +1,5 @@
 import express from "express";
-import { createWorkOrder, deleteWorkOrder, exportWorkOrders, exportWorkOrdersPDF, exportWorkOrdersWord, getAllProductionWordOrders, getAllWorkOrders, getWorkOrderById, importWorkOrders, moveToProduction, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
+import { createWorkOrder, deleteWorkOrder, exportWorkOrders, exportWorkOrdersPDF, exportWorkOrdersWord, getAllProductionWordOrders, getAllWorkOrders, getTotalMPNNeeded, getWorkOrderById, importWorkOrders, moveToProduction, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { upload } from "..//middlewares/upload.js";
 
@@ -22,4 +22,6 @@ router.patch("/:id/delivery", authenticate, updateDeliveryInfo);
 
 router.post("/workOrder/:id/move-to-production", authenticate, moveToProduction);
 router.get("/workOrder/production", authenticate, getAllProductionWordOrders)
+
+router.get('/workOrder/totalMPNNeeded',authenticate, getTotalMPNNeeded)
 export default router;

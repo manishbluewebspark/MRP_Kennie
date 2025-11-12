@@ -65,7 +65,7 @@ const getSideNavMenuItem = (navItem) =>
   navItem
     .filter(nav => !nav.permissions || hasPermission(nav.permissions)) // permission check yahan
     .map(nav => {
-      console.log('------fff', nav)
+    //   console.log('------fff', nav)
       return {
         key: nav.key,
         label: <MenuItem title={nav.title} {...(nav.isGroupTitle ? {} : {path: nav.path, icon: nav.icon})} />,
