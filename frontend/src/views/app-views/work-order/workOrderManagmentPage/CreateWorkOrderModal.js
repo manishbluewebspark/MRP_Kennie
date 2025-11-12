@@ -438,11 +438,11 @@ const CreateWorkOrderModal = ({
                 <Input />
               </Form.Item>
             </Col>
-            <Col xs={24} md={8}>
+            {/* <Col xs={24} md={8}>
               <Form.Item name="projectNo" label="Project No." rules={[{ required: true }]}>
                 <Input />
               </Form.Item>
-            </Col>
+            </Col> */}
             <Col xs={24} md={8}>
               <Form.Item name="poNumber" label="PO Number">
                 <Input />
@@ -451,7 +451,7 @@ const CreateWorkOrderModal = ({
           </Row>
 
           <Row gutter={[24, 16]}>
-            <Col xs={24} md={6}>
+            <Col xs={24} md={8}>
               <Form.Item name="projectType" label="Project Type" rules={[{ required: true }]}>
                 <Select placeholder="Select project type">
                   <Option value="cable_assembly">Cable Assembly</Option>
@@ -460,7 +460,7 @@ const CreateWorkOrderModal = ({
                 </Select>
               </Form.Item>
             </Col>
-            <Col xs={24} md={6}>
+            {/* <Col xs={24} md={6}>
               <Form.Item name="status" label="Status">
                 <Select placeholder="Select status">
                   <Option value="on_hold">On Hold</Option>
@@ -469,8 +469,8 @@ const CreateWorkOrderModal = ({
                   <Option value="cancelled">Cancelled</Option>
                 </Select>
               </Form.Item>
-            </Col>
-            <Col xs={24} md={6}>
+            </Col> */}
+            <Col xs={24} md={8}>
               <Form.Item name="needDate" label="Need Date" rules={[{ required: true }]}>
                 <DatePicker disabled style={{ width: "100%" }} format="DD/MM/YYYY" />
               </Form.Item>
@@ -478,7 +478,7 @@ const CreateWorkOrderModal = ({
                 Automatically calculated from Commit Date minus {workOrderSettings?.needDateCalculation || 0} weeks
               </div>
             </Col>
-            <Col xs={24} md={6}>
+            <Col xs={24} md={8}>
               <Form.Item name="commitDate" label="Commit Date" rules={[{ required: true }]}>
                 <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
               </Form.Item>

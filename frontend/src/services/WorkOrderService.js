@@ -62,6 +62,14 @@ WorkOrderService.getWorkOrdersByProject = (projectId) => {
   });
 };
 
+WorkOrderService.getDeliveryOrders = (params) => {
+  return fetch({
+    url: `/work-orders/workOrder/deliveryOrders`,
+    method: "get",
+    params
+  });
+};
+
 // Export work orders
 WorkOrderService.exportWorkOrders = () => {
   return fetch({
@@ -71,9 +79,17 @@ WorkOrderService.exportWorkOrders = () => {
   });
 };
 
+WorkOrderService.exportDeliveryWorkOrders = () => {
+  return fetch({
+    url: "/work-orders/workOrder/export/delivery/excel",
+    method: "get",
+    responseType: 'arraybuffer'
+  });
+};
+
 WorkOrderService.exportWorkOrdersPDF = () => {
   return fetch({
-    url: "/work-orders/workOrder/export/pdf",
+    url: "/work-orders/workOrder/export/delivery/pdf",
     method: "get",
     responseType: 'arraybuffer'
   });
@@ -81,7 +97,7 @@ WorkOrderService.exportWorkOrdersPDF = () => {
 
 WorkOrderService.exportWorkOrdersWord = () => {
   return fetch({
-    url: "/work-orders/workOrder/export/word",
+    url: "/work-orders/workOrder/export/delivery/word",
     method: "get",
     responseType: 'arraybuffer'
   });

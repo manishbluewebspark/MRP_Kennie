@@ -23,6 +23,8 @@ import categoryRoutes from "./routes/category.routes.js";
 import uomRoutes from "./routes/uom.routes.js";
 import purchaseSettingsRoutes from './routes/purchaseSettings.routes.js'
 import purchaseOrdersRoutes from './routes/purchaseOrder.routes.js'
+import receiveMaterialRoutes from './routes/receiveMaterial.routes.js'
+import inventoryRoutes from './routes/inventory.routes.js'
 import path from "path";
 dotenv.config(); // load .env
 
@@ -70,6 +72,11 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/uoms", uomRoutes);
 app.use("/api/purchase-settings", purchaseSettingsRoutes);
 app.use("/api/purchase-orders", purchaseOrdersRoutes);
+app.use("/api/receive-material", receiveMaterialRoutes);
+app.use("/api/inventory", inventoryRoutes);
+
+
+
 app.get("/api/health", (req, res) => {
   res.json({
     status: "OK",

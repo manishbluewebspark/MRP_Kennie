@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Table, Button, Space, Tag, message, Card, Input, Checkbox } from "antd";
+import { Table, Button, Space, Tag, message, Card, Input, Checkbox, DatePicker } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import GlobalTableActions from "components/GlobalTableActions";
 import useDebounce from "utils/debouce";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import WorkOrderService from "services/WorkOrderService"; // ← make sure this exists
-
+import dayjs from "dayjs";
 const renderBadge = (text, type) => {
   let color = "default";
   if (type === "status") {
@@ -41,13 +41,13 @@ const DeliveryOrderPage = () => {
       key: wo._id,
       _id: wo._id,
       workOrderNo: wo.workOrderNo,
-      drawingNo: firstItem?.drawingNo || firstItem?.drawingId?.drawingNo || "-",
-      project: wo.projectNo || "-",
+      drawingNo: wo?.drawingName || wo?.drawingName || "-",
+      project: wo.projectName || "-",
       customer: wo.customerName || wo.customer?.companyName || "-",
-      qty: firstItem?.quantity ?? wo.qty ?? "-",
+      qty: wo?.quantity ?? wo.qty ?? "-",
       poNumber: wo.poNumber || "-",
-      completedDate: wo.completedDate
-        ? new Date(wo.completedDate).toLocaleDateString("en-GB")
+      completedDate: wo.completeDate
+        ? new Date(wo.completeDate).toLocaleDateString("en-GB")
         : "-",
       targetDeliveryDate: wo.targetDeliveryDate
         ? new Date(wo.targetDeliveryDate).toLocaleDateString("en-GB")
@@ -69,7 +69,7 @@ const DeliveryOrderPage = () => {
         sortOrder = "desc",
       } = params;
 
-      const res = await WorkOrderService.getAllWorkOrders({
+      const res = await WorkOrderService.getDeliveryOrders({
         page: p,
         limit: l,
         search: q,
@@ -124,6 +124,23 @@ const DeliveryOrderPage = () => {
       fetchWorkOrders({ page, limit, search });
     }
   };
+
+  // Update Target Delivery Date
+const handleTargetDeliveryChange = async (record, date) => {
+  try {
+    const isoDate = date ? date.toISOString() : null;
+
+    await WorkOrderService.updateWorkOrder(record._id, {             // ensure backend knows which item
+      targetDeliveryDate: isoDate,         // ISO date string
+    });
+
+    message.success("Target Delivery Date updated");
+  } catch (e) {
+    console.error(e);
+    message.error("Failed to update Target Delivery Date");
+  }
+};
+
 
   // optimistic toggle for delivered
   const handleDeliveredToggle = async (record, checked) => {
@@ -191,15 +208,19 @@ const DeliveryOrderPage = () => {
       ),
     },
     {
-      title: "Target Delivery Date",
-      dataIndex: "targetDeliveryDate",
-      key: "targetDeliveryDate",
-      render: (text) => (
-        <Tag style={{ borderRadius: 12, background: "#1890ff", color: "#fff", border: "none", padding: "2px 10px" }}>
-          {text}
-        </Tag>
-      ),
-    },
+  title: "Target Delivery Date",
+  dataIndex: "targetDeliveryDate",
+  key: "targetDeliveryDate",
+  render: (_, record) => (
+    <DatePicker
+      value={record.targetDeliveryDate ? dayjs(record.targetDeliveryDate) : null}
+      onChange={(date) => handleTargetDeliveryChange(record, date)}
+      format="DD/MM/YYYY"
+      style={{ width: 130 }}
+      disabled={loading}
+    />
+  ),
+},
     {
       title: "Status",
       dataIndex: "status",
@@ -244,7 +265,7 @@ const DeliveryOrderPage = () => {
 
   const handleExport = async () => {
     try {
-      const res = await WorkOrderService.exportWorkOrders();
+      const res = await WorkOrderService.exportDeliveryWorkOrders();
       const blob = new Blob([res], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });

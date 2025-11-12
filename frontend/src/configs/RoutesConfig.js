@@ -145,7 +145,7 @@ export const protectedRoutes = [
     },
     {
         key: 'view-purchase-order',
-        path: `${APP_PREFIX_PATH}/purchase/view-purchase-order`,
+        path: `${APP_PREFIX_PATH}/purchase/view-purchase-order/:id`,
         component: React.lazy(() => import('views/app-views/purchase/viewPurchaseOrder/index')),
     },
     {

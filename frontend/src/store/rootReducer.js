@@ -14,6 +14,8 @@ import purchaseSettings from './slices/purchaseSettingSlice'
 import markupParameter from './slices/markupParameterSlice'
 import systemSettings from './slices/systemSettingsSlice'
 import projects from './slices/ProjectSlice'
+import workOrders from "./slices/workOrderSlice"
+import purchaseOrders from "./slices/purchaseOrderSlice"
 const rootReducer = (asyncReducers) => (state, action) => {
     const combinedReducer = combineReducers({
         theme,
@@ -30,7 +32,9 @@ const rootReducer = (asyncReducers) => (state, action) => {
         purchaseSettings,
         markupParameter,
         systemSettings,
+        workOrders,
         projects,
+        purchaseOrders,
         ...asyncReducers,
     })
     return combinedReducer(state, action)

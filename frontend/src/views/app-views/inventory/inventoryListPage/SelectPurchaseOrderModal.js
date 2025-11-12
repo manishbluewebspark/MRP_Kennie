@@ -1,33 +1,12 @@
 import React, { useState } from 'react';
 import { Modal, Card, Typography, Button, Divider, message } from 'antd';
 import { CalendarOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { formatDate } from 'utils/formatDate';
 
 const { Title, Text } = Typography;
 
-const SelectPurchaseOrderModal = ({ visible, onCancel, onSubmit }) => {
-  const purchaseOrders = [
-    {
-      id: "P25-00006",
-      vendor: "Jaytron",
-      poDate: "13/08/2025",
-      needDate: "11/08/2025",
-      pendingItems: "1/1 items pending"
-    },
-    {
-      id: "P25-00007",
-      vendor: "Jaytron",
-      poDate: "13/08/2025",
-      needDate: "11/08/2025",
-      pendingItems: "1/1 items pending"
-    },
-    {
-      id: "P25-00008",
-      vendor: "Jaytron",
-      poDate: "13/08/2025",
-      needDate: "11/08/2025",
-      pendingItems: "1/1 items pending"
-    }
-  ];
+const SelectPurchaseOrderModal = ({ visible, onCancel, onSubmit, purchaseOrders }) => {
+
 
   const handleReceiveClick = (purchaseOrder) => {
     // Call the onSubmit prop with the selected purchase order data
@@ -69,22 +48,22 @@ const SelectPurchaseOrderModal = ({ visible, onCancel, onSubmit }) => {
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
                     <Text strong style={{ fontSize: '14px' }}>
-                      {po.id}
+                      {po?.poNumber}
                     </Text>
                   </div>
                   <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: 4 }}>
-                    {po.vendor}
+                    {po?.supplier?.companyName}
                   </Text>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
                     <CalendarOutlined style={{ fontSize: '12px', color: '#8c8c8c', marginRight: 4 }} />
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      PO Date: {po.poDate}
+                      PO Date: {formatDate(po?.poDate)}
                     </Text>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}>
                     <ClockCircleOutlined style={{ fontSize: '12px', color: '#8c8c8c', marginRight: 4 }} />
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      • Need Date: {po.needDate}
+                      • Need Date: {formatDate(po?.needDate)}
                     </Text>
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Table, Button, Space, Tag, message, Card, Input, Checkbox, Col, Radio, Row, Typography } from "antd";
-import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, ExclamationCircleFilled, SettingFilled } from "@ant-design/icons";
+import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, ExclamationCircleFilled, SettingFilled, SearchOutlined, FileSearchOutlined } from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
 import GlobalTableActions from "components/GlobalTableActions";
@@ -8,6 +8,12 @@ import useDebounce from "utils/debouce";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import SelectPurchaseOrderModal from "./SelectPurchaseOrderModal";
 import ReceiveMaterialsModal from "./ReceiveMaterialsModal";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchPurchaseOrders } from "store/slices/purchaseOrderSlice";
+import ReceiveMaterialService from "services/ReceiveMaterial";
+import InventoryService from "services/InventoryService";
+import UpdateOutgoingQuantityModal from "../mtoInventoryList/UpdateOutgoingQuantityModal";
+import IncomingStockModal from "./IncomingStockModal";
 
 const { Title, Text } = Typography;
 
@@ -31,116 +37,142 @@ const customerData = [];
 const projectData = [];
 
 const InventoryListPage = () => {
+    const dispatch = useDispatch();
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState('material_required');
-
+    const [activeTab, setActiveTab] = useState('inventory_list');
+    const [selectedPO, setSelectedPO] = useState(null)
     const [isPurchaseOrderModalOpen, setIsPurchaseOrderModalOpen] = useState(false);
     const [isReceiveMaterialModalOpen, setIsReceiveMaterialModalOpen] = useState(false);
-    // Sample data for different tabs
-    const materialRequiredData = [
-        {
-            key: '1',
-            headerContent: {
-                title: "CABLE-AWG22",
-                tag: "EEEID",
-                workOrders: "2508-02",
-                current: "0",
-                alphaUome: "M",
-                required: "20"
-            }
-        },
-        {
-            key: '2',
-            headerContent: {
-                title: "CONNECTOR-5PIN",
-                tag: "URGENT",
-                workOrders: "2509-01",
-                current: "5",
-                alphaUome: "PCS",
-                required: "50"
-            }
-        }
-    ];
+    const [inventoryData, setInventoryData] = useState([]);
+    const [isUpdateInventoryModalOpen, setIsUpdateInventoryModalOpen] = useState(false);
+    const [showPoDataModal, setShowPoDataModal] = useState(false);
+    const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
+    const [selectedPurchaseData, setSelectedPurchaseData] = useState(null);
 
-    const inventoryAlertsData = [
-        {
-            key: '1',
-            headerContent: {
-                title: "RESISTOR-10K",
-                tag: "LOW STOCK",
-                workOrders: "2510-03",
-                current: "2",
-                alphaUome: "PCS",
-                required: "100"
-            }
-        },
-        {
-            key: '2',
-            headerContent: {
-                title: "CAPACITOR-100UF",
-                tag: "CRITICAL",
-                workOrders: "2511-04",
-                current: "1",
-                alphaUome: "PCS",
-                required: "25"
-            }
-        }
-    ];
+    const [lowStockAlertData, setLowStockAlertData] = useState([])
+    const [materialRequiredData, setMaterialRequiredData] = useState([])
+    const [pagination, setPagination] = useState({
+        current: 1,
+        pageSize: 10,
+        total: 0
+    });
 
-    const inventoryListData = [
-        {
-            key: '1',
-            no: '1',
-            mpn: 'oaoraa',
-            manufacturer: 'phoenixcontact',
-            description: 'EC-BIN-EDS',
-            storage: 'ELEC-BIN-E05',
-            balanceQty: '1345',
-            incomingQty: '-',
-            incomingPONo: '12345',
-            commitDate: '12/02/2025',
-            status: 'In Stock'
-        },
-        {
-            key: '2',
-            no: '2',
-            mpn: 'BS8151-0',
-            manufacturer: 'Turck',
-            description: 'Straight Male connector 5 pin',
-            storage: 'WH-A',
-            balanceQty: '0',
-            incomingQty: '10',
-            incomingPONo: 'PO-12345',
-            commitDate: '8/12/2025',
-            status: 'On Order'
-        },
-        {
-            key: '3',
-            no: '3',
-            mpn: 'CAP-100UF',
-            manufacturer: 'Panasonic',
-            description: 'Electrolytic Capacitor 100uF',
-            storage: 'ELEC-BIN-C12',
-            balanceQty: '5',
-            incomingQty: '50',
-            incomingPONo: 'PO-12346',
-            commitDate: '9/15/2025',
-            status: 'Low Stock'
+    const {
+        purchaseOrders,
+        summary,
+        loadingSummary,
+        error
+    } = useSelector(state => state.purchaseOrders);
+
+    console.log('-----purchaseOrders', purchaseOrders)
+
+
+
+    const getInventoryList = async (page = 1, search = '') => {
+        setLoading(true);
+        try {
+            const params = {
+                page,
+                limit: pagination.pageSize,
+                search: search
+            };
+
+            const response = await InventoryService.getInventoryList(params);
+            console.log('-------response', response)
+            if (response.success) {
+                setInventoryData(response.data);
+                setPagination({
+                    ...pagination,
+                    current: response.page,
+                    total: response.total
+                });
+            } else {
+                message.error('Failed to fetch inventory data');
+            }
+        } catch (error) {
+            console.error('Error fetching inventory:', error);
+            message.error('Error loading inventory data');
+        } finally {
+            setLoading(false);
         }
-    ];
+    };
+
+    const getMaterialRequiredList = async (page = 1, search = '') => {
+        setLoading(true);
+        try {
+            const params = {
+                page,
+                limit: pagination.pageSize,
+                search: search
+            };
+
+            const response = await InventoryService.getMaterialRequiredList(params);
+            console.log('-------response', response)
+            if (response.success) {
+                setMaterialRequiredData(response.data);
+                setPagination({
+                    ...pagination,
+                    current: response.page,
+                    total: response.total
+                });
+            } else {
+                message.error('Failed to fetch inventory data');
+            }
+        } catch (error) {
+            console.error('Error fetching inventory:', error);
+            message.error('Error loading inventory data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getLowStockAlertList = async (page = 1, search = '') => {
+        setLoading(true);
+        try {
+            const params = {
+                page,
+                limit: pagination.pageSize,
+                search: search
+            };
+
+            const response = await InventoryService.getLowStockAlertList(params);
+            console.log('-------response', response)
+            if (response.success) {
+                setLowStockAlertData(response.data);
+                setPagination({
+                    ...pagination,
+                    current: response.page,
+                    total: response.total
+                });
+            } else {
+                message.error('Failed to fetch inventory data');
+            }
+        } catch (error) {
+            console.error('Error fetching inventory:', error);
+            message.error('Error loading inventory data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        getInventoryList()
+        getLowStockAlertList()
+        getMaterialRequiredList()
+    }, [])
 
     // Material Required Columns
     const materialRequiredColumns = [
         {
             title: "",
-            dataIndex: "headerContent",
-            key: "headerContent",
-            render: (headerContent) => (
+            dataIndex: "MPN",
+            key: "MPN",
+            render: (_, record) => (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                     <ExclamationCircleFilled style={{
                         color: '#ff4d4f',
@@ -151,36 +183,36 @@ const InventoryListPage = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <Title level={4} style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
-                                    {headerContent.title}
+                                    {record?.MPN}
                                 </Title>
                             </div>
                             <div>
                                 <Tag color="red" style={{ fontSize: '14px', fontWeight: 'bold', padding: '2px 8px' }}>
-                                    {headerContent.tag}
+                                    {record?.Description}
                                 </Tag>
                             </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                             <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Required by Work Orders: {headerContent.workOrders}
+                                    Required by Work Orders: {record?.workOrders}
                                 </Text>
                             </div>
                             <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Current: {headerContent.current}
+                                    Current: {record?.CurrentQty}
                                 </Text>
                             </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                             <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Alpha + UOME: {headerContent.alphaUome}
+                                    Alpha + UOME: {record?.UOM}
                                 </Text>
                             </div>
                             <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Required: {headerContent.required}
+                                    Required: {record?.RequiredQty}
                                 </Text>
                             </div>
                         </div>
@@ -194,9 +226,9 @@ const InventoryListPage = () => {
     const inventoryAlertsColumns = [
         {
             title: "",
-            dataIndex: "headerContent",
-            key: "headerContent",
-            render: (headerContent) => (
+            dataIndex: "MPN",
+            key: "MPN",
+            render: (_, record) => (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                     <ExclamationCircleFilled style={{
                         color: '#ff4d4f',
@@ -207,36 +239,36 @@ const InventoryListPage = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <Title level={4} style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
-                                    {headerContent.title}
+                                    {record?.MPN}
                                 </Title>
                             </div>
                             <div>
                                 <Tag color="red" style={{ fontSize: '14px', fontWeight: 'bold', padding: '2px 8px' }}>
-                                    {headerContent.tag}
+                                    {record?.Manufacturer}
                                 </Tag>
                             </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                             <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Required by Work Orders: {headerContent.workOrders}
+                                    Required by Work Orders: {record?.Description}
                                 </Text>
                             </div>
                             <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Current: {headerContent.current}
+                                    Current: {record?.CurrentStock}
                                 </Text>
                             </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                             <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Alpha + UOME: {headerContent.alphaUome}
+                                    Alpha + UOME: {record?.UOM}
                                 </Text>
                             </div>
                             <div>
                                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Required: {headerContent.required}
+                                    Required: {record?.RecommendedOrder}
                                 </Text>
                             </div>
                         </div>
@@ -249,56 +281,54 @@ const InventoryListPage = () => {
     // Inventory List Columns
     const inventoryListColumns = [
         {
-            title: 'No.',
-            dataIndex: 'no',
-            key: 'no',
-            width: 60,
-            align: 'center',
-        },
-        {
             title: 'MPN',
-            dataIndex: 'mpn',
-            key: 'mpn',
+            dataIndex: 'MPN',
+            key: 'MPN',
             width: 120,
         },
         {
             title: 'Manufacturer',
-            dataIndex: 'manufacturer',
-            key: 'manufacturer',
+            dataIndex: 'Manufacturer',
+            key: 'Manufacturer',
             width: 150,
         },
         {
             title: 'Description',
-            dataIndex: 'description',
-            key: 'description',
+            dataIndex: 'Description',
+            key: 'Description',
             width: 180,
         },
         {
             title: 'Storage',
-            dataIndex: 'storage',
-            key: 'storage',
+            dataIndex: 'Storage',
+            key: 'Storage',
             width: 100,
             align: 'center',
         },
         {
             title: 'Balance Qty',
-            dataIndex: 'balanceQty',
-            key: 'balanceQty',
+            dataIndex: 'balanceQuantity',
+            key: 'balanceQuantity',
             width: 100,
             align: 'center',
         },
         {
             title: 'Incoming Qty',
-            dataIndex: 'incomingQty',
-            key: 'incomingQty',
+            dataIndex: 'IncomingQty',
+            key: 'IncomingQty',
             width: 120,
             align: 'center',
-        },
-        {
-            title: 'Incoming PO NO.',
-            dataIndex: 'incomingPONo',
-            key: 'incomingPONo',
-            width: 150,
+            render: (_, record) => (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                }}>
+                    <FileSearchOutlined onClick={() => handleOpenIncomingStock(record)} style={{ fontSize: '15px', color: '#1890ff' }} />
+                    <span>{record?.IncomingQty || 0}</span>
+                </div>
+            )
         },
         {
             title: 'Commit Date',
@@ -309,8 +339,8 @@ const InventoryListPage = () => {
         },
         {
             title: 'Status',
-            dataIndex: 'status',
-            key: 'status',
+            dataIndex: 'Status',
+            key: 'Status',
             width: 120,
             align: 'center',
             render: (status) => (
@@ -338,7 +368,7 @@ const InventoryListPage = () => {
                         fontSize: '18px',
                         cursor: 'pointer'
                     }}
-                    onClick={() => { handleEdit(record.key); setIsReceiveMaterialModalOpen(true) }}
+                    onClick={() => handleEdit(record)}
                 />
             ),
         },
@@ -390,13 +420,18 @@ const InventoryListPage = () => {
             case 'material_required':
                 return materialRequiredData;
             case 'inventory_alerts':
-                return inventoryAlertsData;
+                return lowStockAlertData;
             case 'inventory_list':
-                return inventoryListData;
+                return inventoryData;
             default:
                 return materialRequiredData;
         }
     };
+
+    useEffect(() => {
+        dispatch(fetchPurchaseOrders({ status: "Pending" }))
+    }, [dispatch]);
+
 
     // Get current columns based on active tab
     const getCurrentColumns = () => {
@@ -412,16 +447,66 @@ const InventoryListPage = () => {
         }
     };
 
-    const handleEdit = async (id) => {
+    const handleOpenIncomingStock = (data) => {
+        console.log('------data', data);
+        setSelectedPurchaseData(data);
+        setShowPoDataModal(true);
+    }
+
+
+    const handleEdit = async (inventoryItem) => {
         try {
-            console.log("Edit record:", id);
-            message.info("Edit functionality to be implemented");
-            // Add your edit logic here
+            setSelectedInventoryItem(inventoryItem);
+            setIsUpdateInventoryModalOpen(true);
+            console.log("Edit inventory item:", inventoryItem);
         } catch (err) {
-            console.error("Error editing record:", err);
-            message.error("Failed to edit record");
+            console.error("Error editing inventory:", err);
+            message.error("Failed to open edit modal");
         }
     };
+
+    const handleUpdateOutgoing = async (updateData) => {
+        try {
+            console.log('🔄 Starting adjustment...', updateData);
+
+            const adjustmentPayload = {
+                inventoryId: updateData.inventoryId,
+                adjustmentQuantity: updateData.adjustmentQuantity,
+                reason: updateData.reason,
+            };
+
+            console.log('📤 Payload:', adjustmentPayload);
+
+            const response = await InventoryService.adjustInventory(adjustmentPayload);
+
+            // ✅ DEBUG: Log complete response structure
+            console.log('🔍 Full Response:', response);
+            console.log('🔍 response.data:', response.data);
+            console.log('🔍 response.data.success:', response.data?.success);
+            console.log('🔍 response.data.data:', response.data?.data);
+
+            // ✅ Check all possible success conditions
+            if (response?.success === true) {
+                console.log('✅ SUCCESS: Adjustment completed');
+                message.success(`Success! New balance: ${response.data.inventory.balanceQuantity}`);
+                setIsUpdateInventoryModalOpen(false);
+                await getInventoryList();
+                return true;
+            } else {
+                console.log('❌ FAIL: Response success is false');
+                throw new Error(response?.message || 'Unknown error');
+            }
+
+        } catch (error) {
+            console.error('💥 Catch block error:', error);
+            console.log('💥 Error response:', error.response);
+
+            // Keep modal open for retry
+            message.error(error.message || 'Adjustment failed');
+            throw error;
+        }
+    };
+
 
     const handleDelete = async (id) => {
         try {
@@ -450,13 +535,32 @@ const InventoryListPage = () => {
     };
 
     const handleExport = async () => {
+        // setExportLoading(true);
         try {
-            console.log("Exporting data...");
-            message.success("Data exported successfully");
-            // Add your export logic here
+            const response = await InventoryService.exportToExcel({
+                search:''
+            });
+
+            // Create blob and download
+            const blob = new Blob([response], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `material-required-${Date.now()}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            message.success('Data exported successfully');
         } catch (err) {
-            console.error("Error exporting data:", err);
-            message.error("Failed to export data");
+            console.error('Error exporting data:', err);
+            message.error('Failed to export data');
+        } finally {
+            // setExportLoading(false);
         }
     };
 
@@ -488,13 +592,32 @@ const InventoryListPage = () => {
 
     const handlePurchaseOrderSubmit = async (status) => {
         console.log('Received handlePurchaseOrderSubmit Data:', status);
+        setSelectedPO(status)
         setIsPurchaseOrderModalOpen(false);
+        setIsReceiveMaterialModalOpen(true)
     }
 
     const handleReceiveSubmit = async (formData) => {
         console.log('Received Materials Data:', formData);
-        setIsReceiveMaterialModalOpen(false)
-    }
+
+        try {
+            // API call to save received materials
+            const response = await ReceiveMaterialService.takeReceiveMaterial(formData)
+            console.log('--------response', response)
+            if (response.success) {
+                message.success('Materials received successfully!');
+                setIsReceiveMaterialModalOpen(false);
+
+                // Refresh purchase orders data
+                dispatch(fetchPurchaseOrders());
+            } else {
+                message.error('Failed to receive materials');
+            }
+        } catch (error) {
+            console.error('Error receiving materials:', error);
+            message.error('Error receiving materials');
+        }
+    };
 
     return (
         <div>
@@ -582,39 +705,28 @@ const InventoryListPage = () => {
                 visible={isPurchaseOrderModalOpen}
                 onCancel={() => { setIsPurchaseOrderModalOpen(false) }}
                 onSubmit={handlePurchaseOrderSubmit}
+                purchaseOrders={purchaseOrders}
             />
 
             <ReceiveMaterialsModal
                 visible={isReceiveMaterialModalOpen}
                 onCancel={() => setIsReceiveMaterialModalOpen(false)}
                 onSubmit={handleReceiveSubmit}
-                purchaseOrderData={{
-                    purchaseOrderDetails: {
-                        poNumber: "123",
-                        projectNumber: "project1",
-                        projectType: "type1"
-                    },
-                    materials: [
-                        {
-                            key: "1",
-                            mpn: "1292C",
-                            manufacturer: "Alpha",
-                            description: "Cable, 22AWG",
-                            uom: "FEET",
-                            orderedQty: 155,
-                            needDate: "08/09/2025",
-                            committedDate: "03/09/2025",
-                            receivedQty: "50",
-                            rejectedQty: "5"
-                        }
-                    ],
-                    purchaseOrderHeader: {
-                        id: "P25-00006",
-                        vendor: "Jaytron",
-                        poDate: "13/08/2025",
-                        needDate: "11/08/2025"
-                    }
-                }}
+                purchaseOrderData={selectedPO}
+            />
+
+
+            <UpdateOutgoingQuantityModal
+                visible={isUpdateInventoryModalOpen}
+                onCancel={() => setIsUpdateInventoryModalOpen(false)}
+                onUpdate={handleUpdateOutgoing}
+                inventoryItem={selectedInventoryItem} // Pass the actual item, not null
+            />
+
+            <IncomingStockModal
+                visible={showPoDataModal}
+                onCancel={() => setShowPoDataModal(false)}
+                purchaseData={selectedPurchaseData}
             />
         </div>
     );

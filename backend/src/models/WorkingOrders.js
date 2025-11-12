@@ -46,11 +46,11 @@ const workOrderSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
-    projectNo: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    // projectNo: {
+    //   type: String,
+    //   required: true,
+    //   trim: true,
+    // },
     poNumber: {
       type: String,
       trim: true,
@@ -91,6 +91,12 @@ const workOrderSchema = new mongoose.Schema(
     delivered: {
       type: Boolean,
       default: false,
+    },
+     targetDeliveryDate: {
+      type: Date,
+    },
+     completeDate: {
+      type: Date,
     },
 
   },

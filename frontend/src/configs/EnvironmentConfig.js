@@ -3,7 +3,7 @@ const dev = {
 };
 
 const prod = {
-  API_ENDPOINT_URL: "https://yourdomain.com/api"  // Live backend
+  API_ENDPOINT_URL: "http://13.204.207.229/api/api"  // Live backend
 };
 
 const test = {

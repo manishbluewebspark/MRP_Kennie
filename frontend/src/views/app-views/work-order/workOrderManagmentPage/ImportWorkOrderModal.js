@@ -67,7 +67,7 @@ const ImportWorkOrderModal = ({ visible, onClose, onQuoteTypeSelect }) => {
               }}
             >
               <Text strong style={{ display: "block" }}>{q.title}</Text>
-              <Text type="secondary">{q.description}</Text>
+              {/* <Text type="secondary">{q.description}</Text> */}
             </div>
           ))}
         </div>

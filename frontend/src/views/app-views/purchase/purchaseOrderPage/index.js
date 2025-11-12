@@ -7,6 +7,7 @@ import GlobalTableActions from "components/GlobalTableActions";
 import useDebounce from "utils/debouce";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import { useNavigate } from "react-router-dom";
+import PurchaseOrderService from "services/PurchaseOrderService";
 
 // Badge render helper
 const renderBadge = (text, type) => {
@@ -40,25 +41,146 @@ const PurchaseOrderPage = () => {
     const [activeTab, setActiveTab] = useState('opening_orders');
     const [selectedRows, setSelectedRows] = useState([]);
 
-    // Sample data for different tabs
-    const openingOrdersData = [
+
+
+    console.log('------data',data)
+       // Columns for Opening Orders
+    const openingOrderColumns = [
         {
-            key: '1',
-            workOrderNo: 'P25-00010',
-            supplier: 'ABC Pte Ltd',
-            createdDate: '29/08/2025',
-            price: '1334',
-            status: 'Active'
+            title: "",
+            key: "work",
+            render: (_, record) => (
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    {/* LEFT: Work order + meta */}
+                    <div style={{ minWidth: 260 }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", lineHeight: 1.2 }}>
+                            {record?.poNumber || "P25-00010"}
+                        </div>
+
+                        <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
+                            Supplier: {record?.supplier?.companyName || "ABC Pte Ltd"}
+                        </div>
+
+                        <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
+                            Created:{" "}
+                            {record?.createdAt ? new Date(record?.createdAt).toLocaleDateString("en-GB") : "-"}
+                        </div>
+                    </div>
+
+                    {/* PRICE CHIP */}
+                    <div
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            border: "1px solid #D1D5DB",
+                            background: "#F9FAFB",
+                            padding: "2px 10px",
+                            borderRadius: 16,
+                            fontSize: 13,
+                            color: "#111827",
+                            fontWeight: 600,
+                            height: 24,
+                        }}
+                    >
+                        {formatMoney(record?.totals?.finalAmount, record.currency || "USD")}
+                    </div>
+                </div>
+            ),
         },
+
+        // STATUS at far right
         {
-            key: '2',
-            workOrderNo: 'P25-00011',
-            supplier: 'XYZ Corp',
-            createdDate: '30/08/2025',
-            price: '2500',
-            status: 'Pending'
-        }
+            title: "",
+            dataIndex: "status",
+            key: "status",
+            align: "right",
+            width: 140,
+            render: (status) => {
+                const label = status || "Pending";
+                const style =
+                    label.toLowerCase() === "pending"
+                        ? { bg: "#FB923C", color: "#FFFFFF" }
+                        : label.toLowerCase() === "approved"
+                            ? { bg: "#22C55E", color: "#FFFFFF" }
+                            : { bg: "#6B7280", color: "#FFFFFF" };
+
+                return (
+                    <span
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "2px 10px",
+                            borderRadius: 16,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: style.bg,
+                            color: style.color,
+                        }}
+                    >
+                        {label}
+                    </span>
+                );
+            },
+        },
+
+        // ACTION ICONS
+        {
+            title: "",
+            key: "actions",
+            align: "right",
+            width: 220,
+            render: (_, record) => (
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                    <ActionButtons
+                        onEdit={() => handleEdit(record?._id)}
+                        onDelete={() => handleDelete(record?._id)}
+                        onInfo={() => navigate(`/app/purchase/view-purchase-order/${record?._id}`)}
+                        onMail={() => { }}
+                        onCross={() => { }}
+                        showEdit
+                        showInfo
+                        showDelete
+                        showDeleteConfirm
+                        showCross
+                        showMail
+                        // optional: soft rounded icon backgrounds like screenshot
+                        styleEdit={{ background: "#DBEAFE", color: "#1D4ED8", borderRadius: 8, padding: 8 }}
+                        styleDelete={{ background: "#FEE2E2", color: "#DC2626", borderRadius: 8, padding: 8 }}
+                        styleMail={{ background: "#E5E7EB", color: "#374151", borderRadius: 8, padding: 8 }}
+                        styleCross={{ background: "#FEE2E2", color: "#DC2626", borderRadius: 8, padding: 8 }}
+                        styleInfo={{ background: "#E5E7EB", color: "#111827", borderRadius: 8, padding: 8 }}
+                    />
+                </div>
+            ),
+        },
     ];
+
+     const fetchWorkOrders = async ({ page: p = page, limit: l = limit, search: s = search,activeTab } = {}) => {
+    setLoading(true);
+    try {
+      // Backend should support filters by status/category via query if needed.
+      const res = await PurchaseOrderService.getAllPurchaseOrders({ page: p, limit: l, search: s,status:activeTab === "opening_orders" ? "Pending" : "Closed" });
+     
+      const payload = res?.data || res; // depends on your fetch wrapper
+      setData(res?.data || []);
+      // setTotal(res?.total || res?.count || 0);
+      // setPage(res?.page);
+      // setLimit(res?.limit);
+    } catch (e) {
+      console.error(e);
+      message.error("Failed to fetch purchase orders");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+     useEffect(() => {
+    fetchWorkOrders({ page: 1, limit, search,activeTab });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
 
     const partialCompletionData = [
         {
@@ -131,118 +253,7 @@ const PurchaseOrderPage = () => {
         }
     ];
 
-    // Columns for Opening Orders
-    const openingOrderColumns = [
-        {
-            title: "",
-            key: "work",
-            render: (_, record) => (
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    {/* LEFT: Work order + meta */}
-                    <div style={{ minWidth: 260 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", lineHeight: 1.2 }}>
-                            {record.workOrderNo || "P25-00010"}
-                        </div>
-
-                        <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
-                            Supplier: {record.supplier || "ABC Pte Ltd"}
-                        </div>
-
-                        <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
-                            Created:{" "}
-                            {record.createdDate
-                            }
-                        </div>
-                    </div>
-
-                    {/* PRICE CHIP */}
-                    <div
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            border: "1px solid #D1D5DB",
-                            background: "#F9FAFB",
-                            padding: "2px 10px",
-                            borderRadius: 16,
-                            fontSize: 13,
-                            color: "#111827",
-                            fontWeight: 600,
-                            height: 24,
-                        }}
-                    >
-                        {formatMoney(record.price, record.currency || "USD")}
-                    </div>
-                </div>
-            ),
-        },
-
-        // STATUS at far right
-        {
-            title: "",
-            dataIndex: "status",
-            key: "status",
-            align: "right",
-            width: 140,
-            render: (status) => {
-                const label = status || "Pending";
-                const style =
-                    label.toLowerCase() === "pending"
-                        ? { bg: "#FB923C", color: "#FFFFFF" }
-                        : label.toLowerCase() === "approved"
-                            ? { bg: "#22C55E", color: "#FFFFFF" }
-                            : { bg: "#6B7280", color: "#FFFFFF" };
-
-                return (
-                    <span
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: "2px 10px",
-                            borderRadius: 16,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            background: style.bg,
-                            color: style.color,
-                        }}
-                    >
-                        {label}
-                    </span>
-                );
-            },
-        },
-
-        // ACTION ICONS
-        {
-            title: "",
-            key: "actions",
-            align: "right",
-            width: 220,
-            render: (_, record) => (
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                    <ActionButtons
-                        onEdit={() => handleEdit(record?.key)}
-                        onDelete={() => handleDelete(record?.key)}
-                        onInfo={() => navigate(`/app/purchase/view-purchase-order`)}
-                        onMail={() => { }}
-                        onCross={() => { }}
-                        showEdit
-                        showInfo
-                        showDelete
-                        showDeleteConfirm
-                        showCross
-                        showMail
-                        // optional: soft rounded icon backgrounds like screenshot
-                        styleEdit={{ background: "#DBEAFE", color: "#1D4ED8", borderRadius: 8, padding: 8 }}
-                        styleDelete={{ background: "#FEE2E2", color: "#DC2626", borderRadius: 8, padding: 8 }}
-                        styleMail={{ background: "#E5E7EB", color: "#374151", borderRadius: 8, padding: 8 }}
-                        styleCross={{ background: "#FEE2E2", color: "#DC2626", borderRadius: 8, padding: 8 }}
-                        styleInfo={{ background: "#E5E7EB", color: "#111827", borderRadius: 8, padding: 8 }}
-                    />
-                </div>
-            ),
-        },
-    ];
+ 
 
     // Columns for Partial Completion
     const partialCompletionColumns = [
@@ -394,10 +405,10 @@ const PurchaseOrderPage = () => {
                                 lineHeight: 1.2,
                             }}
                         >
-                            {record.workOrderNo || "P25-00010"}
+                            {record.poNumber || "P25-00010"}
                         </div>
                         <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
-                            Supplier: {record.supplier || "ABC Pte Ltd"}
+                            Supplier: {record?.supplier?.companyName || "ABC Pte Ltd"}
                         </div>
                         <div
                             style={{
@@ -411,8 +422,7 @@ const PurchaseOrderPage = () => {
                         >
                             <span>
                                 Created:{" "}
-                                {record.createdDate
-                                }
+                                {record?.createdAt ? new Date(record?.createdAt).toLocaleDateString("en-GB") : "-"}
                             </span>
                             <div
                                 style={{
@@ -426,7 +436,7 @@ const PurchaseOrderPage = () => {
                                     gap: '20px'
                                 }}
                             >
-                                ${Number(record.price || 13.34).toFixed(2)}
+                                ${Number(record?.totals?.finalAmount || 0).toFixed(2)}
                             </div>
                         </div>
                     </div>
@@ -629,15 +639,15 @@ const PurchaseOrderPage = () => {
     const getCurrentData = () => {
         switch (activeTab) {
             case 'opening_orders':
-                return openingOrdersData;
+                return data;
             case 'partial_completion':
                 return partialCompletionData;
             case 'closed_orders':
-                return closedOrdersData;
+                return data;
             case 'mpn_shortage':
                 return mpnShortageData;
             default:
-                return openingOrdersData;
+                return data;
         }
     };
 
@@ -744,19 +754,6 @@ const PurchaseOrderPage = () => {
         }
     };
 
-    const fetchWorkOrders = async (params = {}) => {
-        setLoading(true);
-        try {
-            // Simulate API call
-            setTimeout(() => {
-                setData(getCurrentData());
-                setLoading(false);
-            }, 1000);
-        } catch (err) {
-            console.error("Error fetching work orders:", err);
-            setLoading(false);
-        }
-    };
 
     const handleExport = async () => {
         try {
@@ -779,9 +776,7 @@ const PurchaseOrderPage = () => {
         }
     };
 
-    useEffect(() => {
-        fetchWorkOrders();
-    }, [activeTab]);
+
 
     const handleSearch = useDebounce((value) => {
         setPage(1);
