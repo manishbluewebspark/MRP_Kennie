@@ -29,7 +29,8 @@ const CreateWorkOrderModal = ({
   onCreate,
   editingWorkOrder,      // { workOrderNo, projectNo, ... , items:[{drawingId,posNo,quantity,uom,remarks}] }
   workOrderSettings,
-  projectData    // e.g. { needDateCalculation: 2 }  (weeks before commit)
+  projectData,
+  lastWorkOrderNo   // e.g. { needDateCalculation: 2 }  (weeks before commit)
 }) => {
   const [form] = Form.useForm();
   const [selectedRows, setSelectedRows] = useState([]);   // array of row keys
@@ -71,18 +72,32 @@ const CreateWorkOrderModal = ({
   ];
 
   // ---------- Helpers ----------
-  const generateWorkOrderNumber = (existingNumbers = []) => {
+  const generateWorkOrderNumber = (lastWorkOrderNo) => {
     const now = new Date();
     const year = now.getFullYear().toString().slice(-2);
     const month = String(now.getMonth() + 1).padStart(2, "0");
-    const currentMonthNumbers = existingNumbers
+
+    // Normalize to array
+    const arr = Array.isArray(lastWorkOrderNo)
+      ? lastWorkOrderNo
+      : lastWorkOrderNo
+        ? [lastWorkOrderNo]
+        : [];
+
+    // Filter same month WO
+    const currentMonthNumbers = arr
       .filter((num) => num.startsWith(`WO${year}${month}`))
-      .map((num) => parseInt(num.slice(-5), 10))
+      .map((num) => parseInt(num.split("-")[1], 10))
       .filter((n) => !isNaN(n));
-    const nextSeq = currentMonthNumbers.length ? Math.max(...currentMonthNumbers) + 1 : 1;
+
+    const nextSeq = currentMonthNumbers.length
+      ? Math.max(...currentMonthNumbers) + 1
+      : 1;
+
     const seqStr = String(nextSeq).padStart(5, "0");
     return `WO${year}${month}-${seqStr}`;
   };
+
 
   const fetchDrawings = async (params = {}) => {
     setLoading(true);
@@ -318,7 +333,7 @@ const CreateWorkOrderModal = ({
     } else {
       // Fresh create mode
       handleReset();
-      const workOrderNo = generateWorkOrderNumber();
+      const workOrderNo = generateWorkOrderNumber(lastWorkOrderNo);
       form.setFieldsValue({ workOrderNo });
     }
 
@@ -385,7 +400,7 @@ const CreateWorkOrderModal = ({
             Select quoted drawings and fill work order details
           </div>
         </Col>
-        <Col style={{ width: "45%" }}>
+        <Col style={{ width: "45%", marginTop: 30 }}>
           <Row gutter={8} align="middle">
             <Col flex="auto">
               <Input
@@ -451,7 +466,7 @@ const CreateWorkOrderModal = ({
           </Row>
 
           <Row gutter={[24, 16]}>
-            <Col xs={24} md={8}>
+            {/* <Col xs={24} md={8}>
               <Form.Item name="projectType" label="Project Type" rules={[{ required: true }]}>
                 <Select placeholder="Select project type">
                   <Option value="cable_assembly">Cable Assembly</Option>
@@ -459,7 +474,7 @@ const CreateWorkOrderModal = ({
                   <Option value="others_assembly">Others Assembly</Option>
                 </Select>
               </Form.Item>
-            </Col>
+            </Col> */}
             {/* <Col xs={24} md={6}>
               <Form.Item name="status" label="Status">
                 <Select placeholder="Select status">

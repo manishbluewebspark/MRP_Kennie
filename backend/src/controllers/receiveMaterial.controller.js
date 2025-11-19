@@ -11,6 +11,8 @@ export const createReceiveMaterial = async (req, res) => {
       return res.status(400).json({ success: false, message: "No items found in request." });
     }
 
+    const grnNumber = `GRN-${Date.now()}`;
+
     // 🧾 Create new GRN (ReceiveMaterial Entry)
     const newGRN = new receiveMaterial({
       purchaseOrderId,
@@ -18,6 +20,7 @@ export const createReceiveMaterial = async (req, res) => {
       receivedBy:userId,
       items,
       notes,
+      grnNumber
     });
 
     await newGRN.save();

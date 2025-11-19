@@ -1,21 +1,51 @@
 import React, { useEffect, useState } from "react";
-import { Table, Button, Space, Tag, message, Card, Input, Checkbox, Col, Radio } from "antd";
-import { EditOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+    Table,
+    Button,
+    Space,
+    Tag,
+    message,
+    Card,
+    Input,
+    Checkbox,
+    Col,
+    Radio,
+    Select,
+} from "antd";
+import {
+    EditOutlined,
+    DeleteOutlined,
+    PlusOutlined,
+} from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
 import GlobalTableActions from "components/GlobalTableActions";
 import useDebounce from "utils/debouce";
 import GlobalFilterModal from "components/GlobalFilterModal";
+import WorkOrderService from "services/WorkOrderService";
+import dayjs from "dayjs";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchAllMpn } from "store/slices/librarySlice";
 
 // Badge render helper
 const renderBadge = (text, type) => {
     let color;
     switch (type) {
         case "status":
-            color = text === "Active" ? "green" : text === "Completed" ? "blue" : "red";
+            color =
+                text === "Active"
+                    ? "green"
+                    : text === "Completed"
+                        ? "blue"
+                        : "red";
             break;
         case "priority":
-            color = text === "High" ? "red" : text === "Medium" ? "orange" : "green";
+            color =
+                text === "High"
+                    ? "red"
+                    : text === "Medium"
+                        ? "orange"
+                        : "green";
             break;
         default:
             color = "gray";
@@ -23,81 +53,77 @@ const renderBadge = (text, type) => {
     return <Tag color={color}>{text}</Tag>;
 };
 
-const customerData = []
-const projectData = []
-
+const customerData = [];
+const projectData = [];
+const { Option } = Select;
 const MPNTrackerPage = () => {
-    const [data, setData] = useState([]);
+    const dispatch = useDispatch()
+    const { librarys } = useSelector((state) => state);
+    const [data, setData] = useState([]); // Total MPN Needed data
+    const [eachMpnData, setEachMpnData] = useState([]); // Each MPN Usage data
     const [loading, setLoading] = useState(false);
+
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
-    const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState('total_mpn_needed');
-    // Sample data - replace with your API data
-    // Sample data for MPN Tracker
-    const sampleData = [
-        {
-            key: '1',
-            mpnNumber: '12345',
-            description: 'Cable, 22AWG',
-            manufacturer: 'Alpha',
-            uom: 'Feet',
-            totalNeeded: '176',
-            currentStock: '30',
-            shortfall: '146',
-            workOrder: '2508-01-02'
-        },
-        {
-            key: '2',
-            mpnNumber: '67890',
-            description: 'Connector, RJ45',
-            manufacturer: 'Beta',
-            uom: 'Pieces',
-            totalNeeded: '50',
-            currentStock: '15',
-            shortfall: '35',
-            workOrder: '2508-01-03'
-        }
-    ];
 
-    const columns = [
+    const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState("total_mpn_needed");
+
+    // Dropdown for MPN
+    const [mpnOptions, setMpnOptions] = useState([]);
+    const [selectedMpn, setSelectedMpn] = useState(null);
+
+    // ================== COLUMNS ==================
+
+    // Total MPN Needed columns
+    const totalMpnColumns = [
         {
             title: "MPN Number",
-            dataIndex: "mpnNumber",
-            key: "mpnNumber",
-            sorter: (a, b) => a.mpnNumber - b.mpnNumber,
-            render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+            dataIndex: "mpn",
+            key: "mpn",
+            sorter: (a, b) => (a.mpn || "").localeCompare(b.mpn || ""),
+            render: (text) => (
+                <strong style={{ fontSize: "14px" }}>{text}</strong>
+            ),
         },
         {
             title: "Description",
             dataIndex: "description",
             key: "description",
-            render: (text) => <span style={{ fontSize: '13px' }}>{text}</span>
+            render: (text) => (
+                <span style={{ fontSize: "13px" }}>{text}</span>
+            ),
         },
         {
             title: "Manufacturer",
             dataIndex: "manufacturer",
             key: "manufacturer",
-            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
+            render: (text) => (
+                <span style={{ fontSize: "13px", color: "#666" }}>{text}</span>
+            ),
         },
         {
             title: "UoM",
             dataIndex: "uom",
             key: "uom",
-            render: (text) => <Tag color="blue">{text}</Tag>
+            render: (text) => <Tag color="blue">{text}</Tag>,
         },
         {
             title: "Total Needed",
             dataIndex: "totalNeeded",
             key: "totalNeeded",
-            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
+            render: (text) => (
+                <span style={{ fontSize: "13px", color: "#666" }}>{text}</span>
+            ),
         },
         {
             title: "Current Stock",
             dataIndex: "currentStock",
             key: "currentStock",
-            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
+            render: (text) => (
+                <span style={{ fontSize: "13px", color: "#666" }}>{text}</span>
+            ),
         },
         {
             title: "Shortfall",
@@ -107,218 +133,374 @@ const MPNTrackerPage = () => {
                 <Tag
                     color="red"
                     style={{
-                        borderRadius: '12px',
-                        background: '#ff4d4f',
-                        color: 'white',
-                        border: 'none',
-                        padding: '2px 10px'
+                        borderRadius: "12px",
+                        background: "#ff4d4f",
+                        color: "white",
+                        border: "none",
+                        padding: "2px 10px",
                     }}
                 >
                     {text}
                 </Tag>
-            )
+            ),
         },
         {
             title: "Work Order",
-            dataIndex: "workOrder",
-            key: "workOrder",
+            dataIndex: "workOrderNo",
+            key: "workOrderNo",
             render: (text) => (
                 <Tag
                     style={{
-                        borderRadius: '12px',
-                        background: '#1890ff',
-                        color: 'white',
-                        border: 'none',
-                        padding: '2px 10px'
+                        borderRadius: "12px",
+                        background: "#1890ff",
+                        color: "white",
+                        border: "none",
+                        padding: "2px 10px",
                     }}
                 >
                     {text}
                 </Tag>
-            )
-        }
+            ),
+        },
+    ];
+
+    // Each MPN Usage columns
+    const eachMpnColumns = [
+        {
+            title: "Drawing No",
+            dataIndex: "drawingNo",
+            key: "drawingNo",
+            render: (text) => <span style={{ fontSize: 13 }}>{text}</span>,
+        },
+        {
+            title: "Project Name",
+            dataIndex: "projectName",
+            key: "projectName",
+            render: (text) => <span style={{ fontSize: 13 }}>{text}</span>,
+        },
+        {
+            title: "Work Order No",
+            dataIndex: "workOrderNo",
+            key: "workOrderNo",
+            render: (text) => (
+                <Tag
+                    style={{
+                        borderRadius: 12,
+                        background: "#1890ff",
+                        color: "white",
+                        border: "none",
+                        padding: "2px 10px",
+                    }}
+                >
+                    {text}
+                </Tag>
+            ),
+        },
+        {
+            title: "Quantity Used",
+            dataIndex: "quantityUsed",
+            key: "quantityUsed",
+            render: (text) => (
+                <span style={{ fontSize: 13, color: "#333" }}>{text}</span>
+            ),
+        },
+        {
+            title: "Need Date",
+            dataIndex: "needDate",
+            key: "needDate",
+            render: (text) =>
+                text ? (
+                    <span style={{ fontSize: 13 }}>
+                        {dayjs(text).format("YYYY-MM-DD")}
+                    </span>
+                ) : (
+                    "-"
+                ),
+        },
+        {
+            title: "Status",
+            dataIndex: "status",
+            key: "status",
+            render: (text) => {
+                const color =
+                    text === "on_hold"
+                        ? "orange"
+                        : text === "completed"
+                            ? "green"
+                            : "blue";
+                return (
+                    <Tag
+                        color={color}
+                        style={{ borderRadius: 12, padding: "2px 10px" }}
+                    >
+                        {text}
+                    </Tag>
+                );
+            },
+        },
     ];
 
     const filterConfig = [
         {
-            type: 'date',
-            name: 'drawingDate',
-            label: 'Drawing Date',
-            placeholder: 'Select Drawing Date'
+            type: "date",
+            name: "drawingDate",
+            label: "Drawing Date",
+            placeholder: "Select Drawing Date",
         },
         {
-            type: 'select',
-            name: 'customer',
-            label: 'Customer',
-            placeholder: 'Select Customer',
-            options: customerData.map(customer => ({
+            type: "select",
+            name: "customer",
+            label: "Customer",
+            placeholder: "Select Customer",
+            options: customerData.map((customer) => ({
                 label: customer.companyName,
-                value: customer._id
-            }))
+                value: customer._id,
+            })),
         },
         {
-            type: 'select',
-            name: 'project',
-            label: 'Project',
-            placeholder: 'Select Project',
-            options: projectData.map(project => ({
+            type: "select",
+            name: "project",
+            label: "Project",
+            placeholder: "Select Project",
+            options: projectData.map((project) => ({
                 label: project.projectName,
-                value: project._id
-            }))
+                value: project._id,
+            })),
         },
         {
-            type: 'select',
-            name: 'drawingRange',
-            label: 'Drawing Range',
-            placeholder: 'Select Drawing Range',
+            type: "select",
+            name: "drawingRange",
+            label: "Drawing Range",
+            placeholder: "Select Drawing Range",
             options: [
-                { value: 'range1', label: '0–50' },
-                { value: 'range2', label: '51–100' },
-                { value: 'range3', label: '101–200' }
-            ]
-        }
+                { value: "range1", label: "0–50" },
+                { value: "range2", label: "51–100" },
+                { value: "range3", label: "101–200" },
+            ],
+        },
     ];
 
-    const handleEdit = async (id) => {
-        try {
-            console.log("Edit record:", id);
-            message.info("Edit functionality to be implemented");
-            // Add your edit logic here
-        } catch (err) {
-            console.error("Error editing work order:", err);
-            message.error("Failed to edit work order");
-        }
-    };
+    // ================== API CALLS ==================
 
-    const handleDelete = async (id) => {
-        try {
-            console.log("Delete record:", id);
-            message.success("Work order deleted successfully");
-            // Add your delete logic here
-            fetchWorkOrders();
-        } catch (err) {
-            console.error("Error deleting work order:", err);
-            message.error("Failed to delete work order");
-        }
-    };
-
-    const fetchWorkOrders = async (params = {}) => {
+    const fetchTotalMpnNeeded = async (params = {}) => {
         setLoading(true);
         try {
-            // Simulate API call
-            setTimeout(() => {
-                setData(sampleData);
-                setLoading(false);
-            }, 1000);
+            const { page = 1, limit = 10, search = "" } = params;
+            const res = await WorkOrderService.getTotalMPNNeeded({
+                page,
+                limit,
+                search,
+            });
 
-            // Replace with your actual API call:
-            // const { page = 1, limit = 10, search = "" } = params;
-            // const res = await WorkOrderService.getAllWorkOrders({ page, limit, search });
-            // if (res.success) {
-            //     setData(res.data);
-            // }
+            if (res?.status) {
+                const list = res.data || [];
+                setData(list);
+
+                // Build MPN dropdown options from total list
+                // Assume each row has mpnId (backend se bhejna hoga)
+                const mpnMap = new Map();
+                list.forEach((item) => {
+                    const key = item.mpnId || item.mpn;
+                    if (!key) return;
+                    if (!mpnMap.has(key)) {
+                        mpnMap.set(key, {
+                            label: `${item.mpn} ${item.description ? `- ${item.description}` : ""
+                                }`,
+                            value: key,
+                        });
+                    }
+                });
+                setMpnOptions(Array.from(mpnMap.values()));
+            }
         } catch (err) {
-            console.error("Error fetching work orders:", err);
+            console.error("Error fetching total MPN needed:", err);
+            message.error("Failed to fetch total MPN needed");
+        } finally {
             setLoading(false);
         }
     };
 
+    const fetchEachMpnUsage = async (mpnId, params = {}) => {
+        if (!mpnId) return;
+        setLoading(true);
+        try {
+            const { page = 1, limit = 10 } = params;
+            const res = await WorkOrderService.getEachMPNUsage({
+                mpnId,
+                page,
+                limit,
+            });
+
+            if (res?.status) {
+                setEachMpnData(res.data || []);
+            }
+        } catch (err) {
+            console.error("Error fetching each MPN usage:", err);
+            message.error("Failed to fetch MPN usage");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ================== EFFECTS ==================
+
+    useEffect(() => {
+        // default tab: Total MPN Needed
+        fetchTotalMpnNeeded({ page, limit, search });
+        dispatch(fetchAllMpn());
+    }, []);
+
+    // When tab changes
+    const handleTabChange = (value) => {
+        setActiveTab(value);
+        if (value === "total_mpn_needed") {
+            // refresh total tab
+            fetchTotalMpnNeeded({ page: 1, limit, search });
+            setPage(1);
+        } else if (value === "each_mpn_usage") {
+            // if already selected MPN, load its usage
+            if (selectedMpn) {
+                fetchEachMpnUsage(selectedMpn, { page: 1, limit });
+                setPage(1);
+            }
+        }
+    };
+
+    // ================== HANDLERS ==================
+
+    const handleSearch = useDebounce((value) => {
+        setPage(1);
+        setSearch(value);
+        if (activeTab === "total_mpn_needed") {
+            fetchTotalMpnNeeded({ page: 1, limit, search: value });
+        }
+    }, 500);
+
+    const handleFilterSubmit = async (data) => {
+        console.log("-------filter", data);
+    };
+
     const handleExport = async () => {
         try {
-            console.log("Exporting work orders...");
-            message.success("Work orders exported successfully");
-            // Add your export logic here
+            console.log("Exporting...");
+            message.success("Export triggered");
         } catch (err) {
-            console.error("Error exporting work orders:", err);
-            message.error("Failed to export work orders");
+            console.error("Error exporting:", err);
+            message.error("Failed to export");
         }
     };
 
     const handleImport = async (file) => {
         try {
             console.log("Importing file:", file);
-            message.success("Work orders imported successfully");
-            fetchWorkOrders();
-            // Add your import logic here
+            message.success("Import triggered");
         } catch (err) {
-            console.error("Error importing work orders:", err);
-            message.error("Failed to import work orders");
+            console.error("Error importing:", err);
+            message.error("Failed to import");
         }
     };
 
-    useEffect(() => {
-        fetchWorkOrders();
-    }, []);
+    // ================== RENDER ==================
 
-    const handleSearch = useDebounce((value) => {
-        setPage(1);
-        fetchWorkOrders({ page: 1, limit, search: value });
-    }, 500);
-
-    const handleFilterSubmit = async (data) => {
-        console.log('-------filter', data)
-    }
+    const isTotalTab = activeTab === "total_mpn_needed";
 
     return (
         <div>
             {/* Header Section */}
-            <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 16,
-                width: '100%'
-            }}>
-                <div>
-                    <h2 style={{ margin: 0 }}>Total MPN Requirement</h2>
-                    <p style={{ margin: 0, fontSize: 14, color: '#888' }}>
-                        All MPN List
-                    </p>
-                </div>
+           {/* Header + Tabs Row */}
+<div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    width: "100%",
+  }}
+>
+  <div>
+    <h2 style={{ margin: 0 }}>
+      {isTotalTab ? "Total MPN Requirement" : "Each MPN Usage"}
+    </h2>
+    <p style={{ margin: 0, fontSize: 14, color: "#888" }}>
+      {isTotalTab ? "All MPN List" : "Usage breakdown per MPN"}
+    </p>
+  </div>
 
-                <Col>
-                    <Radio.Group
-                        value={activeTab}
-                        onChange={e => setActiveTab(e.target.value)}
-                        optionType="button"
-                        buttonStyle="solid"
-                    >
-                        <Radio.Button value="total_mpn_needed">Total MPN Needed</Radio.Button>
-                        <Radio.Button value="each_mpn_usage">Each MPN Usage</Radio.Button>
-                    </Radio.Group>
-                </Col>
+  <Col>
+    <Radio.Group
+      value={activeTab}
+      onChange={(e) => handleTabChange(e.target.value)}
+      optionType="button"
+      buttonStyle="solid"
+    >
+      <Radio.Button value="total_mpn_needed">
+        Total MPN Needed
+      </Radio.Button>
+      <Radio.Button value="each_mpn_usage">
+        Each MPN Usage
+      </Radio.Button>
+    </Radio.Group>
+  </Col>
+</div>
 
-            </div>
+{/* 🔻 Select row – tabs ke niche, sirf each_mpn_usage pe */}
+{activeTab === "each_mpn_usage" && (
+  <div
+    style={{
+      marginBottom: 16,
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+    }}
+  >
+    {/* <span style={{ fontSize: 14, fontWeight: 500 }}>Select MPN:</span> */}
+    <Select
+      placeholder="Select MPN"
+      value={selectedMpn} // store _id
+      onChange={(value) => {
+        setSelectedMpn(value);
+        setPage(1);
+        fetchEachMpnUsage(value, { page: 1, limit });
+      }}
+      style={{ minWidth: 260 }}
+      showSearch
+      optionFilterProp="children"
+    >
+      {librarys?.mpnList?.map((opt) => (
+        <Option key={opt._id} value={opt._id}>
+          {opt.MPN}
+        </Option>
+      ))}
+    </Select>
+  </div>
+)}
+
 
             {/* Global Table Actions */}
             <GlobalTableActions
-                showSearch={true}
+                showSearch={isTotalTab}            // search sirf Total tab me
                 onSearch={(value) => {
                     setSearch(value);
                     handleSearch(value);
                 }}
-                showImport={true}
+                showImport={false}                 // abhi disable, chahe to on kar sakte ho
                 onImport={(file) => handleImport(file)}
-                showExport={true}
+                showExport={isTotalTab}
                 onExport={() => handleExport()}
-                showFilter={true}
-                onFilter={() => {setIsFilterModalOpen(true)}}
+                showFilter={isTotalTab}
+                onFilter={() => {
+                    setIsFilterModalOpen(true);
+                }}
             />
 
             {/* Table */}
             <Card>
                 <Table
-                    columns={columns}
-                    dataSource={data}
+                    columns={isTotalTab ? totalMpnColumns : eachMpnColumns}
+                    dataSource={isTotalTab ? data : eachMpnData}
                     loading={loading}
-                // pagination={{
-                //     current: page,
-                //     pageSize: limit,
-                //     showSizeChanger: true,
-                //     showQuickJumper: true,
-                //     showTotal: (total, range) =>
-                //         `${range[0]}-${range[1]} of ${total} items`
-                // }}
-                // scroll={{ x: 1000 }}
+                    rowKey={(record, index) => record._id || index}
+                // pagination add karna ho to niche branch wise laga sakte ho
                 />
             </Card>
 

@@ -1,6 +1,6 @@
 // components/GlobalTableActions.js
 import React, { useRef, useState } from "react";
-import { Input, Button, Space } from "antd";
+import { Input, Button, Space, Spin } from "antd";
 import {
   SearchOutlined,
   UploadOutlined,
@@ -34,16 +34,17 @@ const GlobalTableActions = ({
   showPurchaseText = "Show Purchase History",
   onShowPurchaseHistory,
   showProductSetting,
-  onProductSetting=false,
+  onProductSetting = false,
   showProductSettingText,
   showMPNTracker,
   onMPNTracker,
   showExportPDF,
   onExportPDF,
-   showExportWord,
+  showExportWord,
   onExportWord,
   showImportWorkOrder = false,
-  onImportWorkOrder
+  onImportWorkOrder,
+  onImportLoader
 }) => {
   const fileInputRef = useRef(null);
   const [showPurchasess, setShowPurchase] = useState(false);
@@ -121,7 +122,8 @@ const GlobalTableActions = ({
               type="default"
               onClick={handleImportClick}
             >
-              {importText}
+              {onImportLoader ? <><Spin  size="small" />
+              </> : importText}
             </Button>
             <input
               ref={fileInputRef}

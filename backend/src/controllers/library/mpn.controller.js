@@ -199,22 +199,27 @@ export const getAllMpn = async (req, res) => {
       query.Category = new mongoose.Types.ObjectId(category);
     }
 
-    if (status && status !== "all") {
-      // NOTE: field name "Status" vs "status" as per your schema
-      query.Status = status;
-    }
+ if (status && status.trim().toLowerCase() !== "all") {
+  query.Status = status.trim().toLowerCase();
+}
+
 
     // ⚙️ Common find (without skip/limit)
     const baseFind = MPN.find(query)
       .populate("UOM", "code")
       .populate("Supplier", "companyName")
       .populate("Category", "name")
+      .populate({
+        path: "purchaseHistory.Supplier", // Populate Supplier in purchaseHistory array
+        select: "companyName"
+      })
+
       .sort({ createdAt: -1 })
       .lean();
 
     if (hasPaging) {
       // 📄 Paginated response
-      const pageNum  = Math.max(parseInt(page, 10) || 1, 1);
+      const pageNum = Math.max(parseInt(page, 10) || 1, 1);
       const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
 
       const [totalItems, items] = await Promise.all([
@@ -437,6 +442,78 @@ export const getAllMpn = async (req, res) => {
 //   }
 // };
 
+// old code
+// export const importMpn = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ success: false, message: "No file uploaded" });
+//     }
+
+//     const workbook = XLSX.readFile(req.file.path);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const rows = XLSX.utils.sheet_to_json(sheet);
+
+//     let results = { inserted: 0, updated: 0, errors: [] };
+
+//     for (const row of rows) {
+//       try {
+//         const mappedRow = mapRowToSchemaforMPN(row);
+//         console.log('-------mappedRow', mappedRow);
+
+//         if (!mappedRow.MPN) {
+//           results.errors.push({ row, error: "Missing MPN" });
+//           continue;
+//         }
+
+//         // --- Convert names to IDs or set null ---
+//         if (mappedRow.UOM) {
+//           const uomDoc = await UOM.findOne({
+//             code: { $regex: new RegExp(`^${mappedRow.UOM}$`, "i") },
+//           });
+//           mappedRow.UOM = uomDoc ? uomDoc._id : null;
+//         } else {
+//           mappedRow.UOM = null;
+//         }
+
+//         if (mappedRow.Supplier) {
+//           const supplierDoc = await Suppliers.findOne({ companyName: mappedRow.Supplier });
+//           mappedRow.Supplier = supplierDoc ? supplierDoc._id : null;
+//         } else {
+//           mappedRow.Supplier = null;
+//         }
+
+//         if (mappedRow.Category) {
+//           const categoryDoc = await Category.findOne({ name: mappedRow.Category });
+//           mappedRow.Category = categoryDoc ? categoryDoc._id : null;
+//         } else {
+//           mappedRow.Category = null;
+//         }
+
+//         // --- Insert or update ---
+//         const existing = await MPN.findOne({ MPN: mappedRow.MPN });
+
+//         if (existing) {
+//           await MPN.updateOne({ MPN: mappedRow.MPN }, { $set: mappedRow });
+//           results.updated++;
+//         } else {
+//           await MPN.create(mappedRow);
+//           results.inserted++;
+//         }
+//       } catch (err) {
+//         results.errors.push({ row, error: err.message });
+//       }
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "MPN data import completed",
+//       summary: results,
+//     });
+//   } catch (err) {
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+
 export const importMpn = async (req, res) => {
   try {
     if (!req.file) {
@@ -449,13 +526,13 @@ export const importMpn = async (req, res) => {
 
     let results = { inserted: 0, updated: 0, errors: [] };
 
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
       try {
         const mappedRow = mapRowToSchemaforMPN(row);
         console.log('-------mappedRow', mappedRow);
 
         if (!mappedRow.MPN) {
-          results.errors.push({ row, error: "Missing MPN" });
+          results.errors.push({ row: index + 2, error: "Missing MPN" }); // +2 for header row and 1-based index
           continue;
         }
 
@@ -469,8 +546,11 @@ export const importMpn = async (req, res) => {
           mappedRow.UOM = null;
         }
 
+        // Handle main Supplier
         if (mappedRow.Supplier) {
-          const supplierDoc = await Suppliers.findOne({ companyName: mappedRow.Supplier });
+          const supplierDoc = await Suppliers.findOne({ 
+            companyName: mappedRow.Supplier 
+          });
           mappedRow.Supplier = supplierDoc ? supplierDoc._id : null;
         } else {
           mappedRow.Supplier = null;
@@ -483,18 +563,73 @@ export const importMpn = async (req, res) => {
           mappedRow.Category = null;
         }
 
+        // --- Process purchase history from #1, #2, etc. columns ---
+        const purchaseHistory = [];
+        
+        // Process purchase history entries (up to 5 entries as example)
+        for (let i = 1; i <= 3; i++) {
+          const purchasedPrice = row[`Purchased Price#${i}`];
+          const moq = row[`MOQ#${i}`];
+          const purchasedDate = row[`Purchased Date#${i}`];
+          const supplier = row[`Supplier#${i}`];
+          const leadTime = row[`Lead Time#${i}_Wk`];
+
+          // Only add if at least one field has value
+          if (purchasedPrice || moq || purchasedDate || supplier || leadTime) {
+            let supplierId = null;
+            if (supplier) {
+              const supplierDoc = await Suppliers.findOne({ 
+                companyName: supplier 
+              });
+              supplierId = supplierDoc ? supplierDoc._id : null;
+            }
+
+            purchaseHistory.push({
+              purchasedPrice: purchasedPrice || null,
+              MOQ: moq || null,
+              purchasedDate: purchasedDate ? new Date(purchasedDate) : null,
+              Supplier: supplierId,
+              leadTime_Wk: leadTime || null,
+              entryDate: new Date()
+            });
+          }
+        }
+
+        // Add purchase history to mappedRow if any entries found
+        if (purchaseHistory.length > 0) {
+          mappedRow.purchaseHistory = purchaseHistory;
+        }
+
         // --- Insert or update ---
         const existing = await MPN.findOne({ MPN: mappedRow.MPN });
 
         if (existing) {
-          await MPN.updateOne({ MPN: mappedRow.MPN }, { $set: mappedRow });
+          // Update existing document - preserve existing purchaseHistory if not provided in import
+          const updateData = { ...mappedRow };
+          
+          // If new purchase history is provided, merge with existing (avoid duplicates)
+          if (mappedRow.purchaseHistory && mappedRow.purchaseHistory.length > 0) {
+            const existingHistory = existing.purchaseHistory || [];
+            
+            // Simple merge - you might want more sophisticated duplicate detection
+            updateData.purchaseHistory = [
+              ...mappedRow.purchaseHistory,
+              ...existingHistory
+            ].slice(0, 10); // Limit to last 10 entries
+          } else {
+            // If no new purchase history in import, keep existing
+            updateData.purchaseHistory = existing.purchaseHistory;
+          }
+
+          await MPN.updateOne({ MPN: mappedRow.MPN }, { $set: updateData });
           results.updated++;
         } else {
+          // Create new document
           await MPN.create(mappedRow);
           results.inserted++;
         }
       } catch (err) {
-        results.errors.push({ row, error: err.message });
+        results.errors.push({ row: index + 2, error: err.message });
       }
     }
 
@@ -670,6 +805,9 @@ export const exportMpn = async (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws, "MPNs");
 
     const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx", cellDates: true });
+    if (!buffer || buffer.length === 0) {
+      throw new Error("Generated Excel buffer is empty");
+    }
 
     res.setHeader(
       "Content-Disposition",
@@ -679,6 +817,8 @@ export const exportMpn = async (req, res) => {
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
+    res.setHeader("Content-Length", buffer.length);
+
     return res.send(buffer);
   } catch (err) {
     console.error("exportMpn error:", err);

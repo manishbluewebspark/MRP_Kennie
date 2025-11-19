@@ -137,6 +137,21 @@ WorkOrderService.getAllProductionWorkOrders = () => {
   });
 };
 
+WorkOrderService.getTotalMPNNeeded = () => {
+  return fetch({
+    url: `/work-orders/workOrder/totalMPNNeeded`,
+    method: "get"
+  });
+};
+
+WorkOrderService.getEachMPNUsage = (params) => {
+  return fetch({
+    url: `/work-orders/workOrder/getEachMPNUsage`,
+    method: "get",
+    params
+  });
+};
+
 
 
 export default WorkOrderService;

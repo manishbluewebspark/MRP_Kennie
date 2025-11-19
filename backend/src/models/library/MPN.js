@@ -4,9 +4,13 @@ const purchaseHistorySchema = new mongoose.Schema(
   {
     purchasedDate: { type: Date },
     purchasedPrice: { type: String },   // keep as string if it can contain $ sign, else use Number
-    supplier: { type: String },
-    leadTimeWeeks: { type: Number, default: 0 },
-    moq: { type: Number }
+    Supplier: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Supplier",
+    },
+    LeadTime_WK: { type: Number, default: 0 },
+    MOQ: { type: Number },
+    entryDate:{type:Date}
   },
   { _id: false } // we don’t need separate _id for subdocs
 );

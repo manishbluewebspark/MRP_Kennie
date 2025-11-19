@@ -70,4 +70,12 @@ PurchaseOrderService.sendPurchaseOrderMail = function (id, data) {
   });
 };
 
+PurchaseOrderService.getPurchaseShortageList = function (params) {
+  return fetch({
+    url: '/purchase-orders/purchase/shortageList',
+    method: 'get',
+    params: params, // optional for pagination/filter
+  });
+};
+
 export default PurchaseOrderService;

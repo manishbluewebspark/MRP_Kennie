@@ -8,6 +8,15 @@ const workOrderItemSchema = new mongoose.Schema(
       ref: "Drawing",
       required: true,
     },
+     projectType: {
+      type: String,
+      enum: ["cable_harness", "box_build", "other"], // adjust as per your project types
+      default: "cable_harness",
+    },
+     projectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Project",
+    },
     posNo: {
       // Position number within the Work Order (line no / item no)
       type: Number, // keep string to allow formats like "10A"
@@ -46,20 +55,12 @@ const workOrderSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
-    // projectNo: {
-    //   type: String,
-    //   required: true,
-    //   trim: true,
-    // },
+   
     poNumber: {
       type: String,
       trim: true,
     },
-    projectType: {
-      type: String,
-      enum: ["cable_assembly", "box_Build_assembly", "others_assembly"], // adjust as per your project types
-      default: "cable_assembly",
-    },
+   
     needDate: {
       type: Date,
     },

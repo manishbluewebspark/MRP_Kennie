@@ -20,7 +20,7 @@ const ImportWorkOrderModal = ({ visible, onClose, onQuoteTypeSelect }) => {
     multiple: false,
     beforeUpload: (file) => {
       setFile(file);
-      message.success(`${file.name} selected successfully`);
+      // message.success(`${file.name} selected successfully`);
       return false; // stop auto upload
     },
     onRemove: () => {
@@ -52,7 +52,7 @@ const ImportWorkOrderModal = ({ visible, onClose, onQuoteTypeSelect }) => {
       centered
     >
       <Space direction="vertical" style={{ width: "100%" }} size="large">
-        <div>
+        {/* <div>
           {quoteTypes.map((q) => (
             <div
               key={q.value}
@@ -67,10 +67,10 @@ const ImportWorkOrderModal = ({ visible, onClose, onQuoteTypeSelect }) => {
               }}
             >
               <Text strong style={{ display: "block" }}>{q.title}</Text>
-              {/* <Text type="secondary">{q.description}</Text> */}
+             
             </div>
           ))}
-        </div>
+        </div> */}
 
         <div>
           <Dragger {...uploadProps} style={{ borderRadius: 8 }}>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Table, Button, Space, Tag, message, Card, Input, Checkbox, Col, Radio, Row } from "antd";
+import { Table, Button, Space, Tag, message, Card, Input, Checkbox, Col, Radio, Row, Modal } from "antd";
 import { EditOutlined, DeleteOutlined, PlusOutlined, FileExcelFilled, ImportOutlined, ExportOutlined, CloudDownloadOutlined, ExclamationCircleOutlined, ExclamationCircleFilled } from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
@@ -40,11 +40,11 @@ const PurchaseOrderPage = () => {
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('opening_orders');
     const [selectedRows, setSelectedRows] = useState([]);
+    const [mpnShortageData, setMpnShortageData] = useState([])
 
 
-
-    console.log('------data',data)
-       // Columns for Opening Orders
+    console.log('------data', data)
+    // Columns for Opening Orders
     const openingOrderColumns = [
         {
             title: "",
@@ -137,7 +137,7 @@ const PurchaseOrderPage = () => {
                         onDelete={() => handleDelete(record?._id)}
                         onInfo={() => navigate(`/app/purchase/view-purchase-order/${record?._id}`)}
                         onMail={() => { }}
-                        onCross={() => { }}
+                        onCross={() => { confirmClose(record?._id) }}
                         showEdit
                         showInfo
                         showDelete
@@ -156,30 +156,116 @@ const PurchaseOrderPage = () => {
         },
     ];
 
-     const fetchWorkOrders = async ({ page: p = page, limit: l = limit, search: s = search,activeTab } = {}) => {
-    setLoading(true);
-    try {
-      // Backend should support filters by status/category via query if needed.
-      const res = await PurchaseOrderService.getAllPurchaseOrders({ page: p, limit: l, search: s,status:activeTab === "opening_orders" ? "Pending" : "Closed" });
-     
-      const payload = res?.data || res; // depends on your fetch wrapper
-      setData(res?.data || []);
-      // setTotal(res?.total || res?.count || 0);
-      // setPage(res?.page);
-      // setLimit(res?.limit);
-    } catch (e) {
-      console.error(e);
-      message.error("Failed to fetch purchase orders");
-    } finally {
-      setLoading(false);
-    }
-  };
+    const fetchWorkOrders = async ({ page: p = page, limit: l = limit, search: s = search, activeTab } = {}) => {
+        setLoading(true);
+        try {
+            // Backend should support filters by status/category via query if needed.
+            const res = await PurchaseOrderService.getAllPurchaseOrders({ page: p, limit: l, search: s, status: activeTab === "opening_orders" ? "Pending" : "Closed" });
+
+            const payload = res?.data || res; // depends on your fetch wrapper
+            setData(res?.data || []);
+            // setTotal(res?.total || res?.count || 0);
+            // setPage(res?.page);
+            // setLimit(res?.limit);
+        } catch (e) {
+            console.error(e);
+            message.error("Failed to fetch purchase orders");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const confirmClose = (poId) => {
+        Modal.confirm({
+            title: "Are you sure?",
+            content: "Do you really want to close this Purchase Order?",
+            okText: "Yes, Close",
+            cancelText: "Cancel",
+            okType: "danger",
+            onOk: () => handleClosePurchaseOrder(poId),
+        });
+    };
+
+    const confirmResetPO = (poId) => {
+        Modal.confirm({
+            title: "Re-open Purchase Order?",
+            content: "Are you sure you want to open this Purchase Order again?",
+            okText: "Yes, Open",
+            cancelText: "Cancel",
+            okType: "primary",
+            onOk: () => handleResetPurchaseOrder(poId),
+        });
+    };
+
+    const handleResetPurchaseOrder = async (pId) => {
+        try {
+            const res = await PurchaseOrderService.updatePurchaseOrder(pId, {
+                status: "Pending",
+            });
+
+            if (res.success) {
+                message.success("Purchase Order Opened Successfully");
+                fetchWorkOrders(); // refresh list
+            } else {
+                message.error(res.message || "Failed to reopen PO");
+            }
+        } catch (err) {
+            console.error("Reset PO Error:", err);
+            message.error("Something went wrong");
+        }
+    };
 
 
-     useEffect(() => {
-    fetchWorkOrders({ page: 1, limit, search,activeTab });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+
+    const handleClosePurchaseOrder = async (poId) => {
+        try {
+            const res = await PurchaseOrderService.updatePurchaseOrder(poId, {
+                status: "Closed",
+            });
+
+            if (res.success) {
+                message.success("Purchase Order Closed Successfully");
+                fetchWorkOrders(); // refresh list
+            } else {
+                message.error(res.message || "Failed to close PO");
+            }
+        } catch (err) {
+            console.error("Close PO Error:", err);
+            message.error("Something went wrong");
+        }
+    };
+
+
+
+    useEffect(() => {
+        fetchWorkOrders({ page: 1, limit, search, activeTab });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
+   const getPurchaseShortageData = async ({
+  page = 1,
+  limit = 10,
+  manufacturer,
+  supplier,
+} = {}) => {
+  try {
+    const res = await PurchaseOrderService.getPurchaseShortageList({
+      page,
+      limit,
+      manufacturer,
+      supplier,
+    });
+
+    setMpnShortageData(res?.data)
+  } catch (error) {
+    console.error("getPurchaseShortageData error:", error);
+    throw error;
+  }
+};
+
+    useEffect(()=>{
+         getPurchaseShortageData()
+    },[])
 
 
     const partialCompletionData = [
@@ -220,40 +306,9 @@ const PurchaseOrderPage = () => {
         }
     ];
 
-    const mpnShortageData = [
-        {
-            key: '1',
-            mpn: '04 HPQ-D12',
-            details: {
-                description: 'Spill sensor, 24vde',
-                manufacturer: 'Altech',
-                location: 'Not Set',
-                leadTime: '2weeks',
-                workOrder: '2508-12',
-                current: 'Ope',
-                short: 'Spe',
-                needDate: '31/08/2025',
-                supplier: 'TBD'
-            }
-        },
-        {
-            key: '2',
-            mpn: '05 ABC-E34',
-            details: {
-                description: 'Temperature sensor',
-                manufacturer: 'Siemens',
-                location: 'Warehouse A',
-                leadTime: '1week',
-                workOrder: '2508-13',
-                current: 'Low',
-                short: 'High',
-                needDate: '31/08/2025',
-                supplier: 'TechCorp'
-            }
-        }
-    ];
+   
 
- 
+
 
     // Columns for Partial Completion
     const partialCompletionColumns = [
@@ -450,7 +505,7 @@ const PurchaseOrderPage = () => {
             key: 'status',
             render: (status) => (
                 <Tag
-                    color="green"
+                    color="red"
                     style={{
                         margin: 0,
                         fontSize: '12px',
@@ -470,13 +525,9 @@ const PurchaseOrderPage = () => {
             render: (_, record) => (
                 <ActionButtons
                     showReset={true}
-                    onReset={() => {
-
-                    }}
+                    onReset={() => confirmResetPO(record?._id)}
                     showInfo={true}
-                    onInfo={() => {
-
-                    }}
+                    onInfo={() => navigate(`/app/purchase/view-purchase-order/${record?._id}`)}
                 />
             ),
             align: 'center',
@@ -484,141 +535,141 @@ const PurchaseOrderPage = () => {
     ];
 
     // Columns for MPN Shortage with Checkbox
-   const mpnShortageColumns = [
-  {
-    title: "",
-    key: "shortageCard",
-    render: (_, record) => {
-      const d = record?.details || {};
-      return (
-         <div
-          style={{
-            width: "100%",           // ⬅️ make it fill the cell
-            boxSizing: "border-box",
-            borderRadius: 14,
-            padding: 12,
-            background: "#fff",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-         
+    const mpnShortageColumns = [
+        {
+            title: "",
+            key: "shortageCard",
+            render: (_, record) => {
+                const d = record?.details || {};
+                return (
+                    <div
+                        style={{
+                            width: "100%",           // ⬅️ make it fill the cell
+                            boxSizing: "border-box",
+                            borderRadius: 14,
+                            padding: 12,
+                            background: "#fff",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                        }}
+                    >
 
-          {/* Alert badge */}
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              background: "#FDE8E8",
-              display: "grid",
-              placeItems: "center",
-              color: "#EF4444",
-              flexShrink: 0,
-            }}
-          >
-            <ExclamationCircleFilled style={{ fontSize: 20 }} />
-          </div>
 
-          {/* Middle: Title + subtitle */}
-          <div style={{ minWidth: 170 }}>
-            <div
-              style={{
-                fontSize: 16,
-                fontWeight: 700,
-                color: "#111827",
-                lineHeight: 1.1,
-              }}
-            >
-              {record?.mpn || "HPQ-D12"}
-            </div>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
-              {d?.description || "Spill sensor, 24vdc"}
-            </div>
-          </div>
+                        {/* Alert badge */}
+                        <div
+                            style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 12,
+                                background: "#FDE8E8",
+                                display: "grid",
+                                placeItems: "center",
+                                color: "#EF4444",
+                                flexShrink: 0,
+                            }}
+                        >
+                            <ExclamationCircleFilled style={{ fontSize: 20 }} />
+                        </div>
 
-          {/* Right: inline spec row (8 items) */}
-          <div
-            style={{
-              display: "grid",
-              gridAutoFlow: "column",
-              gridAutoColumns: "max-content",
-              columnGap: 28,
-              rowGap: 4,
-              alignItems: "center",
-              flex: 1,
-              paddingLeft: 8,
-            }}
-          >
-            {/* Helper blocks */}
-            <div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Manufacturer</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                {d?.manufacturer || "Altech"}
-              </div>
-            </div>
+                        {/* Middle: Title + subtitle */}
+                        <div style={{ minWidth: 170 }}>
+                            <div
+                                style={{
+                                    fontSize: 16,
+                                    fontWeight: 700,
+                                    color: "#111827",
+                                    lineHeight: 1.1,
+                                }}
+                            >
+                                {record?.mpn || "HPQ-D12"}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+                                {d?.description || "Spill sensor, 24vdc"}
+                            </div>
+                        </div>
 
-            <div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Location</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                {d?.location || "Not Set"}
-              </div>
-            </div>
+                        {/* Right: inline spec row (8 items) */}
+                        <div
+                            style={{
+                                display: "grid",
+                                gridAutoFlow: "column",
+                                gridAutoColumns: "max-content",
+                                columnGap: 28,
+                                rowGap: 4,
+                                alignItems: "center",
+                                flex: 1,
+                                paddingLeft: 8,
+                            }}
+                        >
+                            {/* Helper blocks */}
+                            <div>
+                                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Manufacturer</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                                    {record?.manufacturer || "Altech"}
+                                </div>
+                            </div>
 
-            <div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Lead Time</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                {d?.leadTime || "2 weeks"}
-              </div>
-            </div>
+                            <div>
+                                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Location</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                                    {record?.location || "Not Set"}
+                                </div>
+                            </div>
 
-            <div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Work Order</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                {d?.workOrder || "2508-12"}
-              </div>
-            </div>
+                            <div>
+                                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Lead Time</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                                    {record?.leadTime}
+                                </div>
+                            </div>
 
-            <div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Current</div>
-              <Tag
-                color="default"
-                style={{ margin: 0, fontSize: 12, padding: "0 6px" }}
-              >
-                {d?.current ?? 0} pc
-              </Tag>
-            </div>
+                            <div>
+                                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Work Order</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                                    {record?.workOrder}
+                                </div>
+                            </div>
 
-            <div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Short</div>
-              <Tag
-                color="red"
-                style={{ margin: 0, fontSize: 12, padding: "0 6px" }}
-              >
-                {d?.short ?? 5} pc
-              </Tag>
-            </div>
+                            <div>
+                                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Current</div>
+                                <Tag
+                                    color="default"
+                                    style={{ margin: 0, fontSize: 12, padding: "0 6px" }}
+                                >
+                                    {record?.currentStock} pc
+                                </Tag>
+                            </div>
 
-            <div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Need Date</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                {d?.needDate || "Oct 25, 2025"}
-              </div>
-            </div>
+                            <div>
+                                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Short</div>
+                                <Tag
+                                    color="red"
+                                    style={{ margin: 0, fontSize: 12, padding: "0 6px" }}
+                                >
+                                    {record?.shortage} pc
+                                </Tag>
+                            </div>
 
-            <div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Supplier</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                {d?.supplier || "TBD"}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    },
-  },
-];
+                            <div>
+                                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Need Date</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                                    {record?.needDate}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Supplier</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                                    {record?.supplier}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            },
+        },
+    ];
 
     // Get current columns and data based on active tab
     const getCurrentColumns = () => {
@@ -745,12 +796,17 @@ const PurchaseOrderPage = () => {
 
     const handleDelete = async (id) => {
         try {
-            console.log("Delete record:", id);
-            message.success("Work order deleted successfully");
-            fetchWorkOrders();
+            const res = await PurchaseOrderService.deletePurchaseOrder(id);
+
+            if (res.success) {
+                message.success("Purchase Order deleted successfully");
+                fetchWorkOrders();  // refresh list
+            } else {
+                message.error(res.message || "Failed to delete Purchase Order");
+            }
         } catch (err) {
-            console.error("Error deleting work order:", err);
-            message.error("Failed to delete work order");
+            console.error("Delete PO Error:", err);
+            message.error("Something went wrong while deleting");
         }
     };
 

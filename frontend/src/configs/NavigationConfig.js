@@ -1118,15 +1118,15 @@ const settingsNavTree = [{
       permissions: ["settings.markupParameter:view"],
       submenu: []
     },
-    {
-      key: 'currency-setting',
-      path: `${APP_PREFIX_PATH}/settings/currency-setting`,
-      title: 'settings.currency-setting',
-      icon: PoundCircleOutlined,
-      breadcrumb: false,
-      permissions: ["settings.currencyManagment:view"],
-      submenu: []
-    },
+    // {
+    //   key: 'currency-setting',
+    //   path: `${APP_PREFIX_PATH}/settings/currency-setting`,
+    //   title: 'settings.currency-setting',
+    //   icon: PoundCircleOutlined,
+    //   breadcrumb: false,
+    //   permissions: ["settings.currencyManagment:view"],
+    //   submenu: []
+    // },
     {
       key: 'category-setting',
       path: `${APP_PREFIX_PATH}/settings/category-setting`,

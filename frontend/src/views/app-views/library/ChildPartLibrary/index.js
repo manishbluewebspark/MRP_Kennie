@@ -47,7 +47,10 @@ const ChildPartLibrary = () => {
     const [filterVisible, setFilterVisible] = useState(false);
     const { categories } = useSelector((state) => state.categories);
     const { librarys } = useSelector((state) => state);
-    const [pagination,setPagination] = useState(null)
+
+    console.log('-----Child Part Library',librarys)
+    const [pagination, setPagination] = useState(null)
+    const [importExcel,setImportExcel] = useState(false);
     const columns = [
         { title: "Child Part No", dataIndex: "ChildPartNo", key: "ChildPartNo", sorter: (a, b) => a.ChildPartNo - b.ChildPartNo },
         {
@@ -101,9 +104,9 @@ const ChildPartLibrary = () => {
             name: 'mpn',
             label: 'MPN',
             placeholder: 'Select Mpn',
-            options: librarys?.mpnList?.map(customer => ({
-                label: customer.MPN,
-                value: customer._id
+            options: mpnOptions?.map(customer => ({
+                label: customer?.label,
+                value: customer?.value
             }))
         },
         {
@@ -143,16 +146,25 @@ const ChildPartLibrary = () => {
     };
 
     const handleMpnImport = async (file) => {
+        setImportExcel(true)
+
+        if (!file) {
+            setImportExcel(false)
+            message.error("Please select file")
+            return
+        }
         try {
             const formData = new FormData();
             formData.append("file", file);
 
             const res = await LibraryService.importChild(formData);
-            message.success("✅ MPN imported successfully!");
+            message.success("MPN imported successfully!");
             fetchChildParts()
+            setImportExcel(false)
             return res;
         } catch (err) {
-            console.error("❌ Import failed:", err);
+            setImportExcel(false)
+            console.error("Import failed:", err);
             message.error(err?.response?.data?.message || "Import failed!");
             throw err;
         }
@@ -177,12 +189,14 @@ const ChildPartLibrary = () => {
     const fetchMpn = async (params = {}) => {
         try {
             const res = await LibraryService.getAllMpn();
+            console.log('-----res',res)
             if (res.success) {
-                const options = res.data.map(mpn => ({
-                    label: mpn.MPN,   // show part number
-                    value: mpn._id,   // use _id as value
-                    category: mpn.Category._id // optional, if you want to auto-fill category
+                const options = res?.data?.map(mpn => ({
+                    label: mpn?.MPN,   // show part number
+                    value: mpn?._id,   // use _id as value
+                    category: mpn?.Category?._id // optional, if you want to auto-fill category
                 }));
+                console.log('----options',options)
                 setMnpOption(options);
             }
         } catch (err) {
@@ -199,11 +213,14 @@ const ChildPartLibrary = () => {
     };
 
     useEffect(() => {
+        dispatch(getAllCategories())
+        // dispatch(fetchAllMpn())
+    }, [dispatch]);
+
+    useEffect(()=>{
         fetchMpn()
         fetchChildParts();
-        dispatch(getAllCategories())
-        dispatch(fetchAllMpn())
-    }, []);
+    },[])
 
     const handleSearch = useDebounce((value) => {
         setPage(1); // reset page on search
@@ -290,6 +307,7 @@ const ChildPartLibrary = () => {
                 }}
                 showImport={hasPermission('library.child:import')}
                 onImport={(file) => handleMpnImport(file)}
+                onImportLoader={importExcel}
                 showExport={hasPermission('library.child:export')}
                 onExport={() => handleExport()}
                 showFilter={true}
@@ -300,7 +318,7 @@ const ChildPartLibrary = () => {
                 columns={columns}
                 dataSource={data}
                 rowKey="key"
-                 pagination={{
+                pagination={{
                     current: page,
                     pageSize: limit,
                     total: pagination?.total || 0,

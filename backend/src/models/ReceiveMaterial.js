@@ -57,11 +57,12 @@ const receiveMaterialSchema = new mongoose.Schema(
       },
     ],
 
-    grnNumber: {
-      type: String,
-      unique: true,
-      trim: true,
-    },
+ grnNumber: {
+  type: String,
+  unique: true,
+  sparse: true,   // 👈 important
+},
+
 
     overallStatus: {
       type: String,

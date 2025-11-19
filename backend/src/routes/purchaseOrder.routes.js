@@ -8,6 +8,7 @@ import {
   addPurchaseOrder,
   getPurchaseOrdersHistory,
   getPurchaseOrdersSummary,
+  getPurchaseShortageList,
 } from "../controllers/purchaseOrder.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 
@@ -21,7 +22,7 @@ router.get("/", authenticate, getAllPurchaseOrders);
 router.post("/:id/send-mail", authenticate, sendPurchaseOrderMail);
 router.get("/history", authenticate, getPurchaseOrdersHistory);
 router.get("/summary", authenticate, getPurchaseOrdersSummary);
-
+router.get("/purchase/shortageList", authenticate, getPurchaseShortageList);
 
 router.get("/:id", authenticate, getPurchaseOrderById);
 export default router;

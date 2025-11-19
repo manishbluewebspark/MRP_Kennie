@@ -258,56 +258,56 @@ export const getAllChild = async (req, res) => {
 /**
  * Import Child data
  */
-export const importChild = async (req, res) => {
-  try {
-    if (!req.file)
-      return res.status(400).json({ success: false, message: "No file uploaded" });
+// export const importChild = async (req, res) => {
+//   try {
+//     if (!req.file)
+//       return res.status(400).json({ success: false, message: "No file uploaded" });
 
-    const workbook = XLSX.readFile(req.file.path);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet);
+//     const workbook = XLSX.readFile(req.file.path);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const data = XLSX.utils.sheet_to_json(sheet);
 
-    const mappedData = [];
+//     const mappedData = [];
 
-    for (const row of data) {
-      if (!row["Child Part No"] || !row["Linked MPN"]) continue;
+//     for (const row of data) {
+//       if (!row["Child Part No."] || !row["Linked MPN"]) continue;
+       
+//       // Find MPN by its part number
+//       const parentMpn = await MPN.findOne({ MPN: row["Linked MPN"] });
+//       if (!parentMpn) {
+//         console.warn(`MPN not found for child ${row["Child Part No."]}`);
+//         continue; // skip this row
+//       }
 
-      // Find MPN by its part number
-      const parentMpn = await MPN.findOne({ MPN: row["Linked MPN"] });
-      if (!parentMpn) {
-        console.warn(`MPN not found for child ${row["Child Part No"]}`);
-        continue; // skip this row
-      }
+//       mappedData.push({
+//         ChildPartNo: row["Child Part No."],
+//         mpn: parentMpn._id,
+//         LinkedMPNCategory: parentMpn?.Category || "",
+//         status: row["status"]?.toLowerCase() === "inactive" ? "inactive" : "active",
+//       });
+//     }
 
-      mappedData.push({
-        ChildPartNo: row["Child Part No"],
-        mpn: parentMpn._id,
-        LinkedMPNCategory: parentMpn?.Category || "",
-        status: row["status"]?.toLowerCase() === "inactive" ? "inactive" : "active",
-      });
-    }
+//     // Insert or update each child (avoid duplicates by ChildPartNo + mpn)
+//     const results = [];
+//     for (const child of mappedData) {
+//       const updated = await Child.findOneAndUpdate(
+//         { ChildPartNo: child.ChildPartNo, mpn: child.mpn },
+//         { $set: child },
+//         { upsert: true, new: true }
+//       );
+//       results.push(updated);
+//     }
 
-    // Insert or update each child (avoid duplicates by ChildPartNo + mpn)
-    const results = [];
-    for (const child of mappedData) {
-      const updated = await Child.findOneAndUpdate(
-        { ChildPartNo: child.ChildPartNo, mpn: child.mpn },
-        { $set: child },
-        { upsert: true, new: true }
-      );
-      results.push(updated);
-    }
-
-    return res.json({
-      success: true,
-      message: "Child data imported successfully",
-      data: results,
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: err.message });
-  }
-};
+//     return res.json({
+//       success: true,
+//       message: "Child data imported successfully",
+//       data: results,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 
 /**
  * Export Child data
@@ -327,6 +327,82 @@ export const importChild = async (req, res) => {
 //     return res.status(500).json({ success: false, message: err.message });
 //   }
 // };
+
+export const importChild = async (req, res) => {
+  try {
+    if (!req.file)
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+
+    const workbook = XLSX.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    // Convert sheet to JSON WITHOUT relying on messy headers
+    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    const headers = rawData[0];
+
+    // Normalize headers → trim, lowercase, remove extra spaces/dots
+    const normalizedHeaders = headers.map(h =>
+      String(h)
+        .trim()
+        .toLowerCase()
+        .replace(/\./g, "")         // remove dots
+        .replace(/\s+/g, "_")       // replace spaces with underscore
+    );
+
+    // Create array of objects with normalized keys
+    const data = rawData.slice(1).map(row => {
+      const obj = {};
+      normalizedHeaders.forEach((key, i) => {
+        obj[key] = row[i];
+      });
+      return obj;
+    });
+
+    const mappedData = [];
+
+    for (const row of data) {
+      const childPart = row["child_part_no"]; // normalized
+      const linkedMPN = row["linked_mpn"];    // normalized
+
+      if (!childPart || !linkedMPN) continue;
+
+      const parentMpn = await MPN.findOne({ MPN: String(linkedMPN).trim() });
+      if (!parentMpn) {
+        console.warn(`MPN not found for child ${childPart}`);
+        continue;
+      }
+
+      mappedData.push({
+        ChildPartNo: String(childPart).trim(),
+        mpn: parentMpn._id,
+        LinkedMPNCategory: parentMpn?.Category ? parentMpn.Category : null,
+        status: (row["status"] || "").trim().toLowerCase() === "inactive" ? "inactive" : "active",
+      });
+    }
+
+    const results = [];
+    for (const child of mappedData) {
+      const updated = await Child.findOneAndUpdate(
+        { ChildPartNo: child.ChildPartNo, mpn: child.mpn },
+        { $set: child },
+        { upsert: true, new: true }
+      );
+      results.push(updated);
+    }
+
+    return res.json({
+      success: true,
+      message: "Child data imported successfully",
+      data: results,
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 
 
 export const exportChild = async (req, res) => {

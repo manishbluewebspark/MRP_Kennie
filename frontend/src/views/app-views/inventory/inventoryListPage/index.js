@@ -538,7 +538,7 @@ const InventoryListPage = () => {
         // setExportLoading(true);
         try {
             const response = await InventoryService.exportToExcel({
-                search:''
+                search: ''
             });
 
             // Create blob and download
@@ -607,7 +607,7 @@ const InventoryListPage = () => {
             if (response.success) {
                 message.success('Materials received successfully!');
                 setIsReceiveMaterialModalOpen(false);
-
+                fetchData()
                 // Refresh purchase orders data
                 dispatch(fetchPurchaseOrders());
             } else {

@@ -5,10 +5,10 @@ import GlobalModal from "components/GlobalModal";
 
 const { Option } = Select;
 
-const AddChildPartModal = ({ visible, onCancel, onSubmit, formData, mpnOptions = [], categories = [] }) => {
+const AddChildPartModal = ({ visible, onCancel, onSubmit, formData, mpnOptions, categories = [] }) => {
   const [form] = Form.useForm();
   const [category, setCategory] = useState("");
-
+  console.log('-----mpnOptions',mpnOptions)
   // Prefill form for edit
   useEffect(() => {
     if (formData) {

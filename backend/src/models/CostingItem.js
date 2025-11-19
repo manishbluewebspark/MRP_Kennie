@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+const { Schema, models, model } = mongoose;
+
+
 const CostingItemSchema = new mongoose.Schema({
     drawingId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -58,6 +61,9 @@ const CostingItemSchema = new mongoose.Schema({
     lastEditedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });
 
-const CostingItems = mongoose.model("CostingItems", CostingItemSchema);
+// const CostingItems = mongoose.model("CostingItems", CostingItemSchema);
+const CostingItems =
+  models.CostingItems || model("CostingItems", CostingItemSchema);
 
 export default CostingItems;
+// export default CostingItems;

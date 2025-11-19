@@ -1,6 +1,11 @@
 import nodemailer from "nodemailer";
 import PurchaseOrders from "../models/PurchaseOrders.js";
 import mongoose from "mongoose";
+import CostingItems from "../models/CostingItem.js";
+import WorkOrder from "../models/WorkingOrders.js";
+import MPN from "../models/library/MPN.js";
+import UOM from "../models/UOM.js";
+import Inventory from "../models/Inventory.js";
 
 const toObjectId = (id) => {
   try {
@@ -302,16 +307,16 @@ export const getAllPurchaseOrders = async (req, res) => {
       
       // ✅ WorkOrder se needDate aur commitDate lo
       if (transformedOrder.workOrderNo) {
-        transformedOrder.needDate = transformedOrder.workOrderNo.needDate || transformedOrder.needDate;
-        transformedOrder.commitDate = transformedOrder.workOrderNo.commitDate;
+        transformedOrder.needDate = transformedOrder?.workOrderNo?.needDate || transformedOrder?.needDate;
+        transformedOrder.commitDate = transformedOrder?.workOrderNo?.commitDate;
       }
       
       // ✅ Items ko transform karo with populated data
       if (transformedOrder.items && transformedOrder.items.length > 0) {
         transformedOrder.items = transformedOrder.items.map(item => {
           const transformedItem = { ...item };
-           transformedItem.needDate = transformedOrder.workOrderNo.needDate
-           transformedItem.commitDate = transformedOrder.workOrderNo.commitDate
+           transformedItem.needDate = transformedOrder?.workOrderNo?.needDate
+           transformedItem.commitDate = transformedOrder?.workOrderNo?.commitDate
           // ✅ MPN data ko properly handle karo
           if (item.mpn && typeof item.mpn === 'object') {
             transformedItem.mpnData = {
@@ -589,4 +594,286 @@ export const getPurchaseOrdersSummary = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+export const getPurchaseShortageList = async (req, res) => {
+  try {
+    let {
+      page = 1,
+      limit = 10,
+      manufacturer,
+      supplier,
+    } = req.query;
+
+    page = parseInt(page, 10) || 1;
+    limit = parseInt(limit, 10) || 10;
+
+    // 1) Sare ON HOLD work orders lao
+    const workOrders = await WorkOrder.find({ status: "on_hold" }).lean();
+    if (!workOrders.length) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No work orders in on_hold status",
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalItems: 0,
+          totalPages: 0,
+          pageSize: limit,
+        },
+      });
+    }
+
+    // 2) Unique drawingIds from items
+    const drawingIdStrs = [
+      ...new Set(
+        workOrders.flatMap((wo) =>
+          (wo.items || [])
+            .filter((i) => i.drawingId)
+            .map((i) => String(i.drawingId))
+        )
+      ),
+    ];
+    if (!drawingIdStrs.length) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No drawingIds found",
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalItems: 0,
+          totalPages: 0,
+          pageSize: limit,
+        },
+      });
+    }
+
+    const drawingObjectIds = drawingIdStrs.map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    // 3) CostingItems fetch — only material
+    const costingItems = await CostingItems.find({
+      drawingId: { $in: drawingObjectIds },
+      quoteType: "material",
+    }).lean();
+
+    if (!costingItems.length) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No costing items found",
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalItems: 0,
+          totalPages: 0,
+          pageSize: limit,
+        },
+      });
+    }
+
+    // Map: drawingId → costingItems[]
+    const costingByDrawing = new Map();
+    for (const ci of costingItems) {
+      const key = String(ci.drawingId);
+      const arr = costingByDrawing.get(key) || [];
+      arr.push(ci);
+      costingByDrawing.set(key, arr);
+    }
+
+    // 4) MPN usage aggregation (GROUP BY mpnId)
+    // mpnUsagePerMpn: key = mpnIdStr
+    const mpnUsagePerMpn = new Map();
+    const mpnIdStrSet = new Set();
+
+    for (const wo of workOrders) {
+      const woNo = wo.workOrderNo || "";
+      for (const woItem of wo.items || []) {
+        const drawingId = woItem.drawingId;
+        if (!drawingId) continue;
+
+        const costingArr = costingByDrawing.get(String(drawingId));
+        if (!costingArr || !costingArr.length) continue;
+
+        const woQty = Number(woItem.quantity || 1);
+
+        for (const ci of costingArr) {
+          const mpnObjId = ci.mpn;
+          if (!mpnObjId) continue;
+
+          const mpnIdStr = String(mpnObjId);
+          mpnIdStrSet.add(mpnIdStr);
+
+          const qtyPer = Number(ci.quantity || 0);
+          const totalNeededForThis = qtyPer * woQty;
+
+          const existing = mpnUsagePerMpn.get(mpnIdStr) || {
+            mpnId: mpnIdStr,
+            // will refine later with lib fields
+            description: ci.description || "",
+            manufacturer: ci.manufacturer || "",
+            uomId: ci.uom || null,
+            suppliers: new Set(),          // multiple suppliers ho sakte hain
+            totalNeeded: 0,
+            workOrders: new Set(),         // WO list
+          };
+
+          existing.totalNeeded += totalNeededForThis;
+          if (woNo) existing.workOrders.add(woNo);
+          if (ci.supplier) existing.suppliers.add(String(ci.supplier));
+
+          // Prefer latest non-empty description/manufacturer from costing
+          if (ci.description) existing.description = ci.description;
+          if (ci.manufacturer) existing.manufacturer = ci.manufacturer;
+          if (ci.uom && !existing.uomId) existing.uomId = ci.uom;
+
+          mpnUsagePerMpn.set(mpnIdStr, existing);
+        }
+      }
+    }
+
+    if (!mpnUsagePerMpn.size) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No MPN usage found",
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalItems: 0,
+          totalPages: 0,
+          pageSize: limit,
+        },
+      });
+    }
+
+    // 5) Unique MPN ObjectIDs
+    const mpnObjectIds = [...mpnIdStrSet].map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    // 6) Fetch MPN library records
+    const mpnLibDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
+    const mpnLibMap = new Map();
+    for (const lib of mpnLibDocs) {
+      mpnLibMap.set(String(lib._id), lib);
+    }
+
+    // 7) Fetch UOM for all unique uomIds
+    const uomIds = [
+      ...new Set(
+        Array.from(mpnUsagePerMpn.values())
+          .map((row) => row.uomId)
+          .filter((id) => id)
+          .map((id) => String(id))
+      ),
+    ];
+
+    const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
+    const uomMap = new Map();
+    for (const u of uomDocs) uomMap.set(String(u._id), u);
+
+    // 8) Inventory stock
+    const inventoryDocs = await Inventory.find({
+      mpnId: { $in: mpnObjectIds },
+    }).lean();
+
+    const invMap = new Map();
+    for (const inv of inventoryDocs) {
+      const key = String(inv.mpnId);
+      const curr = invMap.get(key) || 0;
+      invMap.set(key, curr + Number(inv.balanceQuantity || 0));
+    }
+
+    // 9) Build raw list (per MPN)
+    let list = Array.from(mpnUsagePerMpn.values()).map((row) => {
+      const lib = mpnLibMap.get(row.mpnId);
+      const uomDoc = row.uomId ? uomMap.get(String(row.uomId)) : null;
+
+      const currentStock = invMap.get(row.mpnId) || 0;
+      const required = row.totalNeeded;
+      const shortage = Math.max(0, required - currentStock);
+
+      const mpnName =
+        lib?.mpn ||
+        lib?.mpnNumber ||
+        lib?.MPN ||
+        null;
+
+      const manufacturerFinal =
+        row.manufacturer || lib?.manufacturer || null;
+
+      const suppliersArray = Array.from(row.suppliers || []);
+      const supplierFinal = suppliersArray.length
+        ? suppliersArray.join(", ")
+        : null;
+
+      return {
+        mpnId: row.mpnId,
+        mpn: mpnName,                          // MPN name
+        description: row.description || lib?.description || null,
+        manufacturer: manufacturerFinal,
+        supplier: supplierFinal,
+        uom: uomDoc?.name || null,
+        required,                              // total needed
+        currentStock,
+        shortage,
+        requireByWorkOrders: Array.from(row.workOrders || []),
+      };
+    });
+
+    // 10) Sirf shortage wale MPN (shortage > 0)
+    list = list.filter((item) => item.shortage > 0);
+
+    // 11) Filter by manufacturer / supplier if given
+    if (manufacturer) {
+      const mLower = manufacturer.toString().toLowerCase();
+      list = list.filter(
+        (row) =>
+          row.manufacturer &&
+          row.manufacturer.toLowerCase().includes(mLower)
+      );
+    }
+
+    if (supplier) {
+      const sLower = supplier.toString().toLowerCase();
+      list = list.filter(
+        (row) =>
+          row.supplier &&
+          row.supplier.toLowerCase().includes(sLower)
+      );
+    }
+
+    const totalItems = list.length;
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // 12) Pagination slice
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const pagedData = list.slice(start, end);
+
+    return res.json({
+      status: true,
+      statusCode: 200,
+      message: "Purchase shortage list fetched successfully",
+      data: pagedData,
+      pagination: {
+        currentPage: page,
+        pageSize: limit,
+        totalItems,
+        totalPages,
+      },
+    });
+  } catch (error) {
+    console.error("getPurchaseShortageList error:", error);
+    return res.status(500).json({
+      status: false,
+      message: error.message,
+      data: [],
+    });
+  }
+};
+
 

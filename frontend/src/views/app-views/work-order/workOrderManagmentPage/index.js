@@ -57,7 +57,7 @@ const DeliveryOrderPage = () => {
     const { workOrderSettings } = useSelector(
         (state) => state.systemSettings
     );
-  
+
     const [selectedRecord, setSelectedRecord] = useState(null);
     const [isDrawerVisible, setIsDrawerVisible] = useState(false);
     const { projects } = useSelector(
@@ -68,7 +68,7 @@ const DeliveryOrderPage = () => {
     const [moveToProdId, setMoveToProdId] = useState(null)
     console.log('---workOrderSettings', workOrderSettings)
     const [moving, setMoving] = useState(false);
-
+    const [lastWorkOrderNo, setLastOrderNumber] = useState('')
 
     const handleMoveToProduction = (id) => {
         setisProductionvisible(true);
@@ -96,12 +96,12 @@ const DeliveryOrderPage = () => {
         //     key: "projectNo",
         //     render: (text) => <Tag color="blue">{text}</Tag>
         // },
-        {
-            title: "Drawing No",
-            dataIndex: ["drawing", "drawingNumber"],
-            key: "drawingNo",
-            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text || 'N/A'}</span>
-        },
+        // {
+        //     title: "Drawing No",
+        //     dataIndex: ["drawing", "drawingNumber"],
+        //     key: "drawingNo",
+        //     render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text || 'N/A'}</span>
+        // },
         {
             title: "PO Number",
             dataIndex: "poNumber",
@@ -264,6 +264,7 @@ const DeliveryOrderPage = () => {
                     key: item._id
                 }));
                 setData(formattedData);
+                setLastOrderNumber(response?.lastWorkOrderNo)
                 setTotalCount(response.totalCount || response.data.length);
             } else {
                 message.error(response.message || 'Failed to fetch work orders');
@@ -405,9 +406,9 @@ const DeliveryOrderPage = () => {
             produtionSettings: settings
         }
         const res = await SystemSettingsService.addOrUpdateSystemSettings(payload);
-        console.log('------produtionSettings',res)
+        console.log('------produtionSettings', res)
         if (res.data?.success) {
-          dispatch(fetchSystemSettings())
+            dispatch(fetchSystemSettings())
         }
         setIsProductSettingmodalVisible(false);
     }
@@ -433,6 +434,7 @@ const DeliveryOrderPage = () => {
             const response = await WorkOrderService.importWorkOrders(formData);
 
             if (response.success) {
+                fetchWorkOrders()
                 message.success(response.message || "Work orders imported successfully");
             } else {
                 message.error(response.message || "Import failed");
@@ -521,14 +523,15 @@ const DeliveryOrderPage = () => {
                     pagination={{
                         current: page,
                         pageSize: limit,
-                        total: totalCount,
-                        showSizeChanger: true,
-                        showQuickJumper: true,
-                        showTotal: (total, range) =>
-                            `${range[0]}-${range[1]} of ${total} items`
+                        total: data?.pagination?.total || 0,
+                        onChange: (p, l) => {
+                            setPage(p);
+                            setLimit(l);
+                            fetchWorkOrders({ page: p, limit: l, search });
+                        }
                     }}
                     scroll={{ x: 1000 }}
-                    onChange={handleTableChange}
+                // onChange={handleTableChange}
                 />
             </Card>
 
@@ -539,6 +542,7 @@ const DeliveryOrderPage = () => {
                 editingWorkOrder={editingWorkOrder}
                 workOrderSettings={workOrderSettings?.workOrderSettings}
                 projectData={projectData}
+                lastWorkOrderNo={lastWorkOrderNo}
             />
 
             <MoveToProductionModal
@@ -582,10 +586,10 @@ const DeliveryOrderPage = () => {
                             }}
                         >
                             <h4 style={{ fontSize: 16, fontWeight: 600, color: "#111", margin: 0 }}>
-                                {safe(selectedRecord?.assignedTo || selectedRecord?.customerName)} – Web Design
+                                {safe(selectedRecord?.workOrderNo || selectedRecord?.customerName)} – Web Design
                             </h4>
 
-                            <Tag
+                            {/* <Tag
                                 color="green"
                                 style={{
                                     marginTop: 0,
@@ -595,7 +599,7 @@ const DeliveryOrderPage = () => {
                                 }}
                             >
                                 Cable Harness Done
-                            </Tag>
+                            </Tag> */}
                         </div>
 
 
@@ -615,7 +619,7 @@ const DeliveryOrderPage = () => {
                                     }}
                                 >
                                     <h5 style={{ fontSize: 15, fontWeight: 600, color: "#374151", marginBottom: 12 }}>
-                                        Project No - {safe(selectedRecord?.projectNo)}
+                                        Drawing No - {safe(it?.drawingNo)}
                                     </h5>
                                     <Divider style={{ margin: "0 0 12px 0" }} />
                                     {/* Table Section */}
@@ -632,7 +636,7 @@ const DeliveryOrderPage = () => {
                                             label1: "Actual Qty",
                                             value1: safe(it?.quantity),
                                             label2: "Prod Qty",
-                                            value2: safe(it?.prodQty),
+                                            value2: safe(it?.quantity),
                                             label3: "Commit Date",
                                             value3: fmt(selectedRecord?.commitDate),
                                         },
@@ -642,14 +646,16 @@ const DeliveryOrderPage = () => {
                                             label2: "Work Order No.",
                                             value2: safe(selectedRecord?.workOrderNo),
                                             label3: "Prod Type (C/B/O)",
-                                            value3: safe(it?.prodType),
+                                            value3: safe(it?.projectType),
                                         },
                                         {
                                             label1: "Status",
                                             value1: safe(it?.status),
-                                            label2: "Description",
-                                            value2: safe(it?.description),
-                                            colspan: true,
+                                            label2: "Remark",
+                                            value2: safe(it?.remarks),
+                                            label3: "UOM",
+                                            value3: safe(it?.uom),
+                                            // colspan: true,
                                         },
                                     ].map((row, i) => (
                                         <div key={i} style={{ marginBottom: 8 }}>
