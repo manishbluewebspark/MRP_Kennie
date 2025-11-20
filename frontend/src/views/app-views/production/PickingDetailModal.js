@@ -18,10 +18,10 @@ import { ShoppingCartOutlined } from '@ant-design/icons';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
-const PickingDetailModal = ({ visible, onCancel, onSave }) => {
+const PickingDetailModal = ({ visible, onCancel, onSave,selectWorkOrderData }) => {
     const [form] = Form.useForm();
     const [pickedQuantities, setPickedQuantities] = useState({});
-
+    console.log('-------selectWorkOrderData',selectWorkOrderData)
     // Dummy data matching the screenshot structure
     const dummyData = [
         {
@@ -58,15 +58,6 @@ const PickingDetailModal = ({ visible, onCancel, onSave }) => {
             maxQty: 16,
         },
     ];
-
-    const workOrderInfo = {
-        projectNo: '22222',
-        poNumber: '11111',
-        posNumber: '2',
-        workOrderNo: 'S$ SGD',
-        quantity: '2',
-        pickingQty: '2',
-    };
 
     const columns = [
         {
@@ -130,39 +121,7 @@ const PickingDetailModal = ({ visible, onCancel, onSave }) => {
                     }
                 />
             ),
-        },
-        {
-            title: 'Shortage',
-            dataIndex: 'shortage',
-            key: 'shortage',
-            width: 120,
-            render: (_, record) => (
-                <Space>
-                    <InputNumber
-                        min={0}
-                        max={record.maxQty}
-                        placeholder={`Max: ${record.maxQty}`}
-                        style={{ width: '100%' }}
-                        onChange={(value) =>
-                            setPickedQuantities(prev => ({
-                                ...prev,
-                                [record.key]: value
-                            }))
-                        }
-                    />
-                    <Checkbox
-                    // checked={selectedRows?.includes(record.key)}
-                    // onChange={(e) => {
-                    //   const checked = e.target.checked;
-                    //   setSelectedRows((prev) => {
-                    //     if (checked) return [...prev, record.key];
-                    //     return prev.filter((k) => k !== record.key);
-                    //   });
-                    // }}
-                    />
-                </Space>
-            ),
-        },
+        }
     ];
 
     const handleSave = () => {
@@ -206,17 +165,17 @@ const PickingDetailModal = ({ visible, onCancel, onSave }) => {
                     <div>
                         <Text strong>Project No.</Text>
                         <br />
-                        <Text>{workOrderInfo.projectNo}</Text>
+                        <Text>{selectWorkOrderData?.projectName}</Text>
                     </div>
                     <div>
                         <Text strong>PO Number</Text>
                         <br />
-                        <Text>{workOrderInfo.poNumber}</Text>
+                        <Text>{selectWorkOrderData?.poNumber}</Text>
                     </div>
                     <div>
                         <Text strong>POS Number</Text>
                         <br />
-                        <Text>{workOrderInfo.posNumber}</Text>
+                        <Text>{selectWorkOrderData?.posNumber}</Text>
                     </div>
                 </div>
 
@@ -226,19 +185,19 @@ const PickingDetailModal = ({ visible, onCancel, onSave }) => {
                     <div>
                         <Text strong>Work Order No.</Text>
                         <br />
-                        <Text>{workOrderInfo.workOrderNo}</Text>
+                        <Text>{selectWorkOrderData?.workOrderNo}</Text>
                     </div>
                     <div>
                         <Text strong>Quantity</Text>
                         <br />
-                        <Text>{workOrderInfo.quantity}</Text>
+                        <Text>{selectWorkOrderData?.quantity}</Text>
                     </div>
                     <div>
                         <Text strong>Picking Qty * (Max: 2)</Text>
                         <InputNumber
                             min={0}
                             max={10}
-                            value={workOrderInfo.pickingQty}
+                            value={selectWorkOrderData?.pickingQty}
                             // onChange={handleChange}
                             style={{ width: "100%", marginTop: 4 }}
                             placeholder="Enter picking quantity"

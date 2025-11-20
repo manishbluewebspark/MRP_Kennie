@@ -20,6 +20,15 @@ PurchaseOrderService.updatePurchaseOrder = function (id, data) {
   });
 };
 
+// ✏️ Update Purchase Order
+PurchaseOrderService.updatePurchaseOrderstatus = function (id, data) {
+  return fetch({
+    url: `/purchase-orders/updateStatus/${id}`,
+    method: 'put',
+    data: data,
+  });
+};
+
 // 🗑️ Delete Purchase Order
 PurchaseOrderService.deletePurchaseOrder = function (id) {
   return fetch({
@@ -34,6 +43,14 @@ PurchaseOrderService.getAllPurchaseOrders = function (params) {
     url: '/purchase-orders',
     method: 'get',
     params: params, // optional for pagination/filter
+  });
+};
+
+// 📄 Get All Purchase Orders
+PurchaseOrderService.getLastPurachseOrderNumber = function () {
+  return fetch({
+    url: '/purchase-orders/purchase/getLastPurachseOrderNumber',
+    method: 'get'
   });
 };
 
@@ -77,5 +94,13 @@ PurchaseOrderService.getPurchaseShortageList = function (params) {
     params: params, // optional for pagination/filter
   });
 };
+
+PurchaseOrderService.exportPurchaseOrders = function (exportName) {
+ return fetch({
+    url: `/purchase-orders/purchase/excel?type=${exportName}`,  // your backend route
+    method: 'get',            // send selected IDs
+    responseType: 'arraybuffer',            // important for file downloads
+  });
+}
 
 export default PurchaseOrderService;

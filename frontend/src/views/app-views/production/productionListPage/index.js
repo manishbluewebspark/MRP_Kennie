@@ -54,6 +54,15 @@ const InfoItem = ({ label, value, icon }) => (
   </div>
 );
 
+const formatProjectType = (str) => {
+  if (!str) return "";
+  return str
+    .split("_")                // ["cable", "harness"]
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1))  // ["Cable","Harness"]
+    .join(" ");
+};
+
+
 const getQty = (record) =>
   Array.isArray(record?.items)
     ? record.items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0)
@@ -91,7 +100,7 @@ const statusTagColor = (status, isInProduction) => {
 
 
 // ---------------- Cable Assembly Card ----------------
-const CableAssemblyCard = ({ record, setModalVisible }) => {
+const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) => {
   const qty = getQty(record);
   const need = formatDate(record?.needDate);
   const commit = formatDate(record?.commitDate);
@@ -99,6 +108,19 @@ const CableAssemblyCard = ({ record, setModalVisible }) => {
 
   // Stages to click (example)
   const stages = ["Picking", "Cable Harness", "Labelling", "Quality Check"];
+
+  const getStagesForProject = (projectType) => {
+    if (!projectType) return [];
+
+    // box_build → no stages
+    if (projectType === "Box Build") return ["Picking", "Labelling", "Quality Check"];
+
+    // otherwise return all stages
+    return stages;
+  };
+
+  const finalStages = getStagesForProject(record?.projectType);
+
 
   return (
     <Card
@@ -116,10 +138,10 @@ const CableAssemblyCard = ({ record, setModalVisible }) => {
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <FileTextOutlined style={{ color: "#1890ff", fontSize: 18 }} />
               <span style={{ fontSize: 15, fontWeight: 600, color: "#000" }}>
-                {record?.workOrderNo || "-"} — {record?.projectType?.replaceAll("_", " ") || "Project"}
+                {record?.workOrderNo || "-"} — {formatProjectType(record?.projectType || "-")}
               </span>
               <Tag color="purple" style={{ fontSize: 11, padding: "0 6px" }}>
-                Qty: {qty}
+                Qty: {record?.quantity}
               </Tag>
             </div>
           </Col>
@@ -170,7 +192,7 @@ const CableAssemblyCard = ({ record, setModalVisible }) => {
           }}
         >
           <ToolOutlined style={{ marginRight: 5, color: "#1890ff" }} />
-          Cable Assembly Details
+          {formatProjectType(record?.projectType)} Details
         </h3>
 
         <div
@@ -182,18 +204,18 @@ const CableAssemblyCard = ({ record, setModalVisible }) => {
         >
           <InfoItem
             label="Drawing No"
-            value={record?.items?.[0]?.drawingId}
+            value={record?.drawingNo}
             icon={<FileDoneOutlined />}
           />
           <InfoItem label="PO No" value={record?.poNumber} icon={<BarcodeOutlined />} />
-          <InfoItem label="POS No" value={record?.items?.[0]?.posNo} icon={<BarcodeOutlined />} />
+          <InfoItem label="POS No" value={record?.posNo} icon={<BarcodeOutlined />} />
           <InfoItem
             label="Work Order No"
             value={record?.workOrderNo}
             icon={<ApartmentOutlined />}
           />
-          <InfoItem label="Project No" value={record?.projectNo} icon={<ApartmentOutlined />} />
-          <InfoItem label="Customer" value={record?.customerName} icon={<UserOutlined />} />
+          <InfoItem label="Project No" value={record?.projectName} icon={<ApartmentOutlined />} />
+          <InfoItem label="Customer" value={record?.customerName || "JHON"} icon={<UserOutlined />} />
         </div>
       </div>
 
@@ -216,7 +238,7 @@ const CableAssemblyCard = ({ record, setModalVisible }) => {
         </h3>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-          {stages.map((stage, idx) => (
+          {finalStages.map((stage, idx) => (
             <Tooltip key={idx} title={`Stage: ${stage}`}>
               <Card
                 size="small"
@@ -232,7 +254,10 @@ const CableAssemblyCard = ({ record, setModalVisible }) => {
                   flex: "1 1 auto",
                   cursor: "pointer",
                 }}
-                onClick={() => setModalVisible(true)}
+                onClick={() => {
+                  setModalVisible(true)
+                  setSelectWorkOrderData(record)
+                }}
               >
                 {stage}
               </Card>
@@ -241,22 +266,27 @@ const CableAssemblyCard = ({ record, setModalVisible }) => {
         </div>
       </div>
 
-      <Divider style={{ margin: "8px 0" }} />
+
 
       {/* Progress (placeholder: you can compute from stages) */}
-      <div>
-        <h3
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: "#000",
-            marginBottom: 6,
-          }}
-        >
-          Overall Progress
-        </h3>
-        <Progress percent={record?.progress || 30} size="small" strokeColor="#1890ff" />
-      </div>
+      {record?.progress < 0 && (
+        <>
+          <Divider style={{ margin: "8px 0" }} />
+          <div>
+            <h3
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#000",
+                marginBottom: 0,
+              }}
+            >
+              Overall Progress
+            </h3>
+            <Progress percent={record?.progress} size="small" strokeColor="#1890ff" />
+          </div>
+        </>)}
+
     </Card>
   );
 };
@@ -272,10 +302,31 @@ const SkillLevelCostingList = () => {
   const [activeTab, setActiveTab] = useState("active_production");
   const [modalVisible, setModalVisible] = useState(false);
   const [workOrders, setAllWordOrders] = useState([])
+  const [selectWorkOrderData,setSelectWorkOrderData] = useState()
+  const [completeWorkOrders, setCompleteWorkOrders] = useState([])
   useEffect(() => {
     fetchData();
     fetchWorkOrdersData()
+    fetchCompleteWorkOrdersData()
   }, [page, limit]);
+
+
+  const fetchCompleteWorkOrdersData = async () => {
+    try {
+     
+      const res = await WorkOrderService.getCompleteWorkOrders({
+        page,
+        limit,
+      });
+      console.log('-------res',res)
+      setCompleteWorkOrders(res?.data)
+    } catch (err) {
+      message.error("Failed to fetch data");
+      console.error(err);
+    } finally {
+    }
+  };
+
 
   const fetchData = async () => {
     try {
@@ -317,7 +368,7 @@ const SkillLevelCostingList = () => {
     {
       title: "",
       key: "projectDetails",
-      render: (_, record) => <CableAssemblyCard record={record} setModalVisible={setModalVisible} />,
+      render: (_, record) => <CableAssemblyCard record={record} setModalVisible={setModalVisible} setSelectWorkOrderData={setSelectWorkOrderData}/>,
     },
   ];
 
@@ -458,6 +509,7 @@ const SkillLevelCostingList = () => {
         visible={modalVisible}
         onCancel={() => { setModalVisible(false) }}
         onSave={handleSave}
+        selectWorkOrderData={selectWorkOrderData}
       />
     </div>
   );

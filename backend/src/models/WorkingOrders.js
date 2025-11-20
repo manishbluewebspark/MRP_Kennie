@@ -1,8 +1,18 @@
 import mongoose from "mongoose";
 
-
-const workOrderItemSchema = new mongoose.Schema(
+const workOrderSchema = new mongoose.Schema(
   {
+    workOrderNo: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+   
+    poNumber: {
+      type: String,
+      trim: true,
+    },
     drawingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Drawing",
@@ -37,30 +47,6 @@ const workOrderItemSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-    status: {
-      type: String,
-      enum: ["open", "in_progress", "done", "cancelled"],
-      default: "open",
-    },
-  },
-  { _id: false } // items don't need their own _id unless you want it
-);
-
-
-const workOrderSchema = new mongoose.Schema(
-  {
-    workOrderNo: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
-   
-    poNumber: {
-      type: String,
-      trim: true,
-    },
-   
     needDate: {
       type: Date,
     },
@@ -69,7 +55,7 @@ const workOrderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["on_hold", "in_progress", "completed", "cancelled"],
+      enum: ["on_hold", "in_progress", "completed","open", "done", "cancelled"],
       default: "on_hold",
     },
     isTriggered: {
@@ -79,10 +65,6 @@ const workOrderSchema = new mongoose.Schema(
     isInProduction:{
       type: Boolean,
       default: false,
-    },
-    items: {
-      type: [workOrderItemSchema],
-      default: []
     },
     doNumber: {
       type: String,

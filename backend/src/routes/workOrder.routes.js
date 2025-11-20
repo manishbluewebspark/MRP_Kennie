@@ -1,5 +1,5 @@
 import express from "express";
-import { createWorkOrder, deleteWorkOrder, exportDeliveryWorkOrdersPDF, exportDeliveryWorkOrdersWord, exportDeliveryWorkOrdersXlsx, exportWorkOrders, getAllProductionWordOrders, getAllWorkOrders, getDeliveryOrders, getEachMPNUsage, getTotalMPNNeeded, getWorkOrderById, importWorkOrders, moveToProduction, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
+import { createWorkOrder, deleteWorkOrder, exportDeliveryWorkOrdersPDF, exportDeliveryWorkOrdersWord, exportDeliveryWorkOrdersXlsx, exportWorkOrders, getAllChilPartByDrawingId, getAllProductionWordOrders, getAllWorkOrders, getCompleteWorkOrders, getDeliveryOrders, getEachMPNUsage, getTotalMPNNeeded, getWorkOrderById, importWorkOrders, moveToProduction, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { upload } from "..//middlewares/upload.js";
 
@@ -17,7 +17,7 @@ router.patch("/:id/delivery", authenticate, updateDeliveryInfo);
 
 router.post("/workOrder/:id/move-to-production", authenticate, moveToProduction);
 router.get("/workOrder/production", authenticate, getAllProductionWordOrders)
-
+router.get("/workOrder/getAllChilPartByDrawingId", authenticate, getAllChilPartByDrawingId)
 router.get(
   "/workOrder/totalMPNNeeded",
   (req, res, next) => {
@@ -29,7 +29,7 @@ router.get(
 );getEachMPNUsage
 
 router.get("/workOrder/getEachMPNUsage",authenticate,getEachMPNUsage)
-
+router.get("/workOrder/getCompleteWorkOrders",authenticate,getCompleteWorkOrders)
 router.get('/workOrder/deliveryOrders',authenticate, getDeliveryOrders)
 // CRUD routes
 router.get("/", authenticate, getAllWorkOrders);
