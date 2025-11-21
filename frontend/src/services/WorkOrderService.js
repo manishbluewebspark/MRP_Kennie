@@ -144,6 +144,14 @@ WorkOrderService.getCompleteWorkOrders = () => {
   });
 };
 
+WorkOrderService.getAllChilPartByDrawingId = (drawingId) => {
+  return fetch({
+    url: `/work-orders/workOrder/getAllChilPartByDrawingId`,
+    method: "get",
+    params:drawingId
+  });
+};
+
 WorkOrderService.getTotalMPNNeeded = () => {
   return fetch({
     url: `/work-orders/workOrder/totalMPNNeeded`,

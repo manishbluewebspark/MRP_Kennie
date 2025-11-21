@@ -87,6 +87,8 @@ const SystemSettings = () => {
   };
 
   const saveSection = async (values) => {
+
+    console.log('-----values',values)
     try {
       setLoading(true);
 
@@ -112,8 +114,8 @@ const SystemSettings = () => {
           activeCurrencies,
           inactiveCurrencies,
           defaultCurrency: values.defaultCurrency,
-          exchangeRatesToUSD: values.exchangeToUSD,
-          exchangeRatesToSGD: values.exchangeToSGD,
+          exchangeRatesToUSD: values.exchangeRatesToUSD,
+          exchangeRatesToSGD: values.exchangeRatesToSGD,
         },
         inventoryAlerts: {
           criticalWeeksLeft: values.criticalWeeks,
@@ -204,15 +206,15 @@ const SystemSettings = () => {
         </Card>
 
         {/* Currency Settings */}
-        <Card title="Currency Settings" style={{ marginBottom: 24 }}>
+        {/* <Card title="Currency Settings" style={{ marginBottom: 24 }}>
           <Form.Item label="Active Currencies">
             <div style={{ marginBottom: 16 }}>
               {Object.keys(currencyStates).map(c => getCurrencyTag(c))}
             </div>
           </Form.Item>
-          <Form.Item name="defaultCurrency" label="Default Currency">
+          <Form.Item name="defaultCurrency" label="Quoted Currency">
             <Select style={{ width: 200 }}>
-              {Object.keys(currencyStates).map(c => <Option key={c} value={c}>{c}</Option>)}
+               <Option value={'SGD'}>SGD</Option>
             </Select>
           </Form.Item>
           <Row gutter={16}>
@@ -220,6 +222,11 @@ const SystemSettings = () => {
             <Col span={6}><Form.Item name={['exchangeRatesToUSD', 'EUR']} label="EUR"><InputNumber style={{ width: '100%' }} step={0.01} min={0} /></Form.Item></Col>
             <Col span={6}><Form.Item name={['exchangeRatesToUSD', 'RMB']} label="RMB"><InputNumber style={{ width: '100%' }} step={0.01} min={0} /></Form.Item></Col>
           </Row>
+          <Form.Item name="defaultCurrency" label="Quoted Currency">
+            <Select style={{ width: 200 }}>
+              {Object.keys(currencyStates).map(c => <Option key={c} value={c}>{c}</Option>)}
+            </Select>
+          </Form.Item>
           <Row gutter={16}>
             <Col span={6}><Form.Item name={['exchangeRatesToSGD', 'USD']} label="USD"><InputNumber style={{ width: '100%' }} step={0.01} min={0} /></Form.Item></Col>
             <Col span={6}><Form.Item name={['exchangeRatesToSGD', 'EUR']} label="EUR"><InputNumber style={{ width: '100%' }} step={0.01} min={0} /></Form.Item></Col>
@@ -229,7 +236,138 @@ const SystemSettings = () => {
             Save Currency Settings
           </Button>)}
 
-        </Card>
+        </Card> */}
+
+        <Card title="Currency Settings" style={{ marginBottom: 24 }}>
+  {/* Active currencies tags */}
+  {/* <Form.Item label="Active Currencies">
+    <div style={{ marginBottom: 16 }}>
+      {Object.keys(currencyStates).map(c => getCurrencyTag(c))}
+    </div>
+  </Form.Item> */}
+
+  {/* 🔹 Block 1: Quote → USD */}
+  <Form.Item
+    name="quotedToUSD"
+    label="Quoted Currency (to USD)"
+    initialValue="USD"              // ⬅️ default USD
+  >
+    <Select style={{ width: 200 }} disabled>
+      {Object.keys(currencyStates).map(c => (
+        <Option key={c} value={c}>
+          {c}
+        </Option>
+      ))}
+    </Select>
+  </Form.Item>
+
+  {/* 1 <quotedToUSD> = ? USD / EUR / RMB */}
+  <Row gutter={16}>
+    <Col span={6}>
+      <Form.Item
+        name={["exchangeRatesToUSD", "SGD"]}
+        label="1 SGD = ? USD"
+      >
+        <InputNumber
+          style={{ width: "100%" }}
+          step={0.01}
+          min={0}
+        />
+      </Form.Item>
+    </Col>
+    <Col span={6}>
+      <Form.Item
+        name={["exchangeRatesToUSD", "EUR"]}
+        label="1 EUR = ? USD"
+      >
+        <InputNumber
+          style={{ width: "100%" }}
+          step={0.01}
+          min={0}
+        />
+      </Form.Item>
+    </Col>
+    <Col span={6}>
+      <Form.Item
+        name={["exchangeRatesToUSD", "RMB"]}
+        label="1 RMB = ? USD"
+      >
+        <InputNumber
+          style={{ width: "100%" }}
+          step={0.01}
+          min={0}
+        />
+      </Form.Item>
+    </Col>
+  </Row>
+
+  {/* 🔹 Block 2: Quote → SGD */}
+  <Form.Item
+    name="quotedToSGD"
+    label="Quoted Currency (to SGD)"
+    initialValue="SGD"              // ⬅️ default SGD
+  >
+    <Select style={{ width: 200 }} disabled>
+      {Object.keys(currencyStates).map(c => (
+        <Option key={c} value={c}>
+          {c}
+        </Option>
+      ))}
+    </Select>
+  </Form.Item>
+
+  {/* 1 <quotedToSGD> = ? SGD / EUR / RMB */}
+  <Row gutter={16}>
+    <Col span={6}>
+      <Form.Item
+        name={["exchangeRatesToSGD", "USD"]}
+        label="1 USD = ? SGD"
+      >
+        <InputNumber
+          style={{ width: "100%" }}
+          step={0.01}
+          min={0}
+        />
+      </Form.Item>
+    </Col>
+    <Col span={6}>
+      <Form.Item
+        name={["exchangeRatesToSGD", "EUR"]}
+        label="1 EUR = ? SGD"
+      >
+        <InputNumber
+          style={{ width: "100%" }}
+          step={0.01}
+          min={0}
+        />
+      </Form.Item>
+    </Col>
+    <Col span={6}>
+      <Form.Item
+        name={["exchangeRatesToSGD", "RMB"]}
+        label="1 RMB = ? SGD"
+      >
+        <InputNumber
+          style={{ width: "100%" }}
+          step={0.01}
+          min={0}
+        />
+      </Form.Item>
+    </Col>
+  </Row>
+
+  {hasPermission("settings.systemSettings:update_currency_settings") && (
+    <Button
+      type="primary"
+      htmlType="submit"
+      icon={<SaveOutlined />}
+      loading={loading}
+    >
+      Save Currency Settings
+    </Button>
+  )}
+</Card>
+
 
         {/* Inventory Alerts */}
         <Card title="Inventory Alerts">

@@ -40,7 +40,9 @@ import {
   DatabaseOutlined,
   FolderOpenOutlined,
   PartitionOutlined,
-  CarOutlined
+  CarOutlined,
+  BuildOutlined,
+  SolutionOutlined
 } from '@ant-design/icons';
 import { ADMIN_PREFIX_PATH, APP_PREFIX_PATH, AUTH_PREFIX_PATH } from 'configs/AppConfig'
 
@@ -194,33 +196,7 @@ const dashBoardNavTree = [{
   title: 'sidenav.dashboard',
   icon: DashboardOutlined,
   breadcrumb: false,
-  isGroupTitle: true,
-  submenu: [
-    {
-      key: 'dashboards-default',
-      path: `${APP_PREFIX_PATH}/dashboards/default`,
-      title: 'sidenav.dashboard.default',
-      icon: DashboardOutlined,
-      breadcrumb: false,
-      submenu: []
-    },
-    {
-      key: 'dashboards-analytic',
-      path: `${APP_PREFIX_PATH}/dashboards/analytic`,
-      title: 'sidenav.dashboard.analytic',
-      icon: DotChartOutlined,
-      breadcrumb: false,
-      submenu: []
-    },
-    {
-      key: 'dashboards-sales',
-      path: `${APP_PREFIX_PATH}/dashboards/sales`,
-      title: 'sidenav.dashboard.sales',
-      icon: FundOutlined,
-      breadcrumb: false,
-      submenu: []
-    }
-  ]
+  isGroupTitle: false
 }]
 
 const appsNavTree = [{
@@ -974,7 +950,7 @@ const salesNavTree = [{
   key: 'sales',
   path: `${APP_PREFIX_PATH}/sales`,
   title: 'sales.sales',
-  icon: DashboardOutlined,
+  icon: ShoppingCartOutlined,
   breadcrumb: false,
   isGroupTitle: false,
   submenu: [
@@ -1152,7 +1128,7 @@ const inventoryNavTree = [{
   key: 'inventory',
   path: `${APP_PREFIX_PATH}/inventory`,
   title: 'inventory.inventory',
-  icon: DashboardOutlined,
+  icon: DatabaseOutlined,
   breadcrumb: false,
   isGroupTitle: false,
   submenu: [
@@ -1179,7 +1155,7 @@ const purchaseNavTree = [{
   key: 'purchase',
   path: `${APP_PREFIX_PATH}/purchase`,
   title: 'purchase.purchase',
-  icon: DashboardOutlined,
+  icon: SolutionOutlined,
   breadcrumb: false,
   isGroupTitle: false,
   submenu: [
@@ -1222,7 +1198,7 @@ const productionNavTree = [{
   key: 'production',
   path: `${APP_PREFIX_PATH}/production`,
   title: 'production.production',
-  icon: DashboardOutlined,
+  icon: BuildOutlined,
   breadcrumb: false,
   isGroupTitle: false,
   submenu: [
@@ -1230,7 +1206,7 @@ const productionNavTree = [{
       key: 'production',
       path: `${APP_PREFIX_PATH}/production`,
       title: 'production.production',
-      icon: DashboardOutlined,
+      icon: BuildOutlined,
       breadcrumb: false,
       submenu: []
     },
@@ -1239,11 +1215,12 @@ const productionNavTree = [{
 
 const navigationConfig = [
   // ...adminNavTree,
+  ...dashBoardNavTree,
   ...salesNavTree,
   ...workingOrderNavTree,
   ...inventoryNavTree,
-    ...productionNavTree,
   ...purchaseNavTree,
+  ...productionNavTree,
   ...libraryNavTree,
   ...settingsNavTree,
   // ...dashBoardNavTree,

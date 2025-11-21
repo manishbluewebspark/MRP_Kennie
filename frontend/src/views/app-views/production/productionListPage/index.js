@@ -16,12 +16,6 @@ import {
   message,
 } from "antd";
 import {
-  RightOutlined,
-  CheckCircleOutlined,
-  SyncOutlined,
-  SafetyCertificateOutlined,
-  SearchOutlined,
-  SettingOutlined,
   CalendarOutlined,
   UserOutlined,
   FileDoneOutlined,
@@ -30,6 +24,8 @@ import {
   BarcodeOutlined,
   ApartmentOutlined,
   EyeOutlined,
+  SearchOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import { useDispatch } from "react-redux";
 import useDebounce from "utils/debouce";
@@ -50,28 +46,23 @@ const InfoItem = ({ label, value, icon }) => (
   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
     <span style={{ color: "#1890ff", fontSize: 13 }}>{icon}</span>
     <span style={{ color: "#666", fontSize: 12 }}>{label}:</span>
-    <span style={{ color: "#000", fontWeight: 500, fontSize: 12 }}>{value}</span>
+    <span style={{ color: "#000", fontWeight: 500, fontSize: 12 }}>
+      {value}
+    </span>
   </div>
 );
 
 const formatProjectType = (str) => {
   if (!str) return "";
   return str
-    .split("_")                // ["cable", "harness"]
-    .map(s => s.charAt(0).toUpperCase() + s.slice(1))  // ["Cable","Harness"]
+    .split("_")
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join(" ");
 };
-
-
-const getQty = (record) =>
-  Array.isArray(record?.items)
-    ? record.items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0)
-    : 0;
 
 const formatDate = (iso) => {
   if (!iso) return "-";
   const d = new Date(iso);
-  // dd/mm/yyyy
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yyyy = d.getFullYear();
@@ -97,30 +88,29 @@ const statusTagColor = (status, isInProduction) => {
   }
 };
 
-
-
 // ---------------- Cable Assembly Card ----------------
-const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) => {
-  const qty = getQty(record);
+const CableAssemblyCard = ({
+  record,
+  setModalVisible,
+  setSelectWorkOrderData,
+  setActiveStage,
+}) => {
   const need = formatDate(record?.needDate);
   const commit = formatDate(record?.commitDate);
   const statusColor = statusTagColor(record?.status, record?.isInProduction);
 
-  // Stages to click (example)
   const stages = ["Picking", "Cable Harness", "Labelling", "Quality Check"];
 
   const getStagesForProject = (projectType) => {
     if (!projectType) return [];
-
-    // box_build → no stages
-    if (projectType === "Box Build") return ["Picking", "Labelling", "Quality Check"];
-
-    // otherwise return all stages
+    // Box Build ke liye Cable Harness hata diya
+    if (formatProjectType(projectType) === "Box Build") {
+      return ["Picking", "Labelling", "Quality Check"];
+    }
     return stages;
   };
 
   const finalStages = getStagesForProject(record?.projectType);
-
 
   return (
     <Card
@@ -137,11 +127,14 @@ const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) =
           <Col>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <FileTextOutlined style={{ color: "#1890ff", fontSize: 18 }} />
-              <span style={{ fontSize: 15, fontWeight: 600, color: "#000" }}>
-                {record?.workOrderNo || "-"} — {formatProjectType(record?.projectType || "-")}
+              <span
+                style={{ fontSize: 15, fontWeight: 600, color: "#000" }}
+              >
+                {record?.workOrderNo || "-"} —{" "}
+                {formatProjectType(record?.projectType || "-")}
               </span>
               <Tag color="purple" style={{ fontSize: 11, padding: "0 6px" }}>
-                Qty: {record?.quantity}
+                Qty: {record?.quantity ?? 0}
               </Tag>
             </div>
           </Col>
@@ -157,12 +150,20 @@ const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) =
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <CalendarOutlined style={{ color: "#1890ff", fontSize: 14 }} />
-                <span style={{ fontSize: 12, color: "#333", fontWeight: 500 }}>
+                <CalendarOutlined
+                  style={{ color: "#1890ff", fontSize: 14 }}
+                />
+                <span
+                  style={{ fontSize: 12, color: "#333", fontWeight: 500 }}
+                >
                   Need: {need}
                 </span>
-                <span style={{ fontSize: 12, color: "#999" }}>&nbsp;|&nbsp;</span>
-                <span style={{ fontSize: 12, color: "#333", fontWeight: 500 }}>
+                <span style={{ fontSize: 12, color: "#999" }}>
+                  &nbsp;|&nbsp;
+                </span>
+                <span
+                  style={{ fontSize: 12, color: "#333", fontWeight: 500 }}
+                >
                   Commit: {commit}
                 </span>
               </div>
@@ -172,7 +173,9 @@ const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) =
                   color={statusColor}
                   style={{ fontWeight: 500, fontSize: 11, padding: "0 6px" }}
                 >
-                  {record?.isInProduction ? "In Production" : (record?.status || "-")}
+                  {record?.isInProduction
+                    ? "In Production"
+                    : record?.status || "-"}
                 </Tag>
                 <EyeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
               </div>
@@ -207,15 +210,31 @@ const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) =
             value={record?.drawingNo}
             icon={<FileDoneOutlined />}
           />
-          <InfoItem label="PO No" value={record?.poNumber} icon={<BarcodeOutlined />} />
-          <InfoItem label="POS No" value={record?.posNo} icon={<BarcodeOutlined />} />
+          <InfoItem
+            label="PO No"
+            value={record?.poNumber}
+            icon={<BarcodeOutlined />}
+          />
+          <InfoItem
+            label="POS No"
+            value={record?.posNo}
+            icon={<BarcodeOutlined />}
+          />
           <InfoItem
             label="Work Order No"
             value={record?.workOrderNo}
             icon={<ApartmentOutlined />}
           />
-          <InfoItem label="Project No" value={record?.projectName} icon={<ApartmentOutlined />} />
-          <InfoItem label="Customer" value={record?.customerName || "JHON"} icon={<UserOutlined />} />
+          <InfoItem
+            label="Project"
+            value={record?.projectName}
+            icon={<ApartmentOutlined />}
+          />
+          <InfoItem
+            label="Customer"
+            value={record?.customerName || "N/A"}
+            icon={<UserOutlined />}
+          />
         </div>
       </div>
 
@@ -232,7 +251,13 @@ const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) =
           }}
         >
           Production Workflow{" "}
-          <span style={{ color: "#888", fontWeight: "normal", fontSize: 11 }}>
+          <span
+            style={{
+              color: "#888",
+              fontWeight: "normal",
+              fontSize: 11,
+            }}
+          >
             (Picking & Assembly can run concurrently)
           </span>
         </h3>
@@ -255,8 +280,9 @@ const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) =
                   cursor: "pointer",
                 }}
                 onClick={() => {
-                  setModalVisible(true)
-                  setSelectWorkOrderData(record)
+                  setModalVisible(true);
+                  setSelectWorkOrderData(record);
+                  setActiveStage(stage)
                 }}
               >
                 {stage}
@@ -266,9 +292,7 @@ const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) =
         </div>
       </div>
 
-
-
-      {/* Progress (placeholder: you can compute from stages) */}
+      {/* Progress (agar aage chahiye to) */}
       {record?.progress < 0 && (
         <>
           <Divider style={{ margin: "8px 0" }} />
@@ -283,10 +307,14 @@ const CableAssemblyCard = ({ record, setModalVisible,setSelectWorkOrderData }) =
             >
               Overall Progress
             </h3>
-            <Progress percent={record?.progress} size="small" strokeColor="#1890ff" />
+            <Progress
+              percent={record?.progress}
+              size="small"
+              strokeColor="#1890ff"
+            />
           </div>
-        </>)}
-
+        </>
+      )}
     </Card>
   );
 };
@@ -299,34 +327,39 @@ const SkillLevelCostingList = () => {
   const [search, setSearch] = useState("");
   const [skillLevelCostings, setSkillLevelCostings] = useState([]);
   const [loading, setLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState("active_production");
   const [modalVisible, setModalVisible] = useState(false);
-  const [workOrders, setAllWordOrders] = useState([])
-  const [selectWorkOrderData,setSelectWorkOrderData] = useState()
-  const [completeWorkOrders, setCompleteWorkOrders] = useState([])
+
+  const [workOrders, setAllWordOrders] = useState([]);
+  const [completeWorkOrders, setCompleteWorkOrders] = useState([]);
+  const [materialShortages, setMaterialShortages] = useState([]); // ⭐ third tab data
+  const [activeStage, setActiveStage] = useState("picking");
+  const [selectWorkOrderData, setSelectWorkOrderData] = useState();
+
   useEffect(() => {
     fetchData();
-    fetchWorkOrdersData()
-    fetchCompleteWorkOrdersData()
+    fetchWorkOrdersData();
+    fetchCompleteWorkOrdersData();
+    // TODO: yaha material shortages bhi fetch kar sakte ho jab API ready ho
   }, [page, limit]);
+
+
 
 
   const fetchCompleteWorkOrdersData = async () => {
     try {
-     
       const res = await WorkOrderService.getCompleteWorkOrders({
         page,
         limit,
       });
-      console.log('-------res',res)
-      setCompleteWorkOrders(res?.data)
+      console.log("-------complete res", res);
+      setCompleteWorkOrders(res?.data || []);
     } catch (err) {
-      message.error("Failed to fetch data");
+      message.error("Failed to fetch complete work orders");
       console.error(err);
-    } finally {
     }
   };
-
 
   const fetchData = async () => {
     try {
@@ -351,92 +384,152 @@ const SkillLevelCostingList = () => {
         page,
         limit,
       });
-      console.log('-------res', res)
+      console.log("-------active res", res);
       setAllWordOrders(res.data || []);
     } catch (err) {
-      message.error("Failed to fetch data");
+      message.error("Failed to fetch work orders");
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-
+  // Agar tumhare paas material shortage ka API hai to yaha use karo
+  // const fetchMaterialShortagesData = async () => {
+  //   try {
+  //     const res = await SomeService.getMaterialShortages({ page, limit });
+  //     setMaterialShortages(res.data || []);
+  //   } catch (err) {
+  //     message.error("Failed to fetch material shortages");
+  //   }
+  // };
 
   // ---------------- Table Column Sets ----------------
+
+  // 1️⃣ Active Production: Card based column
   const activeProductionColumns = [
     {
       title: "",
       key: "projectDetails",
-      render: (_, record) => <CableAssemblyCard record={record} setModalVisible={setModalVisible} setSelectWorkOrderData={setSelectWorkOrderData}/>,
+      render: (_, record) => (
+        <CableAssemblyCard
+          record={record}
+          setModalVisible={setModalVisible}
+          setSelectWorkOrderData={setSelectWorkOrderData}
+          setActiveStage={setActiveStage}
+        />
+      ),
     },
   ];
 
+  // 2️⃣ Recent Completions: simple table view
   const recentCompletionsColumns = [
     {
-      title: "Project",
-      key: "projectDetails",
-      render: () => (
+      title: "Work Order",
+      dataIndex: "workOrderNo",
+      key: "workOrderNo",
+      render: (text, record) => (
         <Space direction="vertical" size={0}>
           <Title level={5} style={{ margin: 0 }}>
-            2508-03
+            {text || "-"}
           </Title>
-          <Text type="secondary">Cable Assembly</Text>
+          <Text type="secondary">
+            {formatProjectType(record?.projectType) || "–"}
+          </Text>
+        </Space>
+      ),
+    },
+    {
+      title: "Project",
+      key: "projectName",
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text>{record?.projectName || "-"}</Text>
+          <Text type="secondary">{record?.customerName || "-"}</Text>
         </Space>
       ),
     },
     {
       title: "Qty",
       key: "qty",
-      render: () => <Tag color="green">Qty: 2</Tag>,
+      render: (_, record) => (
+        <Tag color="green">Qty: {record?.quantity ?? 0}</Tag>
+      ),
     },
     {
-      title: "Status",
-      key: "status",
-      render: () => <Tag color="green">Completed</Tag>,
-    },
-  ];
-
-  const materialShortagesColumns = [
-    {
-      title: "Work Order",
-      key: "projectDetails",
-      render: () => (
-        <Space direction="vertical" size={0}>
-          <Title level={5} style={{ margin: 0 }}>
-            12345
-          </Title>
-          <Text type="secondary">Work Order: 1234567777-A</Text>
-        </Space>
+      title: "Completed On",
+      key: "completedDate",
+      render: (_, record) => (
+        <Text>{formatDate(record?.completeDate || record?.completedDate)}</Text>
       ),
     },
     {
       title: "Status",
-      key: "actions",
-      render: () => (
+      key: "status",
+      render: (_, record) => (
+        <Tag color={statusTagColor(record?.status, false)}>
+          {record?.status || "Completed"}
+        </Tag>
+      ),
+    },
+  ];
+
+  // 3️⃣ Material Shortages: placeholder columns (abhi static example)
+  const materialShortagesColumns = [
+    {
+      title: "Work Order",
+      dataIndex: "workOrderNo",
+      key: "workOrderNo",
+      render: (text, record) => (
         <Space direction="vertical" size={0}>
-          <Tag color="red">Short: 1</Tag>
-          <Text>Picked: 0</Text>
+          <Title level={5} style={{ margin: 0 }}>
+            {text || "-"}
+          </Title>
+          <Text type="secondary">
+            Work Order Item: {record?.workOrderItemNo || "-"}
+          </Text>
+        </Space>
+      ),
+    },
+    {
+      title: "Shortage",
+      key: "shortage",
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Tag color="red">Short: {record?.shortage ?? 0}</Tag>
+          <Text>Picked: {record?.pickedQty ?? 0}</Text>
         </Space>
       ),
     },
   ];
 
   const handleSave = (data) => {
-    console.log('Saved data:', data);
+    console.log("Saved data:", data);
     setModalVisible(false);
   };
 
-
-  // ---------------- Dynamic Column Switch ----------------
+  // ---------------- Dynamic Column + Data Switch ----------------
   const getColumns = () => {
     switch (activeTab) {
       case "recent_completions":
         return recentCompletionsColumns;
       case "material_shortages":
         return materialShortagesColumns;
+      case "active_production":
       default:
         return activeProductionColumns;
+    }
+  };
+
+  const getDataSource = () => {
+    switch (activeTab) {
+      case "recent_completions":
+        return completeWorkOrders;
+      case "material_shortages":
+        return materialShortages;
+      case "active_production":
+      default:
+        return workOrders;
     }
   };
 
@@ -449,15 +542,15 @@ const SkillLevelCostingList = () => {
             {activeTab === "active_production"
               ? "Active Production"
               : activeTab === "recent_completions"
-                ? "Recent Completions"
-                : "Material Shortages"}
+              ? "Recent Completions"
+              : "Material Shortages"}
           </h2>
           <p style={{ color: "#888" }}>
             {activeTab === "active_production"
               ? "Current work orders in production"
               : activeTab === "recent_completions"
-                ? "Recently completed work orders"
-                : "Orders with missing materials"}
+              ? "Recently completed work orders"
+              : "Orders with missing materials"}
           </p>
         </Col>
 
@@ -499,7 +592,7 @@ const SkillLevelCostingList = () => {
       {/* Table */}
       <Table
         columns={getColumns()}
-        dataSource={workOrders}
+        dataSource={getDataSource()}
         loading={loading}
         rowKey="_id"
         pagination={false}
@@ -507,9 +600,12 @@ const SkillLevelCostingList = () => {
 
       <PickingDetailModal
         visible={modalVisible}
-        onCancel={() => { setModalVisible(false) }}
+        onCancel={() => {
+          setModalVisible(false);
+        }}
         onSave={handleSave}
         selectWorkOrderData={selectWorkOrderData}
+        stage={activeStage}
       />
     </div>
   );

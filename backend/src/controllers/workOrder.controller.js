@@ -24,6 +24,8 @@ import MPN from "../models/library/MPN.js";
 import Inventory from "../models/Inventory.js";
 import UOM from "../models/UOM.js";
 import Project from "../models/Project.js";
+import Customer from "../models/Customer.js";
+import Child from "../models/library/Child.js";
 
 
  function generateWorkOrderNumber (lastWorkOrderNo)  {
@@ -1075,6 +1077,83 @@ export const importWorkOrders = async (req, res) => {
 };
 
 
+export const exportWorkOrders = async (req, res) => {
+  try {
+    // Fetch all WorkOrders (flat schema)
+    const workOrders = await WorkOrder.find()
+      .populate("drawingId", "drawingNo")
+      .populate("projectId", "projectName")
+      .lean();
+
+    if (!workOrders.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No work orders found to export",
+      });
+    }
+
+    // Build rows (1 ROW PER WORK ORDER)
+    const rows = workOrders.map((wo) => ({
+      WorkOrderNo: wo.workOrderNo || "",
+      PO_Number: wo.poNumber || "",
+      ProjectName: wo.projectId?.projectName || "",
+      ProjectType: wo.projectType || "",
+      DrawingNo: wo.drawingId?.drawingNo || "",
+      POS_No: wo.posNo || "",
+      Quantity: wo.quantity ?? "",
+      UOM: wo.uom || "",
+      Remarks: wo.remarks || "",
+      NeedDate: wo.needDate
+        ? new Date(wo.needDate).toLocaleDateString("en-GB")
+        : "",
+      CommitDate: wo.commitDate
+        ? new Date(wo.commitDate).toLocaleDateString("en-GB")
+        : "",
+      Status: wo.status || "",
+      IsTriggered: wo.isTriggered ? "Yes" : "No",
+      IsInProduction: wo.isInProduction ? "Yes" : "No",
+      DONumber: wo.doNumber || "",
+      Delivered: wo.delivered ? "Yes" : "No",
+    }));
+
+    // Prepare Excel
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Auto column width
+    const headers = Object.keys(rows[0]);
+    ws["!cols"] = headers.map((h) => ({
+      wch: Math.max(12, h.length + 2),
+    }));
+
+    XLSX.utils.book_append_sheet(wb, ws, "WorkOrders");
+
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    // Final response
+    res.status(200);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="work_orders_export.xlsx"'
+    );
+    res.setHeader("Content-Length", buf.length);
+
+    return res.end(buf);
+  } catch (error) {
+    console.error("Export Work Orders Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to export work orders",
+      error: error.message,
+    });
+  }
+};
+
+
 // export const importWorkOrders = async (req, res) => {
 //   try {
 //     // ✅ Step 1: File validation
@@ -1369,81 +1448,81 @@ export const importWorkOrders = async (req, res) => {
 // ---------------- Export ----------------
 
 
-export const exportWorkOrders = async (req, res) => {
-  try {
-    // populate drawing number if you store ref in items.drawingId
-    const workOrders = await WorkOrder.find()
-      .populate("items.drawingId", "drawingNo")
-      .lean();
+// export const exportWorkOrders = async (req, res) => {
+//   try {
+//     // populate drawing number if you store ref in items.drawingId
+//     const workOrders = await WorkOrder.find()
+//       .populate("items.drawingId", "drawingNo")
+//       .lean();
 
-    // Build flat rows; also output a row even if items is empty
-    const rows = [];
-    for (const wo of workOrders) {
-      if (Array.isArray(wo.items) && wo.items.length) {
-        for (const it of wo.items) {
-          rows.push({
-            WorkOrderNo: wo.workOrderNo || "",
-            ProjectNo: wo.projectNo || "",
-            ProjectName: wo.projectId?.projectName || "",
-            PO_Number: wo.poNumber || "",
-            ProjectType: wo.projectType || "",
-            NeedDate: wo.needDate ? new Date(wo.needDate).toLocaleDateString("en-GB") : "",
-            CommitDate: wo.commitDate ? new Date(wo.commitDate).toLocaleDateString("en-GB") : "",
-            Status: wo.status || "",
-            DrawingNo: it?.drawingId?.drawingNo || "",   // populated above
-            POS_No: it?.posNo || "",
-            Quantity: it?.quantity ?? "",
-            UOM: it?.uom || "",
-            Remarks: it?.remarks || "",
-            Item_Status: it?.status || "",
-          });
-        }
-      } else {
-        rows.push({
-          WorkOrderNo: wo.workOrderNo || "",
-          ProjectNo: wo.projectNo || "",
-          ProjectName: wo.projectId?.projectName || "",
-          PO_Number: wo.poNumber || "",
-          ProjectType: wo.projectType || "",
-          NeedDate: wo.needDate ? new Date(wo.needDate).toLocaleDateString("en-GB") : "",
-          CommitDate: wo.commitDate ? new Date(wo.commitDate).toLocaleDateString("en-GB") : "",
-          Status: wo.status || "",
-          DrawingNo: "",
-          POS_No: "",
-          Quantity: "",
-          UOM: "",
-          Remarks: "",
-          Item_Status: "",
-        });
-      }
-    }
+//     // Build flat rows; also output a row even if items is empty
+//     const rows = [];
+//     for (const wo of workOrders) {
+//       if (Array.isArray(wo.items) && wo.items.length) {
+//         for (const it of wo.items) {
+//           rows.push({
+//             WorkOrderNo: wo.workOrderNo || "",
+//             ProjectNo: wo.projectNo || "",
+//             ProjectName: wo.projectId?.projectName || "",
+//             PO_Number: wo.poNumber || "",
+//             ProjectType: wo.projectType || "",
+//             NeedDate: wo.needDate ? new Date(wo.needDate).toLocaleDateString("en-GB") : "",
+//             CommitDate: wo.commitDate ? new Date(wo.commitDate).toLocaleDateString("en-GB") : "",
+//             Status: wo.status || "",
+//             DrawingNo: it?.drawingId?.drawingNo || "",   // populated above
+//             POS_No: it?.posNo || "",
+//             Quantity: it?.quantity ?? "",
+//             UOM: it?.uom || "",
+//             Remarks: it?.remarks || "",
+//             Item_Status: it?.status || "",
+//           });
+//         }
+//       } else {
+//         rows.push({
+//           WorkOrderNo: wo.workOrderNo || "",
+//           ProjectNo: wo.projectNo || "",
+//           ProjectName: wo.projectId?.projectName || "",
+//           PO_Number: wo.poNumber || "",
+//           ProjectType: wo.projectType || "",
+//           NeedDate: wo.needDate ? new Date(wo.needDate).toLocaleDateString("en-GB") : "",
+//           CommitDate: wo.commitDate ? new Date(wo.commitDate).toLocaleDateString("en-GB") : "",
+//           Status: wo.status || "",
+//           DrawingNo: "",
+//           POS_No: "",
+//           Quantity: "",
+//           UOM: "",
+//           Remarks: "",
+//           Item_Status: "",
+//         });
+//       }
+//     }
 
-    if (rows.length === 0) {
-      return res.status(404).json({ success: false, message: "No work orders found to export" });
-    }
+//     if (rows.length === 0) {
+//       return res.status(404).json({ success: false, message: "No work orders found to export" });
+//     }
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
+//     const wb = XLSX.utils.book_new();
+//     const ws = XLSX.utils.json_to_sheet(rows);
 
-    // Optional: column widths
-    const headers = Object.keys(rows[0]);
-    ws["!cols"] = headers.map(h => ({ wch: Math.max(12, h.length + 2) }));
+//     // Optional: column widths
+//     const headers = Object.keys(rows[0]);
+//     ws["!cols"] = headers.map(h => ({ wch: Math.max(12, h.length + 2) }));
 
-    XLSX.utils.book_append_sheet(wb, ws, "WorkOrders");
+//     XLSX.utils.book_append_sheet(wb, ws, "WorkOrders");
 
-    // Write Node buffer and send as binary
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+//     // Write Node buffer and send as binary
+//     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-    res.status(200);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", 'attachment; filename="work_orders_export.xlsx"');
-    res.setHeader("Content-Length", buf.length);
-    return res.end(buf);
-  } catch (error) {
-    console.error("Export Work Orders Error:", error);
-    return res.status(500).json({ success: false, message: "Failed to export work orders", error: error.message });
-  }
-};
+//     res.status(200);
+//     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+//     res.setHeader("Content-Disposition", 'attachment; filename="work_orders_export.xlsx"');
+//     res.setHeader("Content-Length", buf.length);
+//     return res.end(buf);
+//   } catch (error) {
+//     console.error("Export Work Orders Error:", error);
+//     return res.status(500).json({ success: false, message: "Failed to export work orders", error: error.message });
+//   }
+// };
 
 export const updateDeliveryInfo = async (req, res) => {
   try {
@@ -2078,9 +2157,193 @@ export const getAllProductionWordOrders = async (req, res) => {
 //   }
 // };
 
-export const getAllChilPartByDrawingId = async(req, res)=>{
+export const getAllChilPartByDrawingId = async (req, res) => {
+  try {
+    // drawingId query/body se lo
+    const drawingId = req.query.drawingId || req.body?.drawingId;
 
-}
+    if (!drawingId) {
+      return res.status(400).json({
+        status: false,
+        statusCode: 400,
+        message: "drawingId is required",
+        data: [],
+      });
+    }
+
+    let drawingObjectId;
+    try {
+      drawingObjectId = new mongoose.Types.ObjectId(drawingId);
+    } catch (e) {
+      return res.status(400).json({
+        status: false,
+        statusCode: 400,
+        message: "Invalid drawingId",
+        data: [],
+      });
+    }
+
+    // 1) CostingItems: drawingId + quoteType = material
+    const costingItems = await CostingItems.find({
+      drawingId: drawingObjectId,
+      quoteType: "material",
+    }).lean();
+
+    if (!costingItems.length) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No material costing items found for this drawing",
+        data: [],
+      });
+    }
+
+    // 2) Unique childPartIds, uomIds
+    const childPartIdStrs = [
+      ...new Set(
+        costingItems
+          .map((ci) => ci.childPart)
+          .filter((id) => id)
+          .map((id) => String(id))
+      ),
+    ];
+
+    const uomIdStrs = [
+      ...new Set(
+        costingItems
+          .map((ci) => ci.uom)
+          .filter((id) => id)
+          .map((id) => String(id))
+      ),
+    ];
+
+    // 3) ChildParts fetch
+    let childPartMap = new Map();
+    if (childPartIdStrs.length) {
+      const childPartObjectIds = childPartIdStrs.map(
+        (id) => new mongoose.Types.ObjectId(id)
+      );
+
+      const childPartDocs = await Child.find({
+        _id: { $in: childPartObjectIds },
+      }).lean();
+
+      childPartMap = new Map(
+        childPartDocs.map((cp) => [String(cp._id), cp])
+      );
+    }
+
+    // 4) MPN ids -> from childPart.mpn
+    const mpnIdStrs = [
+      ...new Set(
+        Array.from(childPartMap.values())
+          .map((cp) => cp.mpn)
+          .filter((id) => id)
+          .map((id) => String(id))
+      ),
+    ];
+
+    let mpnMap = new Map();
+    if (mpnIdStrs.length) {
+      const mpnObjectIds = mpnIdStrs.map(
+        (id) => new mongoose.Types.ObjectId(id)
+      );
+
+      const mpnDocs = await MPN.find({
+        _id: { $in: mpnObjectIds },
+      }).lean();
+
+      mpnMap = new Map(mpnDocs.map((m) => [String(m._id), m]));
+    }
+
+    // 5) UOM fetch
+    let uomMap = new Map();
+    if (uomIdStrs.length) {
+      const uomObjectIds = uomIdStrs.map(
+        (id) => new mongoose.Types.ObjectId(id)
+      );
+
+      const uomDocs = await UOM.find({
+        _id: { $in: uomObjectIds },
+      }).lean();
+
+      uomMap = new Map(uomDocs.map((u) => [String(u._id), u]));
+    }
+
+    // 6) Final list build
+    const list = costingItems.map((ci) => {
+      const child = ci.childPart
+        ? childPartMap.get(String(ci.childPart))
+        : null;
+
+      const mpnDoc = child?.mpn
+        ? mpnMap.get(String(child.mpn))
+        : null;
+
+      const uomDoc = ci.uom ? uomMap.get(String(ci.uom)) : null;
+
+      const quantity = Number(ci.quantity || 0);
+
+      return {
+        itemNumber:ci?.itemNumber,
+        costingItemId: ci._id,
+        drawingId: ci.drawingId,
+
+        // Child part
+        childPartId: ci.childPart || null,
+        ChildPartNo:
+          child?.ChildPartNo ||
+          child?.childPartName ||
+          child?.code ||
+          null,
+
+        // MPN details (linked via childPart)
+        mpnId: child?.mpn || null,
+        mpn:
+          mpnDoc?.mpn ||
+          mpnDoc?.MPN ||
+          mpnDoc?.mpnNumber ||
+          null,
+        description:
+          mpnDoc?.description ||
+          mpnDoc?.Description ||
+          ci.description ||
+          child?.description ||
+          null,
+
+        // UOM
+        uomId: ci.uom || null,
+        uom: uomDoc?.name || uomDoc?.code || null,
+
+        // Quantity from costingItems
+        quantity,
+
+        // Storage Location (assumed from ChildPart)
+        storageLocation:
+          mpnDoc?.
+StorageLocation
+ ||
+          child?.location ||
+          null,
+      };
+    });
+
+    return res.json({
+      status: true,
+      statusCode: 200,
+      message: "Child parts for drawing fetched successfully",
+      data: list,
+    });
+  } catch (error) {
+    console.error("getAllChilPartByDrawingId error:", error);
+    return res.status(500).json({
+      status: false,
+      statusCode: 500,
+      message: error.message,
+      data: [],
+    });
+  }
+};
 
 
 
@@ -2482,7 +2745,7 @@ export const getDeliveryOrders = async (req, res) => {
       page = 1,
       limit = 10,
       search = "",
-      status,          // e.g. Pending | Completed | In_Progress ...
+      status,          // e.g. on_hold, completed, in_progress
       customer,        // customer _id
       project,         // project _id
       dateFrom,        // ISO or yyyy-mm-dd
@@ -2494,21 +2757,23 @@ export const getDeliveryOrders = async (req, res) => {
     page = Math.max(parseInt(page) || 1, 1);
     limit = Math.max(parseInt(limit) || 10, 1);
 
-    const match = { isDeleted: { $ne: true } };
+    const match = { isDeleted: { $ne: true } }; // if you don't have isDeleted, you can remove this
 
+    // 🔍 Basic search on root fields
     if (search) {
       match.$or = [
         { workOrderNo: { $regex: search, $options: "i" } },
         { poNumber: { $regex: search, $options: "i" } },
-        { posNumber: { $regex: search, $options: "i" } },
-        // also allow searching by drawing code once we have it in pipeline
+        { posNo: { $regex: search, $options: "i" } }, // schema has posNo
       ];
     }
 
+    // 🔽 Filter by status
     if (status) {
       match.status = status;
     }
 
+    // 📅 Filter by createdAt range
     if (dateFrom || dateTo) {
       match.createdAt = {};
       if (dateFrom) match.createdAt.$gte = new Date(dateFrom);
@@ -2518,32 +2783,43 @@ export const getDeliveryOrders = async (req, res) => {
     const pipeline = [
       { $match: match },
 
-      // one row per item
-      { $unwind: { path: "$items", preserveNullAndEmptyArrays: true } },
-
-      // drawing join
+      // 🔗 Join Drawing
       {
         $lookup: {
           from: "drawings",
-          localField: "items.drawingId",
+          localField: "drawingId",
           foreignField: "_id",
           as: "drawingDoc",
         },
       },
       { $unwind: { path: "$drawingDoc", preserveNullAndEmptyArrays: true } },
 
-      // project join (from drawing)
+      // 🔗 Join Project (from drawing.projectId OR workOrder.projectId)
       {
         $lookup: {
           from: "projects",
-          localField: "drawingDoc.projectId",
-          foreignField: "_id",
+          let: {
+            drawingProjectId: "$drawingDoc.projectId",
+            woProjectId: "$projectId",
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$_id", "$$drawingProjectId"] },
+                    { $eq: ["$_id", "$$woProjectId"] },
+                  ],
+                },
+              },
+            },
+          ],
           as: "projectDoc",
         },
       },
       { $unwind: { path: "$projectDoc", preserveNullAndEmptyArrays: true } },
 
-      // customer join (from project)
+      // 🔗 Join Customer (from project.customerId)
       {
         $lookup: {
           from: "customers",
@@ -2554,20 +2830,42 @@ export const getDeliveryOrders = async (req, res) => {
       },
       { $unwind: { path: "$customerDoc", preserveNullAndEmptyArrays: true } },
 
-      // optional filter by project/customer after lookups
-      ...(project ? [{ $match: { "projectDoc._id": new mongoose.Types.ObjectId(project) } }] : []),
-      ...(customer ? [{ $match: { "customerDoc._id": new mongoose.Types.ObjectId(customer) } }] : []),
+      // Filter by project / customer after lookups
+      ...(project
+        ? [
+            {
+              $match: {
+                "projectDoc._id": new mongoose.Types.ObjectId(project),
+              },
+            },
+          ]
+        : []),
+      ...(customer
+        ? [
+            {
+              $match: {
+                "customerDoc._id": new mongoose.Types.ObjectId(customer),
+              },
+            },
+          ]
+        : []),
 
-      // compute friendly fields
+      // 🧮 Compute friendly fields
       {
         $addFields: {
-          displayPONumber: { $ifNull: ["$poNumber", "$posNumber"] },
+          displayPONumber: {
+            $ifNull: ["$poNumber", "$posNumber"], // posNumber if you ever add it
+          },
 
-          // Completed date: item.completedDate -> order.completedAt -> null
-          displayCompletedDate: { $ifNull: ["$items.completedDate", "$completedAt"] },
+          // Completed date: prefer completeDate (root)
+          displayCompletedDate: {
+            $ifNull: ["$completeDate", null],
+          },
 
-          // Target delivery: item.targetDeliveryDate -> order.commitDate -> null
-          displayTargetDelivery: { $ifNull: ["$items.targetDeliveryDate", "$commitDate"] },
+          // Target delivery: prefer targetDeliveryDate → commitDate
+          displayTargetDelivery: {
+            $ifNull: ["$targetDeliveryDate", "$commitDate"],
+          },
 
           // Drawing name fallback across common field names
           drawingName: {
@@ -2591,7 +2889,7 @@ export const getDeliveryOrders = async (req, res) => {
         },
       },
 
-      // derive display status
+      // 📌 Derive display status
       {
         $addFields: {
           displayStatus: {
@@ -2604,22 +2902,23 @@ export const getDeliveryOrders = async (req, res) => {
         },
       },
 
-      // final projection (includes itemId for per-item updates + order-level flags)
+      // 🎯 Final projection (1 row per WorkOrder)
       {
         $project: {
           _id: 1,
-          itemId: "$items._id",
           workOrderNo: 1,
           doNumber: 1,
           delivered: 1,
           createdAt: 1,
-          completedDate: 1,
-          poNumber: "$displayPONumber",
-          qty: { $ifNull: ["$items.qty", 0] },
 
-          drawingId: "$items.drawingId",
-          drawingName: 1,                    // <-- here is your drawing name
-          // keep a numeric/code too if you need:
+          poNumber: "$displayPONumber",
+
+          qty: {
+            $ifNull: ["$quantity", 0],
+          },
+
+          drawingId: "$drawingId",
+          drawingName: 1,
           drawingCode: "$drawingDoc.drawingNumber",
 
           projectId: "$projectDoc._id",
@@ -2628,30 +2927,38 @@ export const getDeliveryOrders = async (req, res) => {
           customerId: "$customerDoc._id",
           customerName: "$customerDoc.companyName",
 
-          // completedDate: "$displayCompletedDate",
+          completedDate: "$displayCompletedDate",
           targetDeliveryDate: "$displayTargetDelivery",
           status: "$displayStatus",
         },
       },
 
-      // search could also try drawingName if provided
+      // 🔍 Extended search on drawing & project also
       ...(search
         ? [
-          {
-            $match: {
-              $or: [
-                { workOrderNo: { $regex: search, $options: "i" } },
-                { poNumber: { $regex: search, $options: "i" } },
-                { drawingName: { $regex: search, $options: "i" } },
-                { drawingCode: { $regex: search, $options: "i" } },
-              ],
+            {
+              $match: {
+                $or: [
+                  { workOrderNo: { $regex: search, $options: "i" } },
+                  { poNumber: { $regex: search, $options: "i" } },
+                  { drawingName: { $regex: search, $options: "i" } },
+                  { drawingCode: { $regex: search, $options: "i" } },
+                  { projectName: { $regex: search, $options: "i" } },
+                  { customerName: { $regex: search, $options: "i" } },
+                ],
+              },
             },
-          },
-        ]
+          ]
         : []),
 
-      { $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } },
+      // 🔽 Sort
+      {
+        $sort: {
+          [sortBy]: sortOrder === "asc" ? 1 : -1,
+        },
+      },
 
+      // 📄 Pagination with meta
       {
         $facet: {
           meta: [{ $count: "total" }],
@@ -2845,9 +3152,165 @@ export const getEachMPNUsage = async (req, res) => {
   }
 };
 
-export const getCompleteWorkOrders = async(req, res)=>{
-  
-}
+export const getCompleteWorkOrders = async (req, res) => {
+  try {
+    let { page = 1, limit = 20, search = "" } = req.query;
+
+    page = Number(page) || 1;
+    limit = Number(limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // ✔️ Only completed work orders
+    const baseQuery = { status: "on_hold" };
+
+    if (search) {
+      baseQuery.$or = [
+        { workOrderNo: { $regex: search, $options: "i" } },
+        { poNumber: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // 1️⃣ Fetch completed work orders
+    const [workOrders, total] = await Promise.all([
+      WorkOrder.find(baseQuery)
+        .sort({ completeDate: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      WorkOrder.countDocuments(baseQuery),
+    ]);
+
+    if (!workOrders.length) {
+      return res.json({
+        success: true,
+        message: "No completed work orders",
+        data: [],
+        pagination: { total: 0, page, limit, pages: 0 },
+      });
+    }
+
+    // 2️⃣ Collect Project & Drawing IDs
+    const projectIds = [];
+    const drawingIds = [];
+
+    workOrders.forEach((wo) => {
+      if (wo.projectId) projectIds.push(String(wo.projectId));
+      // items removed? → OR if items exist, pickup drawingId
+      (wo.items || []).forEach((it) => {
+        if (it.drawingId) drawingIds.push(String(it.drawingId));
+      });
+    });
+
+    // 3️⃣ Fetch Projects
+    const projectDocs = await Project.find({
+      _id: { $in: projectIds },
+    })
+      .select("projectName customerId")
+      .lean();
+
+    const projectMap = new Map();
+    projectDocs.forEach((p) => {
+      projectMap.set(String(p._id), {
+        name: p.projectName,
+        customerId: p.customerId,
+      });
+    });
+
+    // 4️⃣ Fetch Customers
+    const customerIds = projectDocs
+      .map((p) => p.customerId)
+      .filter(Boolean)
+      .map((id) => String(id));
+
+    const customerDocs = await Customer.find({
+      _id: { $in: customerIds },
+    })
+      .select("companyName")
+      .lean();
+
+    const customerMap = new Map();
+    customerDocs.forEach((c) => {
+      customerMap.set(String(c._id), c.companyName);
+    });
+
+    // 5️⃣ Fetch Drawings
+    const drawingDocs = await Drawing.find({
+      _id: { $in: drawingIds },
+    })
+      .select("drawingNo")
+      .lean();
+
+    const drawingMap = new Map();
+    drawingDocs.forEach((d) => {
+      drawingMap.set(String(d._id), d.drawingNo);
+    });
+
+    // 6️⃣ Final flat mapped list
+    const finalList = [];
+
+    workOrders.forEach((wo) => {
+      const proj = projectMap.get(String(wo.projectId)) || {};
+      const customerName = customerMap.get(proj.customerId) || null;
+
+      // WorkOrder level — if NO `items` → single row
+      if (!wo.items || wo.items.length === 0) {
+        finalList.push({
+          workOrderId: wo._id,
+          workOrderNo: wo.workOrderNo || null,
+          poNumber: wo.poNumber || null,
+          projectName: proj?.name || null,
+          customerName,
+
+          drawingNo: null,
+          posNo: null,
+          quantity: wo?.quantity,
+
+          projectType: wo.projectType || null,
+          completeDate: wo.completeDate || wo.updatedAt || null,
+          status: wo.status,
+        });
+      } else {
+        // If items exist → each item in new row
+        wo.items.forEach((it) => {
+          finalList.push({
+            workOrderId: wo._id,
+            workOrderNo: wo.workOrderNo || null,
+            poNumber: wo.poNumber || null,
+            projectName: proj?.name || null,
+            customerName,
+
+            drawingNo: drawingMap.get(String(it.drawingId)) || null,
+            posNo: it.posNo ?? null,
+            quantity: it.quantity ?? 0,
+
+            projectType: it.projectType || wo.projectType,
+            completeDate: wo.completeDate || wo.updatedAt || null,
+            status: wo.status,
+          });
+        });
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: "Completed work orders fetched successfully",
+      data: finalList,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("getCompleteWorkOrders error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 
 
 
