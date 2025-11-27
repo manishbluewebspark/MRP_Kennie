@@ -28,11 +28,22 @@ const PurchaseSupplierManagementPage = () => {
   };
 
   const handleEdit = async (id, data) => {
-    await dispatch(updateSupplier({ id, data }));
-    message.success("Supplier updated successfully");
-    setIsModalVisible(false);
-    setEditingSupplier(null);
-  };
+  await dispatch(
+    updateSupplier({ 
+      id, 
+      data: { 
+        ...data, 
+        gst: gstApplicable   // 👈 Add this!
+      }
+    })
+  );
+
+  message.success("Supplier updated successfully");
+  dispatch(fetchSuppliers());
+  setIsModalVisible(false);
+  setEditingSupplier(null);
+};
+
 
   const handleDelete = async (id) => {
     await dispatch(deleteSupplier(id));

@@ -2925,3 +2925,72 @@ export const importDrawings = async (req, res) => {
 //     try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch { }
 //   }
 // };
+
+export const updateLatestPrice = async (req, res) => {
+  try {
+    const { id } = req.params; // costing item ID
+    const userId = req.user.id;
+
+    console.log("----- updateLatestPrice API Called -----");
+    console.log("Costing Item ID:", id);
+    console.log("User ID:", userId);
+
+    // 🟢 1) Find costing item by ID + populate MPN
+    const costingItem = await CostingItems.findById(id)
+      .populate("mpn", "RFQUnitPrice");
+
+    console.log("Found costingItem:", costingItem);
+    console.log("Related MPN:", costingItem?.mpn);
+
+    if (!costingItem) {
+      return res.status(404).json({
+        success: false,
+        message: "Costing item not found",
+      });
+    }
+
+    if (!costingItem.mpn) {
+      return res.status(400).json({
+        success: false,
+        message: "MPN not associated with this costing item",
+      });
+    }
+
+    // 🟢 2) Update Prices
+    const oldUnitPrice = Number(costingItem.unitPrice || 0);
+    const newUnitPrice = Number(costingItem.mpn.RFQUnitPrice || 0);
+
+    if (!newUnitPrice) {
+      return res.status(400).json({
+        success: false,
+        message: "MPN RFQUnitPrice is not set",
+      });
+    }
+
+    costingItem.unitPrice = newUnitPrice;
+    costingItem.updated_by = userId;
+
+    await costingItem.save();
+
+    return res.json({
+      success: true,
+      message: "Unit price updated successfully from MPN",
+      data: {
+        id: costingItem.id,
+        previousUnitPrice: oldUnitPrice,
+        newUnitPrice: newUnitPrice,
+        priceDifference: newUnitPrice - oldUnitPrice,
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating latest price:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+

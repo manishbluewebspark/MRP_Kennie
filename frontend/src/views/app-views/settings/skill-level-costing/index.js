@@ -10,6 +10,7 @@ import SkillLevelCostingService from "services/SkillLevelCostingService";
 import { getAllCurrencies } from "store/slices/currencySlice";
 import { getAllUOMs } from "store/slices/uomSlice";
 import { hasPermission } from "utils/auth";
+import { render } from "@testing-library/react";
 const { Title, Text } = Typography;
 
 
@@ -91,15 +92,20 @@ const SkillLevelCostingList = () => {
             <Title level={4} style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
               {record.skillLevelName || 'Cable Harness Technician - Day'}
             </Title>
-            <Text type="secondary" style={{ fontSize: '14px' }}>
-              {record.description || 'More complex Cable Harness & Assembly Works'}
-            </Text>
+           
             <Space size="middle" style={{ marginTop: 4 }}>
               <Tag color="blue">{record.currencyType?.code}{record.rate}/{record?.type.code}</Tag>
             </Space>
           </Space>
         </div>
       )
+    },
+    {
+      title: "",
+      key: "description",
+      render:(_,record)=>( <Text type="secondary" style={{ fontSize: '14px' }}>
+              {record.description || 'More complex Cable Harness & Assembly Works'}
+            </Text>)
     },
     {
       title: "",

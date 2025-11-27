@@ -660,3 +660,215 @@ export const exportExcel = async (req, res) => {
     });
   }
 };
+
+export const exportMaterialRequiredExcel = async (req, res) => {
+  try {
+    const {
+      search = ""
+    } = req.query;
+
+    // ---- Fetch original data using list logic ----
+    const filter = {};
+
+    if (search) {
+      filter.$or = [
+        { MPN: { $regex: search, $options: "i" } },
+        { Description: { $regex: search, $options: "i" } },
+        { Manufacturer: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    // Get all inventory with mpn data
+    const inventoryList = await Inventory.find(filter)
+      .populate({
+        path: "mpnId",
+        select: "MPN Description Manufacturer UOM minStockLevel preferredSuppliers",
+        model: "MPNLibrary"
+      })
+      .lean();
+
+    const excelData = [];
+
+    for (const item of inventoryList) {
+      if (!item.mpnId) continue;
+
+      const mpn = item.mpnId.MPN || "N/A";
+      const desc = item.mpnId.Description || "N/A";
+      const uom = item.mpnId.UOM || "PCS";
+      const currentQty = item.balanceQuantity || 0;
+      const requiredQty = item.mpnId.minStockLevel || 0;
+      const shortageQty = Math.max(0, requiredQty - currentQty);
+
+      // Only include shortage rows
+      if (shortageQty <= 0) continue;
+
+      excelData.push({
+        "MPN": mpn,
+        "Description": desc,
+        "UOM": uom,
+        "Current Qty": currentQty,
+        "Required Qty": requiredQty,
+        "Shortage Qty": shortageQty,
+      });
+    }
+
+    if (excelData.length === 0) {
+      return res.status(200).json({
+        success: false,
+        message: "No shortage items found"
+      });
+    }
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(excelData);
+
+    ws["!cols"] = Object.keys(excelData[0]).map((c) => ({
+      wch: Math.max(15, c.length + 2)
+    }));
+
+    XLSX.utils.book_append_sheet(wb, ws, "Material Required");
+    const xlsBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    // Download
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=material-required.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    return res.end(xlsBuffer);
+  } catch (error) {
+    console.error("exportMaterialRequiredExcel Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const exportInventoryListExcel = async (req, res) => {
+  try {
+    const { search = "" } = req.query;
+
+    const filter = {};
+
+    if (search) {
+      filter.$or = [
+        { MPN: { $regex: search, $options: "i" } },
+        { Description: { $regex: search, $options: "i" } },
+        { Manufacturer: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const inventoryList = await Inventory.find(filter)
+      .populate({
+        path: "mpnId",
+        select: "MPN Description Manufacturer UOM StorageLocation",
+        model: "MPNLibrary"
+      })
+      .lean();
+
+    const excelData = inventoryList.map((item) => ({
+      "MPN": item.mpnId?.MPN || "N/A",
+      "Description": item.mpnId?.Description || "N/A",
+      "Manufacturer": item.mpnId?.Manufacturer || "N/A",
+      "UOM": item.mpnId?.UOM || "PCS",
+      "Storage Location": item.mpnId?.StorageLocation || "Main",
+      "Current Stock": item.balanceQuantity || 0,
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(excelData);
+
+    ws["!cols"] = Object.keys(excelData[0]).map((c) => ({
+      wch: Math.max(15, c.length + 2)
+    }));
+
+    XLSX.utils.book_append_sheet(wb, ws, "Inventory List");
+    const xlsBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=inventory-list.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    return res.end(xlsBuffer);
+  } catch (error) {
+    console.error("exportInventoryListExcel Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const exportInventoryAlertsExcel = async (req, res) => {
+  try {
+    const { search = "" } = req.query;
+
+    const filter = {};
+
+    if (search) {
+      filter.$or = [
+        { MPN: { $regex: search, $options: "i" } },
+        { Description: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const inventoryList = await Inventory.find(filter)
+      .populate({
+        path: "mpnId",
+        select: "MPN Description Manufacturer UOM minStockLevel maxStockLevel",
+        model: "MPNLibrary"
+      })
+      .lean();
+
+    const excelData = [];
+
+    for (const item of inventoryList) {
+      const mpn = item.mpnId?.MPN || "N/A";
+      const desc = item.mpnId?.Description || "N/A";
+      const current = item.balanceQuantity || 0;
+      const min = item.mpnId?.minStockLevel || 10;
+
+      if (current >= min) continue; // No alert
+
+      excelData.push({
+        "MPN": mpn,
+        "Description": desc,
+        "Current Stock": current,
+        "Minimum Stock": min,
+        "Shortage": Math.max(min - current, 0),
+        "Urgency": current === 0 ? "Critical" : current < min * 0.5 ? "High" : "Low",
+      });
+    }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(excelData);
+
+    ws["!cols"] = Object.keys(excelData[0]).map((c) => ({
+      wch: Math.max(15, c.length + 2)
+    }));
+
+    XLSX.utils.book_append_sheet(wb, ws, "Alerts");
+
+    const xlsBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=inventory-alerts.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    return res.end(xlsBuffer);
+  } catch (error) {
+    console.error("exportInventoryAlertsExcel Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

@@ -26,6 +26,9 @@ import WorkOrderService from "services/WorkOrderService";
 import dayjs from "dayjs";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchAllMpn } from "store/slices/librarySlice";
+import { fetchCustomers } from "store/slices/customerSlice";
+import { fetchProjects } from "store/slices/ProjectSlice";
+import ProjectService from "services/ProjectService";
 
 // Badge render helper
 const renderBadge = (text, type) => {
@@ -53,10 +56,12 @@ const renderBadge = (text, type) => {
     return <Tag color={color}>{text}</Tag>;
 };
 
-const customerData = [];
-const projectData = [];
+
+
 const { Option } = Select;
 const MPNTrackerPage = () => {
+    const { list } = useSelector((state) => state.customers)
+    const [projectData, setProjectData] = useState([])
     const dispatch = useDispatch()
     const { librarys } = useSelector((state) => state);
     const [data, setData] = useState([]); // Total MPN Needed data
@@ -72,7 +77,7 @@ const MPNTrackerPage = () => {
 
     // Dropdown for MPN
     const [mpnOptions, setMpnOptions] = useState([]);
-    const [selectedMpn, setSelectedMpn] = useState(null);
+    const [selectedMpn, setSelectedMpn] = useState(librarys?.mpnList[0]?._id);
 
     // ================== COLUMNS ==================
 
@@ -252,7 +257,7 @@ const MPNTrackerPage = () => {
             name: "customer",
             label: "Customer",
             placeholder: "Select Customer",
-            options: customerData.map((customer) => ({
+            options: list?.map((customer) => ({
                 label: customer.companyName,
                 value: customer._id,
             })),
@@ -285,11 +290,13 @@ const MPNTrackerPage = () => {
     const fetchTotalMpnNeeded = async (params = {}) => {
         setLoading(true);
         try {
-            const { page = 1, limit = 10, search = "" } = params;
+            const { page = 1, limit = 10, search = "",customer,project } = params;
             const res = await WorkOrderService.getTotalMPNNeeded({
                 page,
                 limit,
                 search,
+                project,
+                customer
             });
 
             if (res?.status) {
@@ -321,7 +328,11 @@ const MPNTrackerPage = () => {
     };
 
     const fetchEachMpnUsage = async (mpnId, params = {}) => {
-        if (!mpnId) return;
+        if (!mpnId) {
+            console.log("❌ No MPN ID selected");
+            return;
+        }
+
         setLoading(true);
         try {
             const { page = 1, limit = 10 } = params;
@@ -348,7 +359,35 @@ const MPNTrackerPage = () => {
         // default tab: Total MPN Needed
         fetchTotalMpnNeeded({ page, limit, search });
         dispatch(fetchAllMpn());
+        dispatch(fetchCustomers())
+        fetchProjects()
     }, []);
+
+    const normalizeProjectsResponse = (res) => {
+        if (!res) return [];
+        // axios response usually in res.data
+        const body = res.data ?? res;
+        // if API returns { success:true, data: [...] }
+        if (body?.success !== undefined) return body.data ?? [];
+        // if API returns { data: [...], pagination: {...} }
+        if (Array.isArray(body?.data)) return body.data;
+        // if API returns array directly
+        if (Array.isArray(body)) return body;
+        // fallback
+        return [];
+    };
+
+    const fetchProjects = async (params = {}) => {
+        try {
+            const res = await ProjectService.getAllProjects(params);
+            const projects = normalizeProjectsResponse(res);
+            setProjectData(projects);
+        } catch (err) {
+            console.error("Error fetching projects:", err);
+            message.error("Failed to fetch projects");
+        } finally {
+        }
+    };
 
     // When tab changes
     const handleTabChange = (value) => {
@@ -376,19 +415,105 @@ const MPNTrackerPage = () => {
         }
     }, 500);
 
-    const handleFilterSubmit = async (data) => {
-        console.log("-------filter", data);
-    };
+   const handleFilterSubmit = async (filters) => {
+    try {
+        setIsFilterModalOpen(false);
+
+        let params = {
+            page: 1,
+            limit,
+            search,
+        };
+
+        // 🔹 Drawing Date (convert to ISO start-end range)
+        if (filters.drawingDate) {
+            params.drawingDate = filters.drawingDate; 
+        }
+
+        // 🔹 Customer
+        if (filters.customer) {
+            params.customer = filters.customer;
+        }
+
+        // 🔹 Project
+        if (filters.project) {
+            params.project = filters.project;
+        }
+
+        // 🔹 Drawing Range (range1 → server me handle)
+        if (filters.drawingRange) {
+            params.drawingRange = filters.drawingRange;
+        }
+
+        setPage(1);
+
+        if (activeTab === "total_mpn_needed") {
+            await fetchTotalMpnNeeded(params);
+        } else if (activeTab === "each_mpn_usage") {
+            if (!selectedMpn) {
+                message.warning("Please select MPN first");
+                return;
+            }
+            await fetchEachMpnUsage(selectedMpn, params);
+        }
+
+    } catch (err) {
+        console.error("Filter error:", err);
+        message.error("Filter failed");
+    }
+};
+
 
     const handleExport = async () => {
         try {
-            console.log("Exporting...");
-            message.success("Export triggered");
+            if (activeTab === "total_mpn_needed") {
+                const res = await WorkOrderService.exportGetTotalMPNNeeded();
+
+                const blob = new Blob([res.data], {
+                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                });
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "total_mpn_needed.xlsx";
+                a.click();
+                window.URL.revokeObjectURL(url);
+
+                message.success("Total MPN Needed Exported!");
+            }
+            else if (activeTab === "each_mpn_usage") {
+
+                if (!selectedMpn) {
+                    message.warning("Please select an MPN!");
+                    return;
+                }
+
+                const res = await WorkOrderService.exportGetEachMPNUsage({
+                    mpnId: selectedMpn,
+                });
+
+                const blob = new Blob([res.data], {
+                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                });
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "each_mpn_usage.xlsx";
+                a.click();
+                window.URL.revokeObjectURL(url);
+
+                message.success("Each MPN Usage Exported!");
+            }
         } catch (err) {
-            console.error("Error exporting:", err);
+            console.error("Export error:", err);
             message.error("Failed to export");
         }
     };
+
+
+
 
     const handleImport = async (file) => {
         try {
@@ -407,73 +532,73 @@ const MPNTrackerPage = () => {
     return (
         <div>
             {/* Header Section */}
-           {/* Header + Tabs Row */}
-<div
-  style={{
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-    width: "100%",
-  }}
->
-  <div>
-    <h2 style={{ margin: 0 }}>
-      {isTotalTab ? "Total MPN Requirement" : "Each MPN Usage"}
-    </h2>
-    <p style={{ margin: 0, fontSize: 14, color: "#888" }}>
-      {isTotalTab ? "All MPN List" : "Usage breakdown per MPN"}
-    </p>
-  </div>
+            {/* Header + Tabs Row */}
+            <div
+                style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                    width: "100%",
+                }}
+            >
+                <div>
+                    <h2 style={{ margin: 0 }}>
+                        {isTotalTab ? "Total MPN Requirement" : "Each MPN Usage"}
+                    </h2>
+                    <p style={{ margin: 0, fontSize: 14, color: "#888" }}>
+                        {isTotalTab ? "All MPN List" : "Usage breakdown per MPN"}
+                    </p>
+                </div>
 
-  <Col>
-    <Radio.Group
-      value={activeTab}
-      onChange={(e) => handleTabChange(e.target.value)}
-      optionType="button"
-      buttonStyle="solid"
-    >
-      <Radio.Button value="total_mpn_needed">
-        Total MPN Needed
-      </Radio.Button>
-      <Radio.Button value="each_mpn_usage">
-        Each MPN Usage
-      </Radio.Button>
-    </Radio.Group>
-  </Col>
-</div>
+                <Col>
+                    <Radio.Group
+                        value={activeTab}
+                        onChange={(e) => handleTabChange(e.target.value)}
+                        optionType="button"
+                        buttonStyle="solid"
+                    >
+                        <Radio.Button value="total_mpn_needed">
+                            Total MPN Needed
+                        </Radio.Button>
+                        <Radio.Button value="each_mpn_usage">
+                            Each MPN Usage
+                        </Radio.Button>
+                    </Radio.Group>
+                </Col>
+            </div>
 
-{/* 🔻 Select row – tabs ke niche, sirf each_mpn_usage pe */}
-{activeTab === "each_mpn_usage" && (
-  <div
-    style={{
-      marginBottom: 16,
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-    }}
-  >
-    {/* <span style={{ fontSize: 14, fontWeight: 500 }}>Select MPN:</span> */}
-    <Select
-      placeholder="Select MPN"
-      value={selectedMpn} // store _id
-      onChange={(value) => {
-        setSelectedMpn(value);
-        setPage(1);
-        fetchEachMpnUsage(value, { page: 1, limit });
-      }}
-      style={{ minWidth: 260 }}
-      showSearch
-      optionFilterProp="children"
-    >
-      {librarys?.mpnList?.map((opt) => (
-        <Option key={opt._id} value={opt._id}>
-          {opt.MPN}
-        </Option>
-      ))}
-    </Select>
-  </div>
-)}
+            {/* 🔻 Select row – tabs ke niche, sirf each_mpn_usage pe */}
+            {activeTab === "each_mpn_usage" && (
+                <div
+                    style={{
+                        marginBottom: 16,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                    }}
+                >
+                    {/* <span style={{ fontSize: 14, fontWeight: 500 }}>Select MPN:</span> */}
+                    <Select
+                        placeholder="Select MPN"
+                        value={selectedMpn} // store _id
+                        onChange={(value) => {
+                            setSelectedMpn(value);
+                            setPage(1);
+                            fetchEachMpnUsage(value, { page: 1, limit });
+                        }}
+                        style={{ minWidth: 260 }}
+                        showSearch
+                        optionFilterProp="children"
+                    >
+                        {librarys?.mpnList?.map((opt) => (
+                            <Option key={opt._id} value={opt._id}>
+                                {opt.MPN}
+                            </Option>
+                        ))}
+                    </Select>
+                </div>
+            )}
 
 
             {/* Global Table Actions */}
@@ -485,7 +610,7 @@ const MPNTrackerPage = () => {
                 }}
                 showImport={false}                 // abhi disable, chahe to on kar sakte ho
                 onImport={(file) => handleImport(file)}
-                showExport={isTotalTab}
+                showExport={true}
                 onExport={() => handleExport()}
                 showFilter={isTotalTab}
                 onFilter={() => {

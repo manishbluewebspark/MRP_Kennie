@@ -195,8 +195,8 @@ const MpnMasterList = () => {
             label: "Status",
             placeholder: "Select Status",
             options: [
-                { value: "Active", label: "Active" },
-                { value: "Inactive", label: "Inactive" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
             ],
         },
     ];
@@ -421,7 +421,7 @@ const MpnMasterList = () => {
                 onExport={handleExport}
                 showUpdatePurchaseHistory={true}
                 onUpdatePurchaseHistory={() =>
-                    console.log("Update Purchase clicked")
+                    fetchMpn()
                 }
                 showFilter={true}
                 onFilter={() => setFilterVisible(true)}

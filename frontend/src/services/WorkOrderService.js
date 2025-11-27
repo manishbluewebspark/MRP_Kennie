@@ -152,10 +152,11 @@ WorkOrderService.getAllChilPartByDrawingId = (drawingId) => {
   });
 };
 
-WorkOrderService.getTotalMPNNeeded = () => {
+WorkOrderService.getTotalMPNNeeded = (params = {}) => {
   return fetch({
     url: `/work-orders/workOrder/totalMPNNeeded`,
-    method: "get"
+    method: "get",
+    params
   });
 };
 
@@ -164,6 +165,23 @@ WorkOrderService.getEachMPNUsage = (params) => {
     url: `/work-orders/workOrder/getEachMPNUsage`,
     method: "get",
     params
+  });
+};
+
+
+WorkOrderService.exportGetTotalMPNNeeded = () => {
+  return fetch({
+    url: `/mpn-tracker/export/total-mpn-needed`,
+    method: "get",
+    responseType: 'arraybuffer'
+  });
+};
+
+WorkOrderService.exportGetEachMPNUsage = ({ mpnId }) => {
+  return fetch({
+    url: `/mpn-tracker/export/each-mpn-usage?mpnId=${mpnId}`,
+    method: "get",
+    responseType: "arraybuffer"
   });
 };
 

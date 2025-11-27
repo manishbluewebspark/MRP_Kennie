@@ -25,7 +25,7 @@ import DuplicateDrawingModal from './DuplicateDrawingModal';
 import AssignProjectModal from './AssignProjectModal';
 import AddCostingItemModal from './AddCostingItemModal';
 
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import DrawingService from 'services/DrawingService';
 import ProjectService from 'services/ProjectService';
 import CostingTable from './CostingTable';
@@ -48,7 +48,7 @@ const TAB_TO_QUOTETYPE = {
 const DrawingDetails = () => {
     const [form] = Form.useForm();
     const { id } = useParams();
-
+    const navigate = useNavigate()
     const [quoteModalVisible, setQuoteModalVisible] = useState(false);
     const [createQuoteModalVisible, setCreateQuoteModalVisible] = useState(false);
     const [eraseModalVisible, setEraseModalVisible] = useState(false);
@@ -304,6 +304,33 @@ const DrawingDetails = () => {
         setEditingItem(null);
     };
 
+    const handleUpdateLatestPrice = async (id) => {
+        try {
+            console.log('-----handleUpdateLatestPrice', id);
+
+            // API call to update latest price
+            const response = await DrawingService.updateLatestPrice(id);
+
+            console.log('Price updated successfully:', response.data);
+            fetchCostingItems()
+            // Show success message
+            message.success('Latest price updated successfully!');
+
+            // Optional: Refresh the data or update local state
+            // fetchCostingItems(); // Uncomment if you need to refresh data
+
+            return response.data;
+
+        } catch (error) {
+            console.error('Error updating latest price:', error);
+
+            // Show error message
+            message.error('Error updating price: ' + (error.response?.data?.message || error.message));
+
+            throw error;
+        }
+    };
+
     const menu = (
         <Menu
             items={[
@@ -317,8 +344,8 @@ const DrawingDetails = () => {
         // { key: 'quoteFor', label: 'Quote for', value: drawing?.projectId?.projectName || "-", bold: true },
         { key: 'project', label: 'Project', value: drawing?.projectId?.projectName || "-", bold: true },
         { key: 'customer', label: 'Customer', value: drawing?.customerId?.companyName || "-", bold: true },
-        { key: 'currency', label: 'Currency', value: drawing?.currency?.code || drawing?.projectId?.currency || "-", bold: true,fontSize:20 },
-        { key: 'unitPrice', label: 'Unit Price', value: `$${grandTotalWithMarkup.toFixed(2)}`, bold: true,fontSize:20 },
+        { key: 'currency', label: 'Currency', value: drawing?.currency?.code || drawing?.projectId?.currency || "-", bold: true, fontSize: 20 },
+        { key: 'unitPrice', label: 'Unit Price', value: `$${grandTotalWithMarkup.toFixed(2)}`, bold: true, fontSize: 20 },
         { key: 'leadTime', label: 'Lead Time', value: drawing?.leadTimeWeeks ? `${drawing.leadTimeWeeks} week(s)` : "TBD", bold: true },
         { key: 'createdAt', label: 'Quoted Date', value: drawing?.createdAt ? new Date(drawing.createdAt).toLocaleDateString() : "Not Quoted", bold: true },
         { key: 'lastEditedBy', label: 'Last Edited User', value: drawing?.lastEditedBy?.name || "No User", bold: true },
@@ -326,6 +353,17 @@ const DrawingDetails = () => {
 
     return (
         <div style={{ padding: 24, background: '#fbf7f7ff', minHeight: '100vh' }}>
+            <div>
+                <Button
+                    type="primary"
+                    style={{ margin: '8px' }}
+                    onClick={() => {
+                        navigate('/app/sales/create-order-mto')
+                    }}
+                >
+                    Back
+                </Button>
+            </div>
             <Card>
                 <Card
                     title={
@@ -410,6 +448,7 @@ const DrawingDetails = () => {
                         currentMarkups={markups}
                         baseMarkups={baseMarkups}
                         onMarkupChange={handleMarkupChange}
+                        handleUpdateLatestPrice={handleUpdateLatestPrice}
                     />
                 </Card>
             </Card>

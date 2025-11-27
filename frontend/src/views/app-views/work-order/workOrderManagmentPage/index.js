@@ -16,6 +16,7 @@ import dayjs from 'dayjs'
 import ProjectService from "services/ProjectService";
 import MoveToProductionModal from "./MoveToProductionModal";
 import SystemSettingsService from "services/SystemSettingsService";
+import WorkOrderExportModal from "./WorkOrderExportModal";
 const { confirm } = Modal;
 
 const fmt = (d) => (d ? dayjs(d).format("DD/MM/YYYY") : "-");
@@ -54,6 +55,8 @@ const DeliveryOrderPage = () => {
     const [totalCount, setTotalCount] = useState(0);
     const [isProductSettingmodalVisible, setIsProductSettingmodalVisible] = useState(false);
     const [importWorkOrderModalVisible, setImportWorkOrderModalVisible] = useState(false);
+    const [exportModalOpen, setExportModalOpen] = useState(false);
+
     const { workOrderSettings } = useSelector(
         (state) => state.systemSettings
     );
@@ -167,7 +170,7 @@ const DeliveryOrderPage = () => {
                     onDelete={() => handleDelete(record._id)}
                     showInfo={true}
                     showEdit={true}
-                    showDelete={true}
+                    showDelete={record?.status === "completed"}
                     showDeleteConfirm={true}
                     onInfo={() => handleInfo(record)}
                 />
@@ -501,6 +504,7 @@ const DeliveryOrderPage = () => {
                 exportText="Export"
                 // onImport={(file) => handleImport(file)}
                 showExport={true}
+                // onExport={() => { setExportModalOpen(true) }}
                 onExport={() => handleExport()}
                 showFilter={false}
                 onFilter={() => console.log("Filter clicked")}
@@ -566,6 +570,16 @@ const DeliveryOrderPage = () => {
                 onQuoteTypeSelect={handleQuoteTypeSelect}
             />
 
+            <WorkOrderExportModal
+                open={exportModalOpen}
+                onCancel={() => setExportModalOpen(false)}
+                onExport={(filters) => handleExport(filters)}
+                poOptions={[]}
+                projectOptions={[]}
+                workOrderOptions={[]}
+            />
+
+
             <Drawer
                 width={600}
                 placement="right"
@@ -581,123 +595,105 @@ const DeliveryOrderPage = () => {
                             style={{
                                 padding: "16px",
                                 display: "flex",
-                                justifyContent: "space-between", // 👈 pushes items left & right
-                                alignItems: "center", // 👈 vertically centers them
+                                justifyContent: "space-between",
+                                alignItems: "center",
                             }}
                         >
                             <h4 style={{ fontSize: 16, fontWeight: 600, color: "#111", margin: 0 }}>
-                                {safe(selectedRecord?.workOrderNo || selectedRecord?.customerName)} – Web Design
+                                {safe(selectedRecord?.workOrderNo)} – Work Order Details
                             </h4>
-
-                            {/* <Tag
-                                color="green"
-                                style={{
-                                    marginTop: 0,
-                                    fontSize: 13,
-                                    padding: "4px 10px",
-                                    borderRadius: 20,
-                                }}
-                            >
-                                Cable Harness Done
-                            </Tag> */}
                         </div>
-
 
                         <Divider style={{ margin: "0 0 12px 0" }} />
 
                         <div style={{ padding: "0 16px 16px", overflowY: "auto", flex: 1 }}>
-                            {items.map((it, idx) => (
-                                <div
-                                    key={idx}
-                                    style={{
-                                        background: "#fff",
-                                        padding: "16px",
-                                        borderRadius: 8,
-                                        //   boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                                        border: "1px solid #e5e7eb",
-                                        marginBottom: 16,
-                                    }}
-                                >
-                                    <h5 style={{ fontSize: 15, fontWeight: 600, color: "#374151", marginBottom: 12 }}>
-                                        Drawing No - {safe(it?.drawingNo)}
-                                    </h5>
-                                    <Divider style={{ margin: "0 0 12px 0" }} />
-                                    {/* Table Section */}
-                                    {[
-                                        {
-                                            label1: "Drawing No.",
-                                            value1: safe(it?.drawingNo),
-                                            label2: "PO No.",
-                                            value2: safe(selectedRecord?.poNumber),
-                                            label3: "POS No.",
-                                            value3: safe(it?.posNo),
-                                        },
-                                        {
-                                            label1: "Actual Qty",
-                                            value1: safe(it?.quantity),
-                                            label2: "Prod Qty",
-                                            value2: safe(it?.quantity),
-                                            label3: "Commit Date",
-                                            value3: fmt(selectedRecord?.commitDate),
-                                        },
-                                        {
-                                            label1: "Need Date",
-                                            value1: fmt(selectedRecord?.needDate),
-                                            label2: "Work Order No.",
-                                            value2: safe(selectedRecord?.workOrderNo),
-                                            label3: "Prod Type (C/B/O)",
-                                            value3: safe(it?.projectType),
-                                        },
-                                        {
-                                            label1: "Status",
-                                            value1: safe(it?.status),
-                                            label2: "Remark",
-                                            value2: safe(it?.remarks),
-                                            label3: "UOM",
-                                            value3: safe(it?.uom),
-                                            // colspan: true,
-                                        },
-                                    ].map((row, i) => (
-                                        <div key={i} style={{ marginBottom: 8 }}>
-                                            <div
-                                                style={{
-                                                    display: "grid",
-                                                    gridTemplateColumns: row.colspan
-                                                        ? "1fr 2fr"
-                                                        : "repeat(3, 1fr)",
-                                                    columnGap: 12,
-                                                    fontSize: 12,
-                                                    color: "#6b7280",
-                                                    marginBottom: 2,
-                                                }}
-                                            >
-                                                <div>{row.label1}</div>
-                                                <div>{row.label2}</div>
-                                                {!row.colspan && <div>{row.label3}</div>}
-                                            </div>
-                                            <div
-                                                style={{
-                                                    display: "grid",
-                                                    gridTemplateColumns: row.colspan
-                                                        ? "1fr 2fr"
-                                                        : "repeat(3, 1fr)",
-                                                    columnGap: 12,
-                                                    fontWeight: 600,
-                                                    color: "#111827",
-                                                }}
-                                            >
-                                                <div>{row.value1}</div>
-                                                <div>{row.value2}</div>
-                                                {!row.colspan && <div>{row.value3}</div>}
-                                            </div>
+                            {/* SINGLE BOX (Earlier items.map → removed) */}
+                            <div
+                                style={{
+                                    background: "#fff",
+                                    padding: "16px",
+                                    borderRadius: 8,
+                                    border: "1px solid #e5e7eb",
+                                    marginBottom: 16,
+                                }}
+                            >
+                                <h5 style={{ fontSize: 15, fontWeight: 600, color: "#374151", marginBottom: 12 }}>
+                                    Drawing No - {safe(selectedRecord?.drawingNo)}
+                                </h5>
+
+                                <Divider style={{ margin: "0 0 12px 0" }} />
+
+                                {[
+                                    {
+                                        label1: "Drawing No.",
+                                        value1: safe(selectedRecord?.drawingNo),
+                                        label2: "PO No.",
+                                        value2: safe(selectedRecord?.poNumber),
+                                        label3: "POS No.",
+                                        value3: safe(selectedRecord?.posNo),
+                                    },
+                                    {
+                                        label1: "Actual Qty",
+                                        value1: safe(selectedRecord?.quantity),
+                                        label2: "Prod Qty",
+                                        value2: safe(selectedRecord?.quantity),
+                                        label3: "Commit Date",
+                                        value3: fmt(selectedRecord?.commitDate),
+                                    },
+                                    {
+                                        label1: "Need Date",
+                                        value1: fmt(selectedRecord?.needDate),
+                                        label2: "Work Order No.",
+                                        value2: safe(selectedRecord?.workOrderNo),
+                                        label3: "Prod Type (C/B/O)",
+                                        value3: safe(selectedRecord?.projectType),
+                                    },
+                                    {
+                                        label1: "Status",
+                                        value1: safe(selectedRecord?.status),
+                                        label2: "Remark",
+                                        value2: safe(selectedRecord?.remarks),
+                                        label3: "UOM",
+                                        value3: safe(selectedRecord?.uom),
+                                    },
+                                ].map((row, i) => (
+                                    <div key={i} style={{ marginBottom: 8 }}>
+                                        <div
+                                            style={{
+                                                display: "grid",
+                                                gridTemplateColumns: "repeat(3, 1fr)",
+                                                columnGap: 12,
+                                                fontSize: 12,
+                                                color: "#6b7280",
+                                                marginBottom: 2,
+                                            }}
+                                        >
+                                            <div>{row.label1}</div>
+                                            <div>{row.label2}</div>
+                                            <div>{row.label3}</div>
                                         </div>
-                                    ))}
-                                </div>
-                            ))}
+
+                                        <div
+                                            style={{
+                                                display: "grid",
+                                                gridTemplateColumns: "repeat(3, 1fr)",
+                                                columnGap: 12,
+                                                fontWeight: 600,
+                                                color: "#111827",
+                                            }}
+                                        >
+                                            <div>{row.value1}</div>
+                                            <div>{row.value2}</div>
+                                            <div>{row.value3}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}
             </Drawer>
+
 
 
 

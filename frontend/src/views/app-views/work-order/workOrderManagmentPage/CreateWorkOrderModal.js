@@ -32,6 +32,8 @@ const CreateWorkOrderModal = ({
   projectData,
   lastWorkOrderNo   // e.g. { needDateCalculation: 2 }  (weeks before commit)
 }) => {
+
+  console.log('------editingWorkOrder',editingWorkOrder)
   const [form] = Form.useForm();
   const [selectedRows, setSelectedRows] = useState([]);   // array of row keys
   const [drawingsData, setDrawingsData] = useState([]);   // table rows
@@ -286,7 +288,7 @@ const CreateWorkOrderModal = ({
         commitDate: values.commitDate ? values.commitDate.format("YYYY-MM-DD") : null,
         status: values.status || "on_hold",
         isTriggered: false,
-        items,
+        items:[],
       };
 
       await onCreate(workOrderData);
@@ -316,50 +318,59 @@ const CreateWorkOrderModal = ({
   }, [visible]);
 
   // Prefill form + apply edit overlay (only once per dataset)
-  useEffect(() => {
-    if (!visible) return;
+useEffect(() => {
+  if (!visible) return;
 
-    // Prefill form values
-    if (editingWorkOrder) {
-      form.setFieldsValue({
-        workOrderNo: editingWorkOrder.workOrderNo,
-        projectNo: editingWorkOrder.projectNo,
-        poNumber: editingWorkOrder.poNumber,
-        projectType: editingWorkOrder.projectType,
-        needDate: editingWorkOrder.needDate ? dayjs(editingWorkOrder.needDate) : null,
-        commitDate: editingWorkOrder.commitDate ? dayjs(editingWorkOrder.commitDate) : null,
-        status: editingWorkOrder.status,
+  if (editingWorkOrder) {
+    // Fill form
+    form.setFieldsValue({
+      workOrderNo: editingWorkOrder.workOrderNo,
+      poNumber: editingWorkOrder.poNumber,
+      needDate: editingWorkOrder.needDate ? dayjs(editingWorkOrder.needDate) : null,
+      commitDate: editingWorkOrder.commitDate ? dayjs(editingWorkOrder.commitDate) : null,
+      status: editingWorkOrder.status,
+    });
+
+    // Auto check + auto POS update
+    if (drawingsData.length > 0) {
+      const updatedRows = drawingsData.map(row => {
+        if (String(row.drawingId) === String(editingWorkOrder.drawingId)) {
+          return {
+            ...row,
+            posNo: editingWorkOrder.posNo || row.posNo || "",   // 🔥 AUTO-FILL POS
+          };
+        }
+        return row;
       });
-    } else {
-      // Fresh create mode
-      handleReset();
-      const workOrderNo = generateWorkOrderNumber(lastWorkOrderNo);
-      form.setFieldsValue({ workOrderNo });
-    }
 
-    // Apply overlay exactly once after drawings load
-    if (
-      visible &&
-      drawingsData.length > 0 &&
-      editingWorkOrder?.items?.length > 0 &&
-      !hasPatchedOnceRef.current
-    ) {
-      const { patched, selectedKeys } = applyEditingItemsToRows(drawingsData, editingWorkOrder);
-      setDrawingsData(patched);
-      if (selectedKeys.length) setSelectedRows(selectedKeys);
-      hasPatchedOnceRef.current = true;
+      setDrawingsData(updatedRows);
+
+      // Auto check that row
+      const matched = updatedRows.find(
+        r => String(r.drawingId) === String(editingWorkOrder.drawingId)
+      );
+
+      if (matched) {
+        setSelectedRows([matched.key]);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, drawingsData, editingWorkOrder]);
+  } else {
+    // Create mode
+    handleReset();
+    form.setFieldsValue({
+      workOrderNo: generateWorkOrderNumber(lastWorkOrderNo),
+    });
+  }
+}, [visible, drawingsData, editingWorkOrder]);
+
+
 
   // Overlay helper: map editing items onto table rows
   const applyEditingItemsToRows = (rows, workOrder) => {
-    if (!workOrder?.items?.length) return { patched: rows, selectedKeys: [] };
+    if (!workOrder?.length) return { patched: rows, selectedKeys: [] };
 
     const byId = new Map(
-      workOrder.items
-        .filter((it) => it?.drawingId)
-        .map((it) => [String(it.drawingId), it])
+      workOrder.drawingId
     );
 
     const selectedKeys = [];
@@ -494,10 +505,21 @@ const CreateWorkOrderModal = ({
               </div>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item name="commitDate" label="Commit Date" rules={[{ required: true }]}>
-                <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+              <Form.Item
+                name="commitDate"
+                label="Commit Date"
+                rules={[{ required: true }]}
+              >
+                <DatePicker
+                  style={{ width: "100%" }}
+                  format="DD/MM/YYYY"
+                  disabled={editingWorkOrder?.status === "in_progress"}
+                />
               </Form.Item>
             </Col>
+
+
+
           </Row>
 
           <Divider />

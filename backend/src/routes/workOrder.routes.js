@@ -26,9 +26,10 @@ router.get(
   },
   authenticate,
   getTotalMPNNeeded
-);getEachMPNUsage
+);
 
 router.get("/workOrder/getEachMPNUsage",authenticate,getEachMPNUsage)
+
 router.get("/workOrder/getCompleteWorkOrders",authenticate,getCompleteWorkOrders)
 router.get('/workOrder/deliveryOrders',authenticate, getDeliveryOrders)
 // CRUD routes

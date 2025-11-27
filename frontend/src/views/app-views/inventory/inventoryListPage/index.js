@@ -534,35 +534,82 @@ const InventoryListPage = () => {
         }
     };
 
-    const handleExport = async () => {
-        // setExportLoading(true);
-        try {
-            const response = await InventoryService.exportToExcel({
-                search: ''
-            });
+const handleExport = async () => {
+  try {
+    let resp;
+    let fileName = "";
+    let mime =
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-            // Create blob and download
-            const blob = new Blob([response], {
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `material-required-${Date.now()}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+    // ====== 1) Decide API based on activeTab ========
+    if (activeTab === "material_required") {
+      resp = await InventoryService.exportMaterialRequired(
+        { search: "" },
+        { responseType: "arraybuffer" }
+      );
+      fileName = `material-required-${Date.now()}.xlsx`;
+    } else if (activeTab === "inventory_list") {
+      resp = await InventoryService.exportInventoryList(
+        { search: "" },
+        { responseType: "arraybuffer" }
+      );
+      fileName = `inventory-list-${Date.now()}.xlsx`;
+    } else if (activeTab === "inventory_alerts") {
+      resp = await InventoryService.exportInventoryAlerts(
+        { search: "" },
+        { responseType: "arraybuffer" }
+      );
+      fileName = `inventory-alerts-${Date.now()}.xlsx`;
+    } else {
+      message.error("Invalid tab selected");
+      return;
+    }
 
-            message.success('Data exported successfully');
-        } catch (err) {
-            console.error('Error exporting data:', err);
-            message.error('Failed to export data');
-        } finally {
-            // setExportLoading(false);
-        }
-    };
+    // ====== 2) Handle response shape safely (Axios / fetch / buffer all OK) ========
+    let arrayBuffer;
+
+    if (resp?.data instanceof ArrayBuffer) {
+      // Axios instance → resp.data is arrayBuffer
+      arrayBuffer = resp.data;
+      mime = resp?.headers?.["content-type"] || mime;
+
+    } else if (resp instanceof ArrayBuffer) {
+      // Direct arrayBuffer
+      arrayBuffer = resp;
+
+    } else if (resp?.blob instanceof Blob) {
+      // fetch() wrapper → we returned { blob, contentType }
+      mime = resp.contentType || mime;
+      arrayBuffer = await resp.blob.arrayBuffer();
+
+    } else {
+      console.warn("Unknown export response:", resp);
+      throw new Error("Unknown response format for Excel export");
+    }
+
+    // ====== 3) Convert to blob + download ========
+    const blob = new Blob([arrayBuffer], { type: mime });
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+
+    message.success("Excel exported successfully!");
+  } catch (err) {
+    console.error("Export error:", err);
+    message.error("Failed to export Excel");
+  }
+};
+
+
+
 
     const handleImport = async (file) => {
         try {

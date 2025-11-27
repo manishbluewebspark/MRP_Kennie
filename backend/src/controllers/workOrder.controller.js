@@ -28,31 +28,31 @@ import Customer from "../models/Customer.js";
 import Child from "../models/library/Child.js";
 
 
- function generateWorkOrderNumber (lastWorkOrderNo)  {
-    const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
-    const month = String(now.getMonth() + 1).padStart(2, "0");
+function generateWorkOrderNumber(lastWorkOrderNo) {
+  const now = new Date();
+  const year = now.getFullYear().toString().slice(-2);
+  const month = String(now.getMonth() + 1).padStart(2, "0");
 
-    // Normalize to array
-    const arr = Array.isArray(lastWorkOrderNo)
-      ? lastWorkOrderNo
-      : lastWorkOrderNo
-        ? [lastWorkOrderNo]
-        : [];
+  // Normalize to array
+  const arr = Array.isArray(lastWorkOrderNo)
+    ? lastWorkOrderNo
+    : lastWorkOrderNo
+      ? [lastWorkOrderNo]
+      : [];
 
-    // Filter same month WO
-    const currentMonthNumbers = arr
-      .filter((num) => num.startsWith(`WO${year}${month}`))
-      .map((num) => parseInt(num.split("-")[1], 10))
-      .filter((n) => !isNaN(n));
+  // Filter same month WO
+  const currentMonthNumbers = arr
+    .filter((num) => num.startsWith(`WO${year}${month}`))
+    .map((num) => parseInt(num.split("-")[1], 10))
+    .filter((n) => !isNaN(n));
 
-    const nextSeq = currentMonthNumbers.length
-      ? Math.max(...currentMonthNumbers) + 1
-      : 1;
+  const nextSeq = currentMonthNumbers.length
+    ? Math.max(...currentMonthNumbers) + 1
+    : 1;
 
-    const seqStr = String(nextSeq).padStart(5, "0");
-    return `WO${year}${month}-${seqStr}`;
-  };
+  const seqStr = String(nextSeq).padStart(5, "0");
+  return `WO${year}${month}-${seqStr}`;
+};
 
 // ---------------- Get All WorkOrders ----------------
 // export const getAllWorkOrders = async (req, res) => {
@@ -133,7 +133,7 @@ export const getAllWorkOrders = async (req, res) => {
 
     const query = {};
 
-    // Search by workOrderNo, poNumber, projectNo
+    // Search
     if (search) {
       query.$or = [
         { workOrderNo: { $regex: search, $options: "i" } },
@@ -146,40 +146,38 @@ export const getAllWorkOrders = async (req, res) => {
       query.projectId = projectId;
     }
 
-    // ⚠️ drawingId agar tum root pe nahi rakhte ho (items ke andar hai),
-    // to ye filter normally kaam nahi karega. Agar chaho to items.drawingId pe filter bhi laga sakte hain.
+    if (drawingId && mongoose.Types.ObjectId.isValid(drawingId)) {
+      query.drawingId = drawingId;
+    }
+
     if (status) query.status = status;
 
     const sortOptions = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
     const total = await WorkOrder.countDocuments(query);
+
     let workOrders = await WorkOrder.find(query)
       .sort(sortOptions)
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .lean();
 
-    // ⭐ 1) Saare drawingIds collect karo jo items me use hue hain
-    const allDrawingIds = [];
+    // ***************************************
+    // ⭐ DIRECT drawingId → drawingNo resolve
+    // ***************************************
+    const drawingIds = workOrders
+      .filter((wo) => wo.drawingId)
+      .map((wo) => String(wo.drawingId));
 
-    for (const wo of workOrders) {
-      const items = wo.items || [];
-      for (const it of items) {
-        if (it.drawingId) {
-          allDrawingIds.push(String(it.drawingId));
-        }
-      }
-    }
+    const uniqueDrawingIds = [...new Set(drawingIds)];
 
-    const uniqueDrawingIds = [...new Set(allDrawingIds)];
-
-    // ⭐ 2) Un sab Drawing ko ek hi query me fetch karo
     let drawingMap = new Map();
+
     if (uniqueDrawingIds.length) {
       const drawingDocs = await Drawing.find({
         _id: { $in: uniqueDrawingIds },
       })
-        .select("drawingNo quoteType projectType") // jo fields chahiye sirf woh
+        .select("drawingNo projectType quoteType")
         .lean();
 
       drawingMap = new Map(
@@ -187,34 +185,24 @@ export const getAllWorkOrders = async (req, res) => {
       );
     }
 
-    // ⭐ 3) Har WorkOrder ke items me drawingNo + projectType inject karo
+    // ⭐ Inject drawingNo + projectType into each WorkOrder
     workOrders = workOrders.map((wo) => {
-      const items = wo.items || [];
-      const newItems = items.map((it) => {
-        if (!it.drawingId) return it;
-
-        const d = drawingMap.get(String(it.drawingId));
-
-        return {
-          ...it,
-          drawingNo: d?.drawingNo || null,
-          projectType: d?.quoteType || d?.projectType || null,
-        };
-      });
+      const d = drawingMap.get(String(wo.drawingId));
 
       return {
         ...wo,
-        items: newItems,
+        drawingNo: d?.drawingNo || null,
+        projectType: d?.projectType || d?.quoteType || null,
       };
     });
 
-    // ⭐ 4) Last Work Order Number
+    // ⭐ Last WorkOrderNo
     const lastWorkOrder = await WorkOrder.findOne()
       .sort({ createdAt: -1 })
       .select("workOrderNo")
       .lean();
 
-    const lastWorkOrderNo = lastWorkOrder ? lastWorkOrder.workOrderNo : null;
+    const lastWorkOrderNo = lastWorkOrder?.workOrderNo || null;
 
     return res.status(200).json({
       success: true,
@@ -229,11 +217,10 @@ export const getAllWorkOrders = async (req, res) => {
     });
   } catch (error) {
     console.error("getAllWorkOrders error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // ---------------- Get By ID ----------------
 export const getWorkOrderById = async (req, res) => {
@@ -429,6 +416,22 @@ export const createWorkOrder = async (req, res) => {
           .json({ success: false, message: "drawingId is required for item" });
       }
 
+
+      // 🛑 DUPLICATION CHECK: (workOrderNo + poNumber) combination
+      const comboExists = await WorkOrder.findOne({
+        workOrderNo,
+        poNumber: poNumber || "",
+      });
+
+      if (comboExists) {
+        return res.status(400).json({
+          success: false,
+          message: `Work order with combination (WO: ${workOrderNo}, PO: ${poNumber || "-"
+            }) already exists`,
+        });
+      }
+
+
       const d = drawingMap.get(String(it.drawingId));
 
       // projectId & projectType resolve
@@ -446,8 +449,8 @@ export const createWorkOrder = async (req, res) => {
         typeof it.quantity === "number"
           ? it.quantity
           : typeof it.qty === "number"
-          ? it.qty
-          : 1;
+            ? it.qty
+            : 1;
       const uom = it.uom || "PCS";
 
       // dates priority: item > header > (commit - 14 days)
@@ -531,8 +534,8 @@ export const createWorkOrder = async (req, res) => {
         typeof it.quantity === "number"
           ? it.quantity
           : typeof it.qty === "number"
-          ? it.qty
-          : 1;
+            ? it.qty
+            : 1;
       const uom = it.uom || "PCS";
 
       let finalCommitDate = it.commitDate
@@ -870,6 +873,29 @@ function excelDateToJS(serial) {
   );
 }
 
+// ✅ Helper: valid Date check
+const isValidDate = (d) => d instanceof Date && !isNaN(d.getTime());
+
+// ✅ Helper: safely parse Excel date (number / string / Date → Date | null)
+const parseExcelDate = (raw) => {
+  if (raw === undefined || raw === null || raw === "") return null;
+
+  // If numeric → Excel serial date
+  if (typeof raw === "number") {
+    const d = excelDateToJS(raw); // <-- tumhara existing helper
+    return isValidDate(d) ? d : null;
+  }
+
+  // Already Date
+  if (raw instanceof Date) {
+    return isValidDate(raw) ? raw : null;
+  }
+
+  // String or others → try native Date
+  const d = new Date(raw);
+  return isValidDate(d) ? d : null;
+};
+
 export const importWorkOrders = async (req, res) => {
   try {
     // ✅ 1) File validation
@@ -906,14 +932,21 @@ export const importWorkOrders = async (req, res) => {
         .json({ success: false, message: "Sheet is empty" });
     }
 
-    console.log("🔍 Sample Row:", rows[0]);
+    console.log("🔍 Sample Row:", rows);
 
-    // ✅ 3) Existing WO numbers (uniqueness) + lastWorkOrderNo
+    // ✅ 3) Existing WO numbers (uniqueness)
     const existingWOs = await WorkOrder.find({})
-      .select("workOrderNo -_id")
+      .select("workOrderNo poNumber -_id")
       .lean();
 
     const existingNos = existingWOs.map((x) => x.workOrderNo).filter(Boolean);
+
+    // Ye set DB + current import — dono jagah ke sare WO nos track karega
+    const usedWONumbers = new Set(existingNos);
+
+    // Same (WorkOrder No + PO NO) combo kitni baar aya hai
+    // key: `${baseWO}__${poNumber}`  → count
+    const excelDuplicateMap = new Map();
 
     let lastWorkOrderNo = existingNos.length
       ? existingNos[existingNos.length - 1]
@@ -961,33 +994,27 @@ export const importWorkOrders = async (req, res) => {
     // ✅ 4) Loop through Excel rows
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
-      const rowNumber = index + 2; // 1st row header
+      const rowNumber = index + 2; // 1st row header row
 
       // --- Commit Date ---
-      const commitDate =
-        typeof row["Commit Date"] === "number"
-          ? excelDateToJS(row["Commit Date"])
-          : row["Commit Date"]
-          ? new Date(row["Commit Date"])
-          : null;
+      const commitDate = parseExcelDate(row["Commit Date"]);
 
-      // --- Need Date (fallback 14 din pehle) ---
-      const needDate = row["Need Date"]
-        ? new Date(row["Need Date"])
-        : commitDate
-        ? new Date(
-            commitDate.getTime() - 14 * 24 * 60 * 60 * 1000
-          )
-        : null;
+      // --- Need Date (fallback 14 days before commitDate) ---
+      let needDate = parseExcelDate(row["Need Date"]);
+      if (!needDate && commitDate) {
+        needDate = new Date(
+          commitDate.getTime() - 14 * 24 * 60 * 60 * 1000
+        );
+      }
 
       // --- Drawing find by Drawingno ---
-      const drawingNo = row.Drawingno?.toString().trim();
+      const drawingNo = row["Drawingno"]?.toString().trim();
       const drawing = drawingNo
         ? await Drawing.findOne({ drawingNo }).lean()
         : null;
 
       if (!drawing) {
-        // ❌ Drawing nahi mila → skip
+        // ❌ Drawing nahi mila → skip row
         skippedRows.push({
           rowNumber,
           reason: "Drawing not found",
@@ -998,46 +1025,105 @@ export const importWorkOrders = async (req, res) => {
 
       const drawingId = drawing._id;
 
-      // --- ProjectType resolve (Drawing → Excel fallback) ---
-      const rawProjectType =
-        drawing?.quoteType || row["Prod Type-C/B/O"] || null;
+      // --- ProjectType resolve (Drawing → Excel fallback)
+      const rawProjectType = drawing?.quoteType || null;
       const projectType = normalizeProjectType(rawProjectType);
 
+      // --- PO Number string bana lo (trimmed)
+      const poNumber = row["PO NO"]?.toString().trim() || "";
+
       // --- Work Order No (Excel se ya auto) ---
-      const excelWO = row.WorkorderNo?.toString().trim();
+      const excelWO = row["WorkOrder No"]
+        ? row["WorkOrder No"].toString().trim()
+        : "";
+
       let workOrderNo;
 
-      if (excelWO && !existingNos.includes(excelWO)) {
-        workOrderNo = excelWO;
+      if (excelWO) {
+        const baseWO = excelWO;
+        const comboKey = `${baseWO}__${poNumber}`;
+
+        // Is (WO + PO) combo ko kitni baar pehle dekh chuke hain
+        let count = excelDuplicateMap.get(comboKey) || 0;
+
+        let candidate;
+
+        while (true) {
+          if (count === 0) {
+            // Pehli baar → original hi rakho
+            candidate = baseWO;
+          } else {
+            // 2nd, 3rd, ... time → -A, -B, -C ...
+            const suffixChar = String.fromCharCode(
+              "A".charCodeAt(0) + (count - 1)
+            );
+            candidate = `${baseWO}-${suffixChar}`;
+          }
+
+          // Agar yeh candidate DB ya current batch me already hai to next letter try karo
+          if (!usedWONumbers.has(candidate)) {
+            break;
+          }
+
+          count++;
+        }
+
+        // Next time same (WO + PO) aaye to count se start kare
+        excelDuplicateMap.set(comboKey, count + 1);
+
+        workOrderNo = candidate;
       } else {
-        // auto-generate based on lastWorkOrderNo helper
-        workOrderNo = generateWorkOrderNumber(lastWorkOrderNo);
+        // Agar Excel me WorkOrder No khaali hai to auto-generate
+        workOrderNo = generateWorkOrderNumber(lastWorkOrderNo || undefined);
+
+        // Safety: jab tak unique na mile tab tak next number lo
+        while (usedWONumbers.has(workOrderNo)) {
+          workOrderNo = generateWorkOrderNumber(workOrderNo);
+        }
       }
 
-      // Duplicate se bachne ke liye local list update
-      existingNos.push(workOrderNo);
+      // Ab yeh number use ho chuka hai
+      usedWONumbers.add(workOrderNo);
       lastWorkOrderNo = workOrderNo;
 
-      // --- UOM (agar hai) ---
-      const uom =
-        row.UOM?.toString().trim() ||
-        row["UOM"]?.toString().trim() ||
-        "PCS";
+      // --- UOM (Excel me nahi hai, default PCS) ---
+      const uom = "PCS";
 
-      // ✅ FINAL FLAT WORK ORDER PAYLOAD (NO items ARRAY)
+      // --- Excel Status mapping (optional)
+      const rawStatus = (row["Status"] || "").toString().trim().toLowerCase();
+      let status = "on_hold"; // default
+
+      if (rawStatus === "on hold" || rawStatus === "hold") {
+        status = "on_hold";
+      } else if (
+        rawStatus === "in production" ||
+        rawStatus === "in progress" ||
+        rawStatus === "processing"
+      ) {
+        status = "in_production";
+      } else if (
+        rawStatus === "completed" ||
+        rawStatus === "done" ||
+        rawStatus === "closed"
+      ) {
+        status = "completed";
+      }
+
+      // ✅ FINAL FLAT WORK ORDER PAYLOAD
       const woDoc = {
         workOrderNo,
-        poNumber: row.PONO?.toString().trim() || "",
+        poNumber,
+        projectNo: row["Project No"]?.toString().trim() || "",
         drawingId,
         projectId: drawing?.projectId || null,
         projectType,
-        posNo: Number(row.POSNO) || 0,
-        quantity: Number(row.Prod_Qty) || 1,
+        posNo: Number(row["POS NO"]) || 0,
+        quantity: Number(row["Prod_Qty"]) || 1,
         uom,
-        remarks: row.Description?.trim() || "",
+        remarks: row["Description"]?.toString().trim() || "",
         needDate,
         commitDate,
-        status: "on_hold",
+        status,
         isTriggered: false,
         isInProduction: false,
       };
@@ -1076,10 +1162,8 @@ export const importWorkOrders = async (req, res) => {
   }
 };
 
-
 export const exportWorkOrders = async (req, res) => {
   try {
-    // Fetch all WorkOrders (flat schema)
     const workOrders = await WorkOrder.find()
       .populate("drawingId", "drawingNo")
       .populate("projectId", "projectName")
@@ -1092,37 +1176,103 @@ export const exportWorkOrders = async (req, res) => {
       });
     }
 
-    // Build rows (1 ROW PER WORK ORDER)
+    const formatDate = (d) =>
+      d ? new Date(d).toLocaleDateString("en-GB") : "";
+
     const rows = workOrders.map((wo) => ({
-      WorkOrderNo: wo.workOrderNo || "",
-      PO_Number: wo.poNumber || "",
-      ProjectName: wo.projectId?.projectName || "",
-      ProjectType: wo.projectType || "",
-      DrawingNo: wo.drawingId?.drawingNo || "",
-      POS_No: wo.posNo || "",
-      Quantity: wo.quantity ?? "",
-      UOM: wo.uom || "",
-      Remarks: wo.remarks || "",
-      NeedDate: wo.needDate
-        ? new Date(wo.needDate).toLocaleDateString("en-GB")
-        : "",
-      CommitDate: wo.commitDate
-        ? new Date(wo.commitDate).toLocaleDateString("en-GB")
-        : "",
+      Imported_Date: "",
+
+      "Project No": wo.projectNo || wo.projectId?.projectName || "",
+      "WorkOrder No": wo.workOrderNo || "",
+      "PO NO": wo.poNumber || "",
+      "POS NO": wo.posNo || "",
+      Drawingno: wo.drawingId?.drawingNo || "",
+      Description: wo.remarks || "",
+      Actual_Qty: wo.quantity || "",
+      Prod_Qty: wo.quantity || "",
+      "Commit Date": formatDate(wo.commitDate),
+      "Need Date": formatDate(wo.needDate),
       Status: wo.status || "",
-      IsTriggered: wo.isTriggered ? "Yes" : "No",
-      IsInProduction: wo.isInProduction ? "Yes" : "No",
-      DONumber: wo.doNumber || "",
-      Delivered: wo.delivered ? "Yes" : "No",
+      Remark: wo.remarks || "",
+
+      // Picking stage
+      PickerName: wo.pickerName || "",
+      PickStartdate: formatDate(wo.pickStartdate),
+      PickEnddate: formatDate(wo.pickEnddate),
+      ProduceQty: wo.pickProduceQty || "",
+
+      // Harness stage
+      HarnessName: wo.harnessName || "",
+      "Harness Startdate": formatDate(wo.harnessStartdate),
+      "Harness Enddate": formatDate(wo.harnessEnddate),
+      "ProduceQty#2": wo.harnessProduceQty || "",
+
+      // Labelling stage
+      "Labeller Name": wo.labellerName || "",
+      "Labelling Startdate": formatDate(wo.labellingStartdate),
+      "Labelling Enddate": formatDate(wo.labellingEnddate),
+      "Produce Qty#3": wo.labellingProduceQty || "",
+
+      // QC stage
+      QcName: wo.qcName || "",
+      QcStartdate: formatDate(wo.qcStartdate),
+      QcEtartdate: formatDate(wo.qcEnddate),
+      "Produce Qty#4": wo.qcProduceQty || "",
+
+      // Shortage 1–12 (Each 3 columns)
+      Shortage1: wo.shortage1 || "",
+      "MPN No._1": wo.mpn1 || "",
+      Manufacturer_1: wo.mfg1 || "",
+
+      Shortage2: wo.shortage2 || "",
+      "MPN No._2": wo.mpn2 || "",
+      Manufacturer_2: wo.mfg2 || "",
+
+      Shortage3: wo.shortage3 || "",
+      "MPN No._3": wo.mpn3 || "",
+      Manufacturer_3: wo.mfg3 || "",
+
+      Shortage4: wo.shortage4 || "",
+      "MPN No._4": wo.mpn4 || "",
+      Manufacturer_4: wo.mfg4 || "",
+
+      Shortage5: wo.shortage5 || "",
+      "MPN No._5": wo.mpn5 || "",
+      Manufacturer_5: wo.mfg5 || "",
+
+      Shortage6: wo.shortage6 || "",
+      "MPN No._6": wo.mpn6 || "",
+      Manufacturer_6: wo.mfg6 || "",
+
+      Shortage7: wo.shortage7 || "",
+      "MPN No._7": wo.mpn7 || "",
+      Manufacturer_7: wo.mfg7 || "",
+
+      Shortage8: wo.shortage8 || "",
+      "MPN No._8": wo.mpn8 || "",
+      Manufacturer_8: wo.mfg8 || "",
+
+      Shortage9: wo.shortage9 || "",
+      "MPN No._9": wo.mpn9 || "",
+      Manufacturer_9: wo.mfg9 || "",
+
+      Shortage10: wo.shortage10 || "",
+      "MPN No._10": wo.mpn10 || "",
+      Manufacturer_10: wo.mfg10 || "",
+
+      Shortage11: wo.shortage11 || "",
+      "MPN No._11": wo.mpn11 || "",
+      Manufacturer_11: wo.mfg11 || "",
+
+      Shortage12: wo.shortage12 || "",
+      "MPN No._12": wo.mpn12 || "",
+      Manufacturer_12: wo.mfg12 || "",
     }));
 
-    // Prepare Excel
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
 
-    // Auto column width
-    const headers = Object.keys(rows[0]);
-    ws["!cols"] = headers.map((h) => ({
+    ws["!cols"] = Object.keys(rows[0]).map((h) => ({
       wch: Math.max(12, h.length + 2),
     }));
 
@@ -1130,8 +1280,6 @@ export const exportWorkOrders = async (req, res) => {
 
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-    // Final response
-    res.status(200);
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -1140,7 +1288,6 @@ export const exportWorkOrders = async (req, res) => {
       "Content-Disposition",
       'attachment; filename="work_orders_export.xlsx"'
     );
-    res.setHeader("Content-Length", buf.length);
 
     return res.end(buf);
   } catch (error) {
@@ -1152,6 +1299,295 @@ export const exportWorkOrders = async (req, res) => {
     });
   }
 };
+
+
+// export const importWorkOrders = async (req, res) => {
+//   try {
+//     // ✅ 1) File validation
+//     if (!req.file) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "No file uploaded" });
+//     }
+
+//     const fileName = (req.file.originalname || "").toLowerCase();
+//     if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Only .xlsx / .xls files allowed",
+//       });
+//     }
+
+//     // ✅ 2) Read Excel
+//     const buffer = req.file.buffer || fs.readFileSync(req.file.path);
+//     const workbook = XLSX.read(buffer, { type: "buffer" });
+
+//     if (!workbook.SheetNames?.length) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "Excel has no sheets" });
+//     }
+
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+//     if (!rows.length) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "Sheet is empty" });
+//     }
+
+//     console.log("🔍 Sample Row:", rows[0]);
+
+//     // ✅ 3) Existing WO numbers (uniqueness) + lastWorkOrderNo
+//     const existingWOs = await WorkOrder.find({})
+//       .select("workOrderNo poNumber -_id")
+//       .lean();
+
+//        // Build hashMap for quick duplicate checking
+//     const comboMap = new Set(
+//       existingWOs.map((x) => `${x.workOrderNo}__${x.poNumber}`)
+//     );
+
+//     const existingNos = existingWOs.map((x) => x.workOrderNo).filter(Boolean);
+
+//     let lastWorkOrderNo = existingNos.length
+//       ? existingNos[existingNos.length - 1]
+//       : null;
+
+//     const newWorkOrders = [];
+//     const skippedRows = [];
+
+//     // 🔹 helper: normalize projectType to schema enum
+//     const normalizeProjectType = (raw) => {
+//       if (!raw) return "cable_harness";
+
+//       let v = String(raw).toLowerCase().trim();
+
+//       // Excel C/B/O mapping
+//       if (v === "c") return "cable_harness";
+//       if (v === "b") return "box_build";
+//       if (v === "o") return "other";
+
+//       if (
+//         v === "cable_harness" ||
+//         v === "cable-assembly" ||
+//         v === "cable_assembly" ||
+//         v === "cable harness"
+//       ) {
+//         return "cable_harness";
+//       }
+
+//       if (
+//         v === "box_build" ||
+//         v === "box-build" ||
+//         v === "box_build_assembly" ||
+//         v === "box-build-assembly"
+//       ) {
+//         return "box_build";
+//       }
+
+//       if (v === "other" || v === "others_assembly") {
+//         return "other";
+//       }
+
+//       return "other";
+//     };
+
+//     // ✅ 4) Loop through Excel rows
+//     for (let index = 0; index < rows.length; index++) {
+//       const row = rows[index];
+//       const rowNumber = index + 2; // 1st row header
+
+//       // --- Commit Date ---
+//       const commitDate =
+//         typeof row["Commit Date"] === "number"
+//           ? excelDateToJS(row["Commit Date"])
+//           : row["Commit Date"]
+//             ? new Date(row["Commit Date"])
+//             : null;
+
+//       // --- Need Date (fallback 14 din pehle) ---
+//       const needDate = row["Need Date"]
+//         ? new Date(row["Need Date"])
+//         : commitDate
+//           ? new Date(
+//             commitDate.getTime() - 14 * 24 * 60 * 60 * 1000
+//           )
+//           : null;
+
+//       // --- Drawing find by Drawingno ---
+//       const drawingNo = row.Drawingno?.toString().trim();
+//       const drawing = drawingNo
+//         ? await Drawing.findOne({ drawingNo }).lean()
+//         : null;
+
+//       if (!drawing) {
+//         // ❌ Drawing nahi mila → skip
+//         skippedRows.push({
+//           rowNumber,
+//           reason: "Drawing not found",
+//           drawingNo,
+//         });
+//         continue;
+//       }
+
+//       const drawingId = drawing._id;
+
+//       // --- ProjectType resolve (Drawing → Excel fallback) ---
+//       const rawProjectType =
+//         drawing?.quoteType || row["Prod Type-C/B/O"] || null;
+//       const projectType = normalizeProjectType(rawProjectType);
+
+//       // --- Work Order No (Excel se ya auto) ---
+//       const excelWO = row.WorkorderNo?.toString().trim();
+//       let workOrderNo;
+
+//       if (excelWO && !existingNos.includes(excelWO)) {
+//         workOrderNo = excelWO;
+//       } else {
+//         // auto-generate based on lastWorkOrderNo helper
+//         workOrderNo = generateWorkOrderNumber(lastWorkOrderNo);
+//       }
+
+//       // Duplicate se bachne ke liye local list update
+//       existingNos.push(workOrderNo);
+//       lastWorkOrderNo = workOrderNo;
+
+//       // --- UOM (agar hai) ---
+//       const uom =
+//         row.UOM?.toString().trim() ||
+//         row["UOM"]?.toString().trim() ||
+//         "PCS";
+
+//       // ✅ FINAL FLAT WORK ORDER PAYLOAD (NO items ARRAY)
+//       const woDoc = {
+//         workOrderNo,
+//         poNumber: row.PONO?.toString().trim() || "",
+//         drawingId,
+//         projectId: drawing?.projectId || null,
+//         projectType,
+//         posNo: Number(row.POSNO) || 0,
+//         quantity: Number(row.Prod_Qty) || 1,
+//         uom,
+//         remarks: row.Description?.trim() || "",
+//         needDate,
+//         commitDate,
+//         status: "on_hold",
+//         isTriggered: false,
+//         isInProduction: false,
+//       };
+
+//       newWorkOrders.push(woDoc);
+//     }
+
+//     // ✅ 5) Bulk Insert only valid rows
+//     let inserted = [];
+//     if (newWorkOrders.length) {
+//       inserted = await WorkOrder.insertMany(newWorkOrders, {
+//         ordered: true,
+//       });
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: `Imported ${inserted.length} Work Orders. Skipped ${skippedRows.length} rows.`,
+//       importedCount: inserted.length,
+//       skippedCount: skippedRows.length,
+//       skippedRows,
+//       data: inserted.map((x) => ({
+//         workOrderNo: x.workOrderNo,
+//         drawingId: x.drawingId,
+//         projectType: x.projectType,
+//         quantity: x.quantity,
+//       })),
+//     });
+//   } catch (error) {
+//     console.error("❌ Import Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Server error during import",
+//       error: error.message,
+//     });
+//   }
+// };
+
+
+// export const exportWorkOrders = async (req, res) => {
+//   try {
+//     // Fetch all WorkOrders (flat schema)
+//     const workOrders = await WorkOrder.find()
+//       .populate("drawingId", "drawingNo")
+//       .populate("projectId", "projectName")
+//       .lean();
+
+//     if (!workOrders.length) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "No work orders found to export",
+//       });
+//     }
+
+//     // Build rows (1 ROW PER WORK ORDER)
+//     const rows = workOrders.map((wo) => ({
+//       WorkOrderNo: wo.workOrderNo || "",
+//       PO_Number: wo.poNumber || "",
+//       ProjectName: wo.projectId?.projectName || "",
+//       ProjectType: wo.projectType || "",
+//       DrawingNo: wo.drawingId?.drawingNo || "",
+//       POS_No: wo.posNo || "",
+//       Quantity: wo.quantity ?? "",
+//       UOM: wo.uom || "",
+//       Remarks: wo.remarks || "",
+//       NeedDate: wo.needDate
+//         ? new Date(wo.needDate).toLocaleDateString("en-GB")
+//         : "",
+//       CommitDate: wo.commitDate
+//         ? new Date(wo.commitDate).toLocaleDateString("en-GB")
+//         : "",
+//       Status: wo.status || "",
+//       IsTriggered: wo.isTriggered ? "Yes" : "No",
+//       IsInProduction: wo.isInProduction ? "Yes" : "No",
+//       DONumber: wo.doNumber || "",
+//       Delivered: wo.delivered ? "Yes" : "No",
+//     }));
+
+//     // Prepare Excel
+//     const wb = XLSX.utils.book_new();
+//     const ws = XLSX.utils.json_to_sheet(rows);
+
+//     // Auto column width
+//     const headers = Object.keys(rows[0]);
+//     ws["!cols"] = headers.map((h) => ({
+//       wch: Math.max(12, h.length + 2),
+//     }));
+
+//     XLSX.utils.book_append_sheet(wb, ws, "WorkOrders");
+
+//     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+//     // Final response
+//     res.status(200);
+//     res.setHeader(
+//       "Content-Type",
+//       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+//     );
+//     res.setHeader(
+//       "Content-Disposition",
+//       'attachment; filename="work_orders_export.xlsx"'
+//     );
+//     res.setHeader("Content-Length", buf.length);
+
+//     return res.end(buf);
+//   } catch (error) {
+//     console.error("Export Work Orders Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to export work orders",
+//       error: error.message,
+//     });
+//   }
+// };
 
 
 // export const importWorkOrders = async (req, res) => {
@@ -2285,7 +2721,7 @@ export const getAllChilPartByDrawingId = async (req, res) => {
       const quantity = Number(ci.quantity || 0);
 
       return {
-        itemNumber:ci?.itemNumber,
+        itemNumber: ci?.itemNumber,
         costingItemId: ci._id,
         drawingId: ci.drawingId,
 
@@ -2321,8 +2757,8 @@ export const getAllChilPartByDrawingId = async (req, res) => {
         // Storage Location (assumed from ChildPart)
         storageLocation:
           mpnDoc?.
-StorageLocation
- ||
+            StorageLocation
+          ||
           child?.location ||
           null,
       };
@@ -2558,41 +2994,76 @@ StorageLocation
 
 export const getTotalMPNNeeded = async (req, res) => {
   try {
-    // 1) Sare ON HOLD work orders (flat schema)
-    const workOrders = await WorkOrder.find({ status: "on_hold" }).lean();
+    const {
+      drawingDate,   // ISO date
+      customer,      // customerId
+      project,       // projectId
+      drawingRange,  // range1 / range2 / range3
+    } = req.query;
+
+    // -------------------------
+    // 1️⃣ FILTER DRAWINGS FIRST
+    // -------------------------
+    const drawingFilters = {};
+
+    // Drawing Range Logic
+    if (drawingRange === "range1") { drawingFilters.drawingNo = { $gte: 0, $lte: 50 }; }
+    if (drawingRange === "range2") { drawingFilters.drawingNo = { $gte: 51, $lte: 100 }; }
+    if (drawingRange === "range3") { drawingFilters.drawingNo = { $gte: 101, $lte: 200 }; }
+
+    // Customer Filter
+    if (customer) drawingFilters.customerId = customer;
+
+    // Project Filter
+    if (project) drawingFilters.projectId = project;
+
+    // Drawing Date Filter
+    if (drawingDate) {
+      const dateOnly = new Date(drawingDate);
+      const nextDay = new Date(dateOnly);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      drawingFilters.createdAt = { $gte: dateOnly, $lt: nextDay };
+    }
+
+    // Fetch only filtered drawings
+    const filteredDrawings = await Drawing.find(drawingFilters).select("_id").lean();
+
+    if (!filteredDrawings.length) {
+      return res.json({
+        status: true,
+        message: "No drawings match filter criteria",
+        data: [],
+      });
+    }
+
+    const filteredDrawingIds = filteredDrawings.map((d) => d._id.toString());
+
+    // -------------------------
+    // 2️⃣ FILTER WORK ORDERS
+    // -------------------------
+    const workOrders = await WorkOrder.find({
+      status: "on_hold",
+      drawingId: { $in: filteredDrawingIds },
+    }).lean();
 
     if (!workOrders.length) {
       return res.json({
         status: true,
-        statusCode: 200,
-        message: "No work orders in on_hold status",
+        message: "No work orders found for selected filters",
         data: [],
       });
     }
 
-    // 2) Unique drawingIds from workOrders (NO items[])
-    const drawingIdStrs = [
-      ...new Set(
-        workOrders
-          .filter((wo) => wo.drawingId)
-          .map((wo) => String(wo.drawingId))
-      ),
-    ];
-
-    if (!drawingIdStrs.length) {
-      return res.json({
-        status: true,
-        statusCode: 200,
-        message: "No drawingIds found",
-        data: [],
-      });
-    }
+    const drawingIdStrs = filteredDrawingIds;
 
     const drawingObjectIds = drawingIdStrs.map(
       (id) => new mongoose.Types.ObjectId(id)
     );
 
-    // 3) CostingItems fetch — sirf material
+    // -------------------------
+    // 3️⃣ COSTING ITEMS
+    // -------------------------
     const costingItems = await CostingItems.find({
       drawingId: { $in: drawingObjectIds },
       quoteType: "material",
@@ -2601,131 +3072,113 @@ export const getTotalMPNNeeded = async (req, res) => {
     if (!costingItems.length) {
       return res.json({
         status: true,
-        statusCode: 200,
         message: "No costing items found",
         data: [],
       });
     }
 
-    // Map: drawingId → costingItems[]
+    // Group costing per drawing
     const costingByDrawing = new Map();
-    for (const ci of costingItems) {
+    costingItems.forEach((ci) => {
       const key = String(ci.drawingId);
       const arr = costingByDrawing.get(key) || [];
       arr.push(ci);
       costingByDrawing.set(key, arr);
-    }
+    });
 
-    // 4) MPN usage aggregation (per mpn + workOrder)
-    const mpnUsageMap = new Map(); // key: `${mpnIdStr}_${wo._id}`
+    // -------------------------
+    // 4️⃣ MPN USAGE AGGREGATION
+    // -------------------------
+    const mpnUsageMap = new Map();
     const mpnIdStrSet = new Set();
 
     for (const wo of workOrders) {
-      const drawingId = wo.drawingId;
-      if (!drawingId) continue;
-
-      const costingArr = costingByDrawing.get(String(drawingId));
-      if (!costingArr || !costingArr.length) continue;
+      const dId = String(wo.drawingId);
+      const costArr = costingByDrawing.get(dId);
+      if (!costArr) continue;
 
       const woQty = Number(wo.quantity || 1);
 
-      for (const ci of costingArr) {
-        const mpnObjId = ci.mpn;
-        if (!mpnObjId) continue;
+      for (const ci of costArr) {
+        const mpnIdStr = String(ci.mpn);
+        if (!mpnIdStr) continue;
 
-        const mpnIdStr = String(mpnObjId);
         mpnIdStrSet.add(mpnIdStr);
 
-        const qtyPer = Number(ci.quantity || 0);
-        const totalNeededForThis = qtyPer * woQty;
+        const needed = Number(ci.quantity || 0) * woQty;
 
         const key = `${mpnIdStr}_${wo._id}`;
 
         const prev = mpnUsageMap.get(key) || {
           mpnId: mpnIdStr,
-          workOrderNo: wo.workOrderNo || "",
           description: ci.description || "",
           manufacturer: ci.manufacturer || "",
-          uomId: ci.uom || null, // UOM id
+          uomId: ci.uom || null,
+          workOrderNo: wo.workOrderNo,
           totalNeeded: 0,
         };
 
-        prev.totalNeeded += totalNeededForThis;
+        prev.totalNeeded += needed;
         mpnUsageMap.set(key, prev);
       }
     }
 
-    if (!mpnUsageMap.size) {
-      return res.json({
-        status: true,
-        statusCode: 200,
-        message: "No MPN usage found",
-        data: [],
-      });
-    }
-
-    // 5) Unique MPN ObjectIDs
+    // -------------------------
+    // 5️⃣ LOAD MPN, UOM, STOCK
+    // -------------------------
     const mpnObjectIds = [...mpnIdStrSet].map(
       (id) => new mongoose.Types.ObjectId(id)
     );
 
-    // 6) Fetch MPN library records
     const mpnLibDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
-    const mpnLibMap = new Map();
-    for (const lib of mpnLibDocs) {
-      mpnLibMap.set(String(lib._id), lib);
-    }
+    const mpnMap = new Map(mpnLibDocs.map((m) => [String(m._id), m]));
 
-    // 7) Fetch UOM docs
     const uomIds = [
       ...new Set(
-        Array.from(mpnUsageMap.values())
+        [...mpnUsageMap.values()]
           .map((row) => row.uomId)
-          .filter((id) => id)
-          .map((id) => String(id))
+          .filter(Boolean)
       ),
     ];
 
     const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
-    const uomMap = new Map();
-    for (const u of uomDocs) {
-      uomMap.set(String(u._id), u);
-    }
+    const uomMap = new Map(uomDocs.map((u) => [String(u._id), u]));
 
-    // 8) Inventory stock by mpnId
-    const inventoryDocs = await Inventory.find({
+    // Inventory stock
+    const invDocs = await Inventory.find({
       mpnId: { $in: mpnObjectIds },
     }).lean();
 
     const invMap = new Map();
-    for (const inv of inventoryDocs) {
+    invDocs.forEach((inv) => {
       const key = String(inv.mpnId);
-      const curr = invMap.get(key) || 0;
-      invMap.set(key, curr + Number(inv.balanceQuantity || 0));
-    }
+      const qty = Number(inv.balanceQuantity || 0);
+      invMap.set(key, (invMap.get(key) || 0) + qty);
+    });
 
-    // 9) Final result
-    const result = Array.from(mpnUsageMap.values()).map((row) => {
-      const lib = mpnLibMap.get(row.mpnId);
-      const uomDoc = row.uomId ? uomMap.get(String(row.uomId)) : null;
-      const currentStock = invMap.get(row.mpnId) || 0;
+    // -------------------------
+    // 6️⃣ FINAL RESULT FORMAT
+    // -------------------------
+    const result = [...mpnUsageMap.values()].map((row) => {
+      const mpn = mpnMap.get(row.mpnId);
+      const uom = row.uomId ? uomMap.get(String(row.uomId)) : null;
+      const stock = invMap.get(row.mpnId) || 0;
 
       return {
-        mpn: lib?.mpn || lib?.mpnNumber || lib?.MPN || null,
-        description: row.description || lib?.description || null,
-        manufacturer: row.manufacturer || lib?.manufacturer || null,
-        uom: uomDoc?.name || null,
+        mpn: mpn?.mpn || mpn?.MPN || null,
+        description: row.description || mpn?.description || null,
+        manufacturer: row.manufacturer || mpn?.manufacturer || null,
+        uom: uom?.name || null,
         totalNeeded: row.totalNeeded,
-        currentStock,
-        shortfall: Math.max(0, row.totalNeeded - currentStock),
+        currentStock: stock,
+        shortfall: Math.max(0, row.totalNeeded - stock),
         workOrderNo: row.workOrderNo,
       };
     });
 
     return res.json({
       status: true,
-      statusCode: 200,
-      message: "Total MPN needed calculated successfully",
+      message: "Filtered Total MPN Needed fetched successfully",
       data: result,
     });
   } catch (error) {
@@ -2734,6 +3187,196 @@ export const getTotalMPNNeeded = async (req, res) => {
       status: false,
       message: error.message,
       data: [],
+    });
+  }
+};
+
+
+export const exportTotalMPNNeeded = async (req, res) => {
+  try {
+    // 1) ON HOLD Work Orders (flat)
+    const workOrders = await WorkOrder.find({ status: "on_hold" }).lean();
+
+    if (!workOrders.length) {
+      return res.status(200).json({
+        status: true,
+        message: "No work orders to export",
+      });
+    }
+
+    const drawingIds = [
+      ...new Set(
+        workOrders
+          .filter((wo) => wo.drawingId)
+          .map((wo) => String(wo.drawingId))
+      ),
+    ];
+
+    if (!drawingIds.length) {
+      return res.status(200).json({
+        status: true,
+        message: "No drawingIds found",
+      });
+    }
+
+    const drawingObjectIds = drawingIds.map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    // 2) Costing Items (material only)
+    const costingItems = await CostingItems.find({
+      drawingId: { $in: drawingObjectIds },
+      quoteType: "material",
+    }).lean();
+
+    if (!costingItems.length) {
+      return res.status(200).json({
+        status: true,
+        message: "No costing items found",
+      });
+    }
+
+    // Map: drawing → costing[]
+    const costingMap = new Map();
+    costingItems.forEach((ci) => {
+      const key = String(ci.drawingId);
+      const arr = costingMap.get(key) || [];
+      arr.push(ci);
+      costingMap.set(key, arr);
+    });
+
+    // ========== AGGREGATION ==========
+    const mpnUsageMap = new Map(); // unique per {mpn+workorder}
+    const mpnIdSet = new Set();
+
+    for (const wo of workOrders) {
+      const dId = String(wo.drawingId);
+      const costingArr = costingMap.get(dId);
+      if (!costingArr) continue;
+
+      const woQty = Number(wo.quantity || 1);
+
+      for (const ci of costingArr) {
+        const mpnIdStr = String(ci.mpn);
+        if (!mpnIdStr) continue;
+
+        mpnIdSet.add(mpnIdStr);
+
+        const qtyPer = Number(ci.quantity || 0);
+        const needed = qtyPer * woQty;
+
+        const key = `${mpnIdStr}_${wo._id}`;
+
+        const prev = mpnUsageMap.get(key) || {
+          mpnId: mpnIdStr,
+          description: ci.description || "",
+          manufacturer: ci.manufacturer || "",
+          uomId: ci.uom || null,
+          workOrderNo: wo.workOrderNo,
+          totalNeeded: 0,
+        };
+
+        prev.totalNeeded += needed;
+        mpnUsageMap.set(key, prev);
+      }
+    }
+
+    if (!mpnUsageMap.size) {
+      return res.status(200).json({
+        status: true,
+        message: "No MPN usage found",
+      });
+    }
+
+    // ========== FETCH MPN / UOM / INVENTORY ==========
+
+    // Unique mpn IDs
+    const mpnObjectIds = [...mpnIdSet].map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    const mpnDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
+    const mpnMap = new Map();
+    mpnDocs.forEach((m) => mpnMap.set(String(m._id), m));
+
+    // Unique UOM IDs
+    const uomIds = [
+      ...new Set(
+        [...mpnUsageMap.values()]
+          .map((row) => row.uomId)
+          .filter((x) => x)
+          .map((id) => String(id))
+      ),
+    ];
+
+    const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
+    const uomMap = new Map();
+    uomDocs.forEach((u) => uomMap.set(String(u._id), u));
+
+    // Inventory balance
+    const invDocs = await Inventory.find({
+      mpnId: { $in: mpnObjectIds },
+    }).lean();
+
+    const invMap = new Map();
+    invDocs.forEach((inv) => {
+      const key = String(inv.mpnId);
+      const curr = invMap.get(key) || 0;
+      invMap.set(key, curr + Number(inv.balanceQuantity || 0));
+    });
+
+    // ========== BUILD EXCEL ROWS ==========
+    const excelRows = [...mpnUsageMap.values()].map((row) => {
+      const mpnDoc = mpnMap.get(row.mpnId);
+      const uomDoc = row.uomId ? uomMap.get(String(row.uomId)) : null;
+      const stock = invMap.get(row.mpnId) || 0;
+
+      return {
+        "MPN": mpnDoc?.mpn || mpnDoc?.MPN || "",
+        "Description": row.description || mpnDoc?.description || "",
+        "Manufacturer": row.manufacturer || mpnDoc?.manufacturer || "",
+        "UOM": uomDoc?.name || "",
+        "Total Needed": row.totalNeeded,
+        "Current Stock": stock,
+        "Shortfall": Math.max(0, row.totalNeeded - stock),
+        "Work Order No": row.workOrderNo,
+      };
+    });
+
+    if (!excelRows.length) {
+      return res.status(200).json({
+        status: true,
+        message: "No rows to export",
+      });
+    }
+
+    // ========== CREATE EXCEL ==========
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(excelRows);
+
+    ws["!cols"] = Object.keys(excelRows[0]).map((h) => ({
+      wch: Math.max(12, h.length + 2),
+    }));
+
+    XLSX.utils.book_append_sheet(wb, ws, "Total MPN Needed");
+
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="work_orders_export.xlsx"'
+    );
+
+    return res.end(buf);
+  } catch (error) {
+    console.error("exportTotalMPNNeeded error:", error);
+    return res.status(500).json({
+      status: false,
+      message: error.message,
     });
   }
 };
@@ -2833,21 +3476,21 @@ export const getDeliveryOrders = async (req, res) => {
       // Filter by project / customer after lookups
       ...(project
         ? [
-            {
-              $match: {
-                "projectDoc._id": new mongoose.Types.ObjectId(project),
-              },
+          {
+            $match: {
+              "projectDoc._id": new mongoose.Types.ObjectId(project),
             },
-          ]
+          },
+        ]
         : []),
       ...(customer
         ? [
-            {
-              $match: {
-                "customerDoc._id": new mongoose.Types.ObjectId(customer),
-              },
+          {
+            $match: {
+              "customerDoc._id": new mongoose.Types.ObjectId(customer),
             },
-          ]
+          },
+        ]
         : []),
 
       // 🧮 Compute friendly fields
@@ -2936,19 +3579,19 @@ export const getDeliveryOrders = async (req, res) => {
       // 🔍 Extended search on drawing & project also
       ...(search
         ? [
-            {
-              $match: {
-                $or: [
-                  { workOrderNo: { $regex: search, $options: "i" } },
-                  { poNumber: { $regex: search, $options: "i" } },
-                  { drawingName: { $regex: search, $options: "i" } },
-                  { drawingCode: { $regex: search, $options: "i" } },
-                  { projectName: { $regex: search, $options: "i" } },
-                  { customerName: { $regex: search, $options: "i" } },
-                ],
-              },
+          {
+            $match: {
+              $or: [
+                { workOrderNo: { $regex: search, $options: "i" } },
+                { poNumber: { $regex: search, $options: "i" } },
+                { drawingName: { $regex: search, $options: "i" } },
+                { drawingCode: { $regex: search, $options: "i" } },
+                { projectName: { $regex: search, $options: "i" } },
+                { customerName: { $regex: search, $options: "i" } },
+              ],
             },
-          ]
+          },
+        ]
         : []),
 
       // 🔽 Sort
@@ -3151,6 +3794,134 @@ export const getEachMPNUsage = async (req, res) => {
     });
   }
 };
+
+export const exportEachMPNUsage = async (req, res) => {
+  try {
+    const { mpnId } = req.query;
+
+    if (!mpnId) {
+      return res.status(400).send("mpnId is required");
+    }
+
+    const mpnObjectId = new mongoose.Types.ObjectId(mpnId);
+
+    // 1) Costing items for this MPN
+    let costingItems = await CostingItems.find({
+      mpn: mpnObjectId,
+      quoteType: "material",
+    }).lean();
+
+    if (!costingItems.length) {
+      costingItems = []; // return empty excel
+    }
+
+    const drawingIds = [...new Set(costingItems.map(ci => String(ci.drawingId)))];
+    const drawingObjectIds = drawingIds.map(id => new mongoose.Types.ObjectId(id));
+
+    // 2) WorkOrders
+    let workOrders = await WorkOrder.find({
+      status: "on_hold",
+      drawingId: { $in: drawingObjectIds },
+    }).lean();
+
+    if (!workOrders.length) {
+      workOrders = [];
+    }
+
+    // 3) Drawings
+    const drawingDocs = await Drawing.find({
+      _id: { $in: drawingObjectIds },
+    }).lean();
+
+    const projectIds = [
+      ...new Set(drawingDocs.map(d => d.projectId).filter(Boolean).map(String)),
+    ];
+
+    // 4) Projects
+    const projectDocs = await Project.find({
+      _id: { $in: projectIds },
+    }).lean();
+
+    const projectMap = new Map();
+    projectDocs.forEach(p => {
+      projectMap.set(String(p._id), p.projectName || p.name || "");
+    });
+
+    const drawingMap = new Map();
+    drawingDocs.forEach(d => {
+      drawingMap.set(String(d._id), {
+        drawingNo: d.drawingNo || "",
+        projectId: d.projectId ? String(d.projectId) : null,
+      });
+    });
+
+    // Group costing
+    const costingMap = new Map();
+    costingItems.forEach(ci => {
+      const key = String(ci.drawingId);
+      const arr = costingMap.get(key) || [];
+      arr.push(ci);
+      costingMap.set(key, arr);
+    });
+
+    // 5) Build Excel rows
+    const excelRows = [];
+
+    for (const wo of workOrders) {
+      const dKey = String(wo.drawingId);
+      const dInfo = drawingMap.get(dKey) || {};
+
+      const costArr = costingMap.get(dKey) || [];
+      const woQty = Number(wo.quantity || 1);
+      const projectName = dInfo.projectId
+        ? projectMap.get(dInfo.projectId) || ""
+        : "";
+
+      for (const ci of costArr) {
+        const qtyUsed = Number(ci.quantity || 0) * woQty;
+
+        excelRows.push({
+          "Drawing No": dInfo.drawingNo || "",
+          "Project Name": projectName || "",
+          "Work Order No": wo.workOrderNo || "",
+          "Quantity Used": qtyUsed,
+          "Need Date": wo.needDate
+            ? new Date(wo.needDate).toLocaleDateString("en-GB")
+            : "",
+          "Status": wo.status || "",
+        });
+      }
+    }
+
+    // 6) Even if excelRows is empty → return valid sheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(excelRows.length ? excelRows : [{}]);
+
+    ws["!cols"] = Object.keys(excelRows[0] || { A: "" }).map(h => ({
+      wch: 15,
+    }));
+
+    XLSX.utils.book_append_sheet(wb, ws, "MPN Usage");
+
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    // Correct headers
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="mpn_usage_export.xlsx"`
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    return res.end(buf);
+  } catch (error) {
+    console.error("exportEachMPNUsage error:", error);
+    return res.status(500).send(error.message);
+  }
+};
+
 
 export const getCompleteWorkOrders = async (req, res) => {
   try {

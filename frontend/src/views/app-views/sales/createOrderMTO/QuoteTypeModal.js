@@ -132,7 +132,7 @@ const QuoteTypeModal = ({
           onClick={handleContinue}
           disabled={uploading}
         >
-          {uploading ? "Please wait…" : "Continue"}
+          {uploading ? "Please wait…" : "Create Quote"}
         </Button>,
       ].filter(Boolean)}
       width={720}
@@ -170,11 +170,18 @@ const QuoteTypeModal = ({
         {showImportPanel && (
           <>
             <div>
+              <span style={{color:'red', padding:'5px'}}>
+                 Please Select Project First
+              </span>
               <Select
-                placeholder="Select Project"
+                placeholder={
+                  <span style={{ color: '#181515ff' }}>
+                    Select Project
+                  </span>
+                }
                 showSearch
                 optionFilterProp="children"
-                style={{ width: "100%" }}
+                style={{ width: "100%",borderColor:'b22b2bff' }}
                 value={selectedProject}
                 onChange={(value) => setSelectedProject(value)}
                 disabled={uploading}

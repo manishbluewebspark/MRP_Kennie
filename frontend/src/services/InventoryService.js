@@ -35,14 +35,30 @@ InventoryService.adjustInventory = function (adjustmentData) {
   });
 };
 
-InventoryService.exportToExcel = function (data) {
+InventoryService.exportMaterialRequired = () => {
   return fetch({
-    url: `/inventory/export/excel`,
-    method: 'get',
-    data,
-    responseType: 'blob' // Important for file download
+    url: "/inventory/inventory/export/material-required",
+    method: "get",
+    responseType: "arraybuffer"
   });
 };
+
+InventoryService.exportInventoryList = () => {
+  return fetch({
+    url: "/inventory/inventory/export/list",
+    method: "get",
+    responseType: "arraybuffer"
+  });
+};
+
+InventoryService.exportInventoryAlerts = () => {
+  return fetch({
+    url: "/inventory/inventory/export/alerts",
+    method: "get",
+    responseType: "arraybuffer"
+  });
+};
+
 
 
 export default InventoryService;

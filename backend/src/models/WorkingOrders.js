@@ -13,6 +13,10 @@ const workOrderSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    projectNo: {
+      type: String,
+      trim: true,
+    },
     drawingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Drawing",

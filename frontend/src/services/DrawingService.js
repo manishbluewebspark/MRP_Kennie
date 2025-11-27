@@ -118,5 +118,12 @@ DrawingService.importCostingItems = function (drawingId, formData) {
     });
 };
 
+DrawingService.updateLatestPrice = function (itemId) {
+    return fetch({
+      url: `/drawings/costing/${itemId}/latest-price`,
+      method: 'put'
+    });
+  }
+
 
 export default DrawingService;

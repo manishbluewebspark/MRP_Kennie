@@ -42,19 +42,19 @@ const PickingDetailModal = ({
     console.log('-----stage', selectWorkOrderData?.drawingId)
 
     const getDrawingId = (workOrder) => {
-  return (
-    workOrder?.drawingId ||
-    workOrder?.item?.drawingId ||
-    workOrder?.items?.[0]?.drawingId ||
-    null
-  );
-};
+        return (
+            workOrder?.drawingId ||
+            workOrder?.item?.drawingId ||
+            workOrder?.items?.[0]?.drawingId ||
+            null
+        );
+    };
 
 
     const [form] = Form.useForm();
     const [pickedQuantities, setPickedQuantities] = useState({});
     const [stageQty, setStageQty] = useState(null); // picking / assemble / qc / labelling qty
-   const [childParts, setChildParts] = useState([])
+    const [childParts, setChildParts] = useState([])
     const wo = selectWorkOrderData || {};
     const workQty = Number(wo.quantity || 0);
     useEffect(() => {
@@ -194,7 +194,21 @@ const PickingDetailModal = ({
         },
     ];
 
-    const dataSource = childParts.length ? childParts : dummyData;
+    // ---------- TABLE (Materials for Picking) ----------
+    const multipliedParts = childParts.map((p, index) => {
+        const qty = Number(p.quantity || 0);
+        const finalQty = stageQty ? qty * stageQty : qty;
+
+        return {
+            ...p,
+            key: p.key || index,
+            quantity: finalQty,
+            maxQty: finalQty,
+        };
+    });
+
+    const dataSource = multipliedParts.length ? multipliedParts : dummyData;
+
 
     const columns = [
         { title: "Item", dataIndex: "itemNumber", key: "itemNumber", width: 70 },

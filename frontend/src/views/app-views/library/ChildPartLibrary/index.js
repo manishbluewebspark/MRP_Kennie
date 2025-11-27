@@ -19,8 +19,9 @@ const renderBadge = (text, type) => {
     let color;
     switch (type) {
         case "status":
-            color = text === "active" ? "green" : "red";
-            break;
+    const activeValues = ["active", "Active", "ACTIVE", "aCtive"];
+    color = activeValues.includes(text) ? "green" : "red";
+    break;
         case "uom":
             color = "blue";
             break;
@@ -115,8 +116,8 @@ const ChildPartLibrary = () => {
             label: 'Status',
             placeholder: 'Select Status',
             options: [
-                { value: 'Active', label: 'Active' },
-                { value: 'InActive', label: 'InActive' }
+                { value: 'active', label: 'Active' },
+                { value: 'inActive', label: 'InActive' }
             ]
         }
     ];
