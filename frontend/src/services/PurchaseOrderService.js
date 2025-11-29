@@ -79,11 +79,10 @@ PurchaseOrderService.getPurchaseOrdersHistory = function (params) {
 };
 
 // ✉️ Send Purchase Order Mail
-PurchaseOrderService.sendPurchaseOrderMail = function (id, data) {
+PurchaseOrderService.sendPurchaseOrderMail = function (id) {
   return fetch({
     url: `/purchase-orders/${id}/send-mail`,
-    method: 'post',
-    data: data, // e.g. { email: "client@domain.com", message: "...", attachments: [...] }
+    method: 'post'
   });
 };
 

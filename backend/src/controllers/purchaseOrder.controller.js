@@ -8,6 +8,8 @@ import UOM from "../models/UOM.js";
 import Inventory from "../models/Inventory.js";
 import Suppliers from "../models/Suppliers.js";
 import XLSX from 'xlsx'
+import fs from 'fs'
+import { generatePurchaseOrderPDF } from "../middlewares/purchaseEmail.middleware.js";
 const toObjectId = (id) => {
   try {
     return new mongoose.Types.ObjectId(String(id));
@@ -433,41 +435,66 @@ export const getPurchaseOrderById = async (req, res) => {
  * Send Purchase Order by Email
  */
 export const sendPurchaseOrderMail = async (req, res) => {
+  let pdfPath;
+
   try {
     const { id } = req.params;
-    const { toEmail, subject, messageBody } = req.body;
+
+    console.log('🚀 Generating Purchase Order PDF...');
 
     const purchaseOrder = await PurchaseOrders.findById(id).populate("supplier");
     if (!purchaseOrder) {
       return res.status(404).json({ success: false, error: "Purchase Order not found" });
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+    // Generate PDF
+    pdfPath = await generatePurchaseOrderPDF(purchaseOrder);
+    console.log('✅ PDF generated at:', pdfPath);
+
+    // Update status to "Emailed"
+    await PurchaseOrders.findByIdAndUpdate(id, {
+      status: "Emailed",
+      emailedAt: new Date()
     });
 
-    await transporter.sendMail({
-      from: `"PO System" <${process.env.SMTP_USER}>`,
-      to: toEmail,
-      subject: subject || `Purchase Order ${purchaseOrder.poNumber}`,
-      html: messageBody || `<h3>Purchase Order ${purchaseOrder.poNumber}</h3>
-        <p>Supplier: ${purchaseOrder.supplier.companyName}</p>
-        <p>PO Date: ${purchaseOrder.poDate}</p>
-        <p>Total Amount: ${purchaseOrder.totals.finalAmount}</p>`,
-    });
+    // Read PDF file and send as response
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    
+    // Clean up temporary PDF
+    if (pdfPath && fs.existsSync(pdfPath)) {
+      fs.unlinkSync(pdfPath);
+      console.log('✅ Temporary PDF deleted');
+    }
 
-    res.json({ success: true, message: "Purchase Order sent via email" });
+    // Set headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="PO_${purchaseOrder.poNumber}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send PDF file
+    res.send(pdfBuffer);
+
+    console.log(`✅ Status updated to "Emailed" and PDF sent for download - PO: ${purchaseOrder.poNumber}`);
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ Error:', error);
+    
+    // Clean up PDF file if exists
+    try {
+      if (pdfPath && fs.existsSync(pdfPath)) {
+        fs.unlinkSync(pdfPath);
+      }
+    } catch (cleanupError) {
+      console.error('Cleanup error:', cleanupError);
+    }
+
+    res.status(500).json({ 
+      success: false, 
+      error: `PDF generation failed: ${error.message}` 
+    });
   }
 };
+
 
 export const getPurchaseOrdersHistory = async (req, res) => {
   try {

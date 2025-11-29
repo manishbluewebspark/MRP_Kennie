@@ -180,6 +180,18 @@ const PurchaseOrderPage = () => {
         }
     };
 
+
+    const handleSendMail = async(poId)=>{
+         const res = await PurchaseOrderService.sendPurchaseOrderMail(poId);
+            if (res.success) {
+       
+        alert('Purchase Order sent successfully via email with PDF attachment!');
+      } else {
+        alert('Failed to send Purchase Order: ' + res.error);
+      }
+
+    }
+
     // ---- COLUMNS ----
 
     const openingOrderColumns = [
@@ -284,7 +296,7 @@ const PurchaseOrderPage = () => {
                         onInfo={() =>
                             navigate(`/app/purchase/view-purchase-order/${record?._id}`)
                         }
-                        onMail={() => { }}
+                        onMail={() => {handleSendMail(record?._id) }}
                         onCross={() => {
                             confirmClose(record?._id);
                         }}
