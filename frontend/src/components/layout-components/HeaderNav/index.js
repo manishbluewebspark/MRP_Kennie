@@ -18,6 +18,8 @@ import NavItem from '../NavItem';
 import { toggleCollapsedNav, onMobileNavToggle } from 'store/slices/themeSlice';
 import { NAV_TYPE_TOP, SIDE_NAV_COLLAPSED_WIDTH, SIDE_NAV_WIDTH } from 'constants/ThemeConstant';
 import utils from 'utils'
+import NavAlert from '../NavAlerts';
+import NavSystemStatus from '../NavSystemStatus';
 
 export const HeaderNav = props => {
 
@@ -106,8 +108,11 @@ export const HeaderNav = props => {
 					</NavEdge>
 					<NavEdge right>
 						{/* <NavNotification mode={navMode} /> */}
+						<NavSystemStatus mode={navMode} />
+						<NavAlert mode={navMode}/>
 						{/* <NavLanguage mode={navMode} /> */}
 						{/* <NavPanel direction={direction} mode={navMode} /> */}
+						
 						<NavProfile mode={navMode} />
 					</NavEdge>
 					<NavSearch 

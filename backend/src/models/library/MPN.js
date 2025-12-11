@@ -26,6 +26,7 @@ const mpnSchema = new mongoose.Schema(
     },
     StorageLocation: { type: String },
     RFQUnitPrice: { type: String, default: "" }, // Request For Quotation Unit Price
+    currency: { type: mongoose.Schema.Types.ObjectId, ref: "Currency" },
     MOQ: { type: Number }, // Minimum Order Quantity
     RFQ: { type: String },
     RFQDate: { type: Date },

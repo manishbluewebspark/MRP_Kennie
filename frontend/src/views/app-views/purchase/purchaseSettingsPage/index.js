@@ -70,7 +70,7 @@ const SettingsPage = () => {
   // 🔹 Handle backend success/error
   useEffect(() => {
     if (success) {
-      message.success('Settings saved successfully');
+      // message.success('Settings saved successfully');
       dispatch(clearSuccess());
     }
     if (error) {
@@ -90,6 +90,7 @@ const SettingsPage = () => {
         })),
       };
       await dispatch(addOrUpdatePurchaseSetting(processedValues)).unwrap();
+      message.success('Settings saved successfully');
     } catch (err) {
       console.error('Save failed:', err);
     }

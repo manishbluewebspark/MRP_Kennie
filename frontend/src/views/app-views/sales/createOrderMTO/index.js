@@ -32,6 +32,18 @@ const renderStatusBadge = (status) => {
   return <Tag color={cfg.color}>{cfg.text}</Tag>;
 };
 
+const renderQyoteTypeBadge = (type) => {
+  const typeConfig = {
+    cable_harness: { color: "purple", text: "Cable Harness" },
+    box_build: { color: "cyan", text: "Box Build" },
+    other: { color: "default", text: "Other" },
+  };
+
+  const cfg = typeConfig[type] || { color: "default", text: type };
+  return <Tag color={cfg.color}>{cfg.text}</Tag>;
+};
+
+
 const formatCurrency = (amount, currency = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 2 }).format(amount);
 
@@ -205,6 +217,12 @@ const MTOList = () => {
       dataIndex: "quoteStatus",
       key: "quoteStatus",
       render: renderStatusBadge
+    },
+      {
+      title: "Quote Type",
+      dataIndex: "quoteType",
+      key: "quoteType",
+      render: renderQyoteTypeBadge
     },
     {
       title: "Last Edited By",

@@ -8,33 +8,112 @@ import XLSX from "xlsx";
  */
 export const addChild = async (req, res) => {
   try {
-    const { mpn: mpnId } = req.body;
-    const mpn = await MPN.findById(mpnId);
-    if (!mpn) return res.status(404).json({ success: false, message: "Parent MPN not found" });
+    const { mpn: mpnId, childPartNo } = req.body;
 
-    // Save child
-    const child = new Child(req.body);
+    // 1️⃣ Check parent MPN exists
+    const mpn = await MPN.findById(mpnId);
+    if (!mpn) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Parent MPN not found" });
+    }
+
+    // 2️⃣ Check if this childPartNo is already linked to some other MPN
+    //    Rule: one child part no cannot be linked to 2 or more MPNs
+    const existingChild = await Child.findOne({ childPartNo });
+
+    if (existingChild && existingChild.mpn.toString() !== mpnId.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: "This child part number is already linked to another MPN.",
+      });
+    }
+
+    // 3️⃣ Create + save child
+    const child = new Child({
+      ...req.body,
+      mpn: mpnId, // make sure mpn is set correctly
+    });
+
     await child.save();
 
-    return res.status(201).json({ success: true, message: "Child created", data: child });
-
+    return res
+      .status(201)
+      .json({ success: true, message: "Child created", data: child });
   } catch (err) {
-    return res.status(400).json({ success: false, message: err.message });
+    return res
+      .status(400)
+      .json({ success: false, message: err.message || "Something went wrong" });
   }
 };
+
 
 /**
  * Update Child
  */
 export const updateChild = async (req, res) => {
   try {
-    const child = await Child.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!child) return res.status(404).json({ success: false, message: "Child not found" });
-    return res.json({ success: true, message: "Child updated", data: child });
+    const childId = req.params.id;
+
+    // 1️⃣ Find existing child
+    const existingChild = await Child.findById(childId);
+    if (!existingChild) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Child not found" });
+    }
+
+    // 2️⃣ Determine final values after update
+    const newMpnId = req.body.mpn || existingChild.mpn;
+    const newChildPartNo = req.body.childPartNo || existingChild.childPartNo;
+
+    // 3️⃣ Validate new parent MPN exists (if changed)
+    if (req.body.mpn) {
+      const mpn = await MPN.findById(newMpnId);
+      if (!mpn) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Parent MPN not found" });
+      }
+    }
+
+    // 4️⃣ Check if same childPartNo is already linked to a different MPN
+    const conflictChild = await Child.findOne({
+      _id: { $ne: childId },         // ignore current child
+      childPartNo: newChildPartNo,   // same childPartNo
+      mpn: { $ne: newMpnId },        // but different MPN → not allowed
+    });
+
+    if (conflictChild) {
+      return res.status(400).json({
+        success: false,
+        message: "This child part number is already linked to another MPN.",
+      });
+    }
+
+    // 5️⃣ Perform update
+    const updatedChild = await Child.findByIdAndUpdate(
+      childId,
+      {
+        ...req.body,
+        mpn: newMpnId,
+        childPartNo: newChildPartNo,
+      },
+      { new: true }
+    );
+
+    return res.json({
+      success: true,
+      message: "Child updated",
+      data: updatedChild,
+    });
   } catch (err) {
-    return res.status(400).json({ success: false, message: err.message });
+    return res
+      .status(400)
+      .json({ success: false, message: err.message || "Something went wrong" });
   }
 };
+
 
 /**
  * Delete Child
@@ -177,7 +256,7 @@ export const getChildById = async (req, res) => {
 
 export const getAllChild = async (req, res) => {
   try {
-    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const pageNum = Math.max(parseInt(req.query.page, 50) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 200);
 
     const { search = "", category, mpn, status } = req.query;

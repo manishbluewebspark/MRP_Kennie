@@ -14,6 +14,7 @@ export function mapRowToSchemaforMPN(row) {
     UOM: normalizedRow["uom"] || "",
     StorageLocation: normalizedRow["storage location"] || "",
     RFQUnitPrice: normalizedRow["rfq unit price"] || "",
+    currency: normalizedRow["Currency"] || "",
     MOQ: normalizedRow["moq"] ? Number(normalizedRow["moq"]) : null,
     RFQ: normalizedRow["rfq"] || "",
     RFQDate: normalizedRow["rfq date"] ? new Date(normalizedRow["rfq date"]) : null,

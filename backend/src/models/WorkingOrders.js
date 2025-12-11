@@ -8,7 +8,7 @@ const workOrderSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
-   
+
     poNumber: {
       type: String,
       trim: true,
@@ -22,12 +22,12 @@ const workOrderSchema = new mongoose.Schema(
       ref: "Drawing",
       required: true,
     },
-     projectType: {
+    projectType: {
       type: String,
       enum: ["cable_harness", "box_build", "other"], // adjust as per your project types
       default: "cable_harness",
     },
-     projectId: {
+    projectId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Project",
     },
@@ -59,14 +59,27 @@ const workOrderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["on_hold", "in_progress", "completed","open", "done", "cancelled"],
-      default: "on_hold",
+      // enum: [
+      //   "no_progress",
+      //   "picking_in_progress",
+      //   "quality_check_done",
+      //   "cable_harness_done",
+      //   "qc_partial",         // QC: 1/2, 2/3 etc.
+      //   "completed",          // NEW
+      //   "on_hold"             // NEW
+      // ],
+      default: "no_progress",
+    }
+    ,
+    isProductionComplete: {
+      type: Boolean,
+      default: false
     },
     isTriggered: {
       type: Boolean,
       default: false,
     },
-    isInProduction:{
+    isInProduction: {
       type: Boolean,
       default: false,
     },
@@ -79,12 +92,61 @@ const workOrderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-     targetDeliveryDate: {
+    targetDeliveryDate: {
       type: Date,
     },
-     completeDate: {
+    completeDate: {
       type: Date,
     },
+    processHistory: [
+      {
+        _id: false, // prevent auto _id for subdocs → keeps array clean
+
+        process: {
+          type: String,
+          enum: ["picking", "assembly", "quality_check", "labelling", "cable_harness"],
+          required: true,
+        },
+
+        qty: {
+          type: Number,
+          required: true,
+          default: 0
+        },
+
+        completedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+
+        completedAt: {
+          type: Date,
+          default: null
+        },
+
+        notes: {
+          type: String,
+          trim: true,
+          default: "",
+        },
+
+        isComplete: {
+          type: Boolean,
+          default: false
+        },
+
+        createdAt: {
+          type: Date,
+          default: () => new Date(),
+        },
+
+        details: {
+          type: mongoose.Schema.Types.Mixed,
+          default: null,
+        },
+      }
+    ]
 
   },
   {

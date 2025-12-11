@@ -105,6 +105,7 @@ const CreateWorkOrderModal = ({
     setLoading(true);
     try {
       const response = await DrawingService.getAllDrawings(params);
+      console.log('-------response',response)
       if (response?.success) {
         const formatted = (response.data || []).map((drawing, index) => ({
           key: drawing._id || String(index),
@@ -115,8 +116,8 @@ const CreateWorkOrderModal = ({
           customer: drawing.customerId?.companyName || drawing.customerName || "-",
           qty: drawing.qty || 0,
           unitPrice: drawing.unitPrice ?? 0,
-          unitPriceDisplay: `$ ${(drawing.unitPrice ?? 0).toFixed(2)}`,
-          totalPriceDisplay: `$ ${(((drawing.qty ?? 0) * (drawing.unitPrice ?? 0))).toFixed(2)}`,
+          unitPrice: `$ ${(drawing.unitPrice ?? 0).toFixed(2)}`,
+          totalPrice: `$ ${(((drawing.qty ?? 0) * (drawing.totalPrice ?? 0))).toFixed(2)}`,
           quotedDate: drawing.quotedDate ? dayjs(drawing.quotedDate).format("DD/MM/YYYY") : "-",
           posNo: drawing.posNumber || "",
           status: drawing.quoteStatus || "draft",
@@ -186,15 +187,15 @@ const CreateWorkOrderModal = ({
     },
     {
       title: "Unit Price",
-      dataIndex: "unitPriceDisplay",
-      key: "unitPriceDisplay",
+      dataIndex: "unitPrice",
+      key: "unitPrice",
       sorter: (a, b) => (a.unitPrice || 0) - (b.unitPrice || 0),
     },
     {
       title: "Total Price",
-      dataIndex: "totalPriceDisplay",
-      key: "totalPriceDisplay",
-      sorter: (a, b) => ((a.unitPrice || 0) * (a.qty || 0)) - ((b.unitPrice || 0) * (b.qty || 0)),
+      dataIndex: "totalPrice",
+      key: "totalPrice",
+      sorter: (a, b) => (a.totalPrice || 0) - (b.totalPrice || 0),
     },
     {
       title: "Quoted Date",
@@ -288,7 +289,7 @@ const CreateWorkOrderModal = ({
         commitDate: values.commitDate ? values.commitDate.format("YYYY-MM-DD") : null,
         status: values.status || "on_hold",
         isTriggered: false,
-        items:[],
+        items:items,
       };
 
       await onCreate(workOrderData);

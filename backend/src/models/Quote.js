@@ -38,13 +38,13 @@ const quoteSchema = new mongoose.Schema({
 });
 
 // Pre-save hooks
-quoteSchema.pre('save', async function(next) {
-  if (this.isNew) {
-    const count = await mongoose.model('Quote').countDocuments();
-    this.quoteNumber = `QT-${String(count + 1).padStart(6, '0')}`;
-  }
-  next();
-});
+// quoteSchema.pre('save', async function(next) {
+//   if (this.isNew) {
+//     const count = await mongoose.model('Quote').countDocuments();
+//     this.quoteNumber = `QT-${String(count + 1).padStart(6, '0')}`;
+//   }
+//   next();
+// });
 
 quoteSchema.pre('save', function(next) {
   if (this.items && this.items.length) {

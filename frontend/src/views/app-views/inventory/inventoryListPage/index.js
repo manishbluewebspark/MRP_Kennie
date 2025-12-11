@@ -14,6 +14,7 @@ import ReceiveMaterialService from "services/ReceiveMaterial";
 import InventoryService from "services/InventoryService";
 import UpdateOutgoingQuantityModal from "../mtoInventoryList/UpdateOutgoingQuantityModal";
 import IncomingStockModal from "./IncomingStockModal";
+import { render } from "@testing-library/react";
 
 const { Title, Text } = Typography;
 
@@ -281,6 +282,13 @@ const InventoryListPage = () => {
     // Inventory List Columns
     const inventoryListColumns = [
         {
+            title: 'No.',
+            key: 'serial',
+            width: 80,
+            render: (_, __, index) => index + 1   // ← yahan se numbering 1,2,3...
+        },
+
+        {
             title: 'MPN',
             dataIndex: 'MPN',
             key: 'MPN',
@@ -297,6 +305,13 @@ const InventoryListPage = () => {
             dataIndex: 'Description',
             key: 'Description',
             width: 180,
+        },
+        {
+            title: 'UOM',
+            dataIndex: 'UOM',
+            key: 'UOM',
+            width: 180,
+            render: (_, record) => (<Text>{record?.UOM?.code}</Text>)
         },
         {
             title: 'Storage',
@@ -330,13 +345,13 @@ const InventoryListPage = () => {
                 </div>
             )
         },
-        {
-            title: 'Commit Date',
-            dataIndex: 'commitDate',
-            key: 'commitDate',
-            width: 120,
-            align: 'center',
-        },
+        // {
+        //     title: 'Commit Date',
+        //     dataIndex: 'commitDate',
+        //     key: 'commitDate',
+        //     width: 120,
+        //     align: 'center',
+        // },
         {
             title: 'Status',
             dataIndex: 'Status',
@@ -534,79 +549,79 @@ const InventoryListPage = () => {
         }
     };
 
-const handleExport = async () => {
-  try {
-    let resp;
-    let fileName = "";
-    let mime =
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const handleExport = async () => {
+        try {
+            let resp;
+            let fileName = "";
+            let mime =
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-    // ====== 1) Decide API based on activeTab ========
-    if (activeTab === "material_required") {
-      resp = await InventoryService.exportMaterialRequired(
-        { search: "" },
-        { responseType: "arraybuffer" }
-      );
-      fileName = `material-required-${Date.now()}.xlsx`;
-    } else if (activeTab === "inventory_list") {
-      resp = await InventoryService.exportInventoryList(
-        { search: "" },
-        { responseType: "arraybuffer" }
-      );
-      fileName = `inventory-list-${Date.now()}.xlsx`;
-    } else if (activeTab === "inventory_alerts") {
-      resp = await InventoryService.exportInventoryAlerts(
-        { search: "" },
-        { responseType: "arraybuffer" }
-      );
-      fileName = `inventory-alerts-${Date.now()}.xlsx`;
-    } else {
-      message.error("Invalid tab selected");
-      return;
-    }
+            // ====== 1) Decide API based on activeTab ========
+            if (activeTab === "material_required") {
+                resp = await InventoryService.exportMaterialRequired(
+                    { search: "" },
+                    { responseType: "arraybuffer" }
+                );
+                fileName = `material-required-${Date.now()}.xlsx`;
+            } else if (activeTab === "inventory_list") {
+                resp = await InventoryService.exportInventoryList(
+                    { search: "" },
+                    { responseType: "arraybuffer" }
+                );
+                fileName = `inventory-list-${Date.now()}.xlsx`;
+            } else if (activeTab === "inventory_alerts") {
+                resp = await InventoryService.exportInventoryAlerts(
+                    { search: "" },
+                    { responseType: "arraybuffer" }
+                );
+                fileName = `inventory-alerts-${Date.now()}.xlsx`;
+            } else {
+                message.error("Invalid tab selected");
+                return;
+            }
 
-    // ====== 2) Handle response shape safely (Axios / fetch / buffer all OK) ========
-    let arrayBuffer;
+            // ====== 2) Handle response shape safely (Axios / fetch / buffer all OK) ========
+            let arrayBuffer;
 
-    if (resp?.data instanceof ArrayBuffer) {
-      // Axios instance → resp.data is arrayBuffer
-      arrayBuffer = resp.data;
-      mime = resp?.headers?.["content-type"] || mime;
+            if (resp?.data instanceof ArrayBuffer) {
+                // Axios instance → resp.data is arrayBuffer
+                arrayBuffer = resp.data;
+                mime = resp?.headers?.["content-type"] || mime;
 
-    } else if (resp instanceof ArrayBuffer) {
-      // Direct arrayBuffer
-      arrayBuffer = resp;
+            } else if (resp instanceof ArrayBuffer) {
+                // Direct arrayBuffer
+                arrayBuffer = resp;
 
-    } else if (resp?.blob instanceof Blob) {
-      // fetch() wrapper → we returned { blob, contentType }
-      mime = resp.contentType || mime;
-      arrayBuffer = await resp.blob.arrayBuffer();
+            } else if (resp?.blob instanceof Blob) {
+                // fetch() wrapper → we returned { blob, contentType }
+                mime = resp.contentType || mime;
+                arrayBuffer = await resp.blob.arrayBuffer();
 
-    } else {
-      console.warn("Unknown export response:", resp);
-      throw new Error("Unknown response format for Excel export");
-    }
+            } else {
+                console.warn("Unknown export response:", resp);
+                throw new Error("Unknown response format for Excel export");
+            }
 
-    // ====== 3) Convert to blob + download ========
-    const blob = new Blob([arrayBuffer], { type: mime });
-    const url = window.URL.createObjectURL(blob);
+            // ====== 3) Convert to blob + download ========
+            const blob = new Blob([arrayBuffer], { type: mime });
+            const url = window.URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
 
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
 
-    window.URL.revokeObjectURL(url);
+            window.URL.revokeObjectURL(url);
 
-    message.success("Excel exported successfully!");
-  } catch (err) {
-    console.error("Export error:", err);
-    message.error("Failed to export Excel");
-  }
-};
+            message.success("Excel exported successfully!");
+        } catch (err) {
+            console.error("Export error:", err);
+            message.error("Failed to export Excel");
+        }
+    };
 
 
 
@@ -715,7 +730,7 @@ const handleExport = async () => {
                 showFilter={false}
                 onFilter={() => setIsFilterModalOpen(true)}
                 showExportPDF={false}
-                showProductSetting={true}
+                showProductSetting={false}
                 onProductSetting={() => { setIsPurchaseOrderModalOpen(true) }}
                 showProductSettingText="Receive Material"
                 onExportPDF={() => { }}

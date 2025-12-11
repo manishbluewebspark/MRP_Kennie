@@ -58,14 +58,16 @@ const CostingTable = ({
 
   const commonColumns = [
     {
-      title: 'Item Number',
+      title: 'Item',
       dataIndex: 'itemNumber',
       key: 'itemNumber',
       width: 150,
       fixed: 'left',
       render: (text) => <Text strong>{text || '-'}</Text>,
     },
+    { title: 'Child Part', dataIndex: 'childPart', key: 'childPart', width: 220,render: (_,record) => <Text strong>{record?.childPart?.ChildPartNo || '-'}</Text> },
     { title: 'Description', dataIndex: 'description', key: 'description', width: 220 },
+    { title: 'MPN', dataIndex: 'mpn', key: 'mpn', width: 220,render: (_,record) => <Text strong>{record?.mpn?.MPN || '-'}</Text> },
     {
       title: 'UOM',
       dataIndex: 'uom',
@@ -90,7 +92,7 @@ const CostingTable = ({
       render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
     },
     {
-      title: 'Latest Price',
+      title: 'Latest P. Price',
       dataIndex: 'unitPrice',
       key: 'unitPrice',
       width: 150,
@@ -112,7 +114,7 @@ const CostingTable = ({
     }
     ,
     {
-      title: 'Ext Price',
+      title: 'Ex. Price',
       dataIndex: 'extPrice',
       key: 'extPrice',
       width: 110,
@@ -171,14 +173,16 @@ const CostingTable = ({
   ];
 
   const manhourColumns = [
-    {
-      title: 'Remarks',
-      dataIndex: 'remarks',
-      key: 'remarks',
-      width: 160,
-      render: (t) => t || '-',
+     {
+      title: 'Item',
+      dataIndex: 'itemNumber',
+      key: 'itemNumber',
+      width: 150,
+      fixed: 'left',
+      render: (text) => <Text strong>{text || '-'}</Text>,
     },
-    {
+    { title: 'Description', dataIndex: 'description', key: 'description', width: 220 },
+       {
       title: 'Skill Level',
       dataIndex: 'skillLevel',
       key: 'skillLevel',
@@ -197,15 +201,102 @@ const CostingTable = ({
         );
       },
     },
+     {
+      title: 'UOM',
+      dataIndex: 'uom',
+      key: 'uom',
+      width: 80,
+      render: (uom) => (uom?.code || uom?.name || '-'),
+    },
+      {
+      title: 'Qty',
+      dataIndex: 'quantity',
+      key: 'quantity',
+      width: 80,
+      align: 'right',
+      render: (v) => (Number(v || 0)).toFixed(2),
+    },
+    {
+      title: 'Unit Price',
+      dataIndex: 'unitPrice',
+      key: 'unitPrice',
+      width: 110,
+      align: 'right',
+      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+    },
+    {
+      title: 'Sales Price',
+      dataIndex: 'salesPrice',
+      key: 'salesPrice',
+      width: 120,
+      align: 'right',
+      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+    },
+    {
+      title: 'Remarks',
+      dataIndex: 'remarks',
+      key: 'remarks',
+      width: 160,
+      render: (t) => t || '-',
+    },
+ 
   ];
 
   const packingColumns = [
+    {
+      title: 'Item',
+      dataIndex: 'itemNumber',
+      key: 'itemNumber',
+      width: 150,
+      fixed: 'left',
+      render: (text) => <Text strong>{text || '-'}</Text>,
+    },
+      { title: 'Description', dataIndex: 'description', key: 'description', width: 220 },
     {
       title: 'MPN',
       dataIndex: 'mpn',
       key: 'mpn',
       width: 140,
       render: (mpn) => (typeof mpn === 'string' ? mpn : (mpn?.MPN || '-')),
+    },
+    {
+      title: 'UOM',
+      dataIndex: 'uom',
+      key: 'uom',
+      width: 80,
+      render: (uom) => (uom?.code || uom?.name || '-'),
+    },
+      {
+      title: 'Qty',
+      dataIndex: 'quantity',
+      key: 'quantity',
+      width: 80,
+      align: 'right',
+      render: (v) => (Number(v || 0)).toFixed(2),
+    },
+    {
+      title: 'Unit Price',
+      dataIndex: 'unitPrice',
+      key: 'unitPrice',
+      width: 110,
+      align: 'right',
+      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+    },
+     {
+      title: 'Ex. Price',
+      dataIndex: 'extPrice',
+      key: 'extPrice',
+      width: 110,
+      align: 'right',
+      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+    },
+    {
+      title: 'SGA%',
+      dataIndex: 'sgaPercent',
+      key: 'sgaPercent',
+      width: 120,
+      align: 'right',
+      render: (v) => `${Number(v || 0)}%`,
     },
     {
       title: 'Max Burden %',
@@ -227,8 +318,9 @@ const CostingTable = ({
 
   const getColumns = () => {
     const base = [...commonColumns];
-    if (activeTab === 'materials') return [...base, ...materialColumns, actionColumn];
-    if (activeTab === 'manhour') return [...base, ...manhourColumns, actionColumn];
+    if (activeTab === 'materials') return [...base, actionColumn];
+    if (activeTab === 'manhour') return [...manhourColumns, actionColumn];
+    if (activeTab === 'packing') return [...packingColumns, actionColumn];
     return [...base, ...packingColumns, actionColumn];
   };
 

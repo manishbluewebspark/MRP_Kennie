@@ -35,6 +35,25 @@ InventoryService.adjustInventory = function (adjustmentData) {
   });
 };
 
+InventoryService.addShortage = function (data) {
+  return fetch({
+    url: "/inventory/addShortage",
+    method: "post",
+    data
+  });
+};
+
+// InventoryService.js
+InventoryService.getMaterialShortages = function (params = {}) {
+  return fetch({
+    url: "/inventory/material-shortages/list",
+    method: "get",
+    params,
+  });
+};
+
+
+
 InventoryService.exportMaterialRequired = () => {
   return fetch({
     url: "/inventory/inventory/export/material-required",

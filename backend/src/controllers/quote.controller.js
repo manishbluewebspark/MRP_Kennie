@@ -3,8 +3,10 @@ import * as XLSX from 'xlsx';
 import Customer from '../models/Customer.js';
 import Drawing from '../models/Drwaing.js';
 import Quote from '../models/Quote.js';
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-         WidthType, AlignmentType, BorderStyle } from "docx";
+import {
+  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+  WidthType, AlignmentType, BorderStyle
+} from "docx";
 import mongoose from 'mongoose';
 import Project from '../models/Project.js';
 
@@ -137,9 +139,9 @@ export const createQuote = async (req, res) => {
 
     const projects = projectIds.length
       ? await Project.find(
-          { _id: { $in: projectIds } },
-          { _id: 1, currency: 1 }
-        ).lean()
+        { _id: { $in: projectIds } },
+        { _id: 1, currency: 1 }
+      ).lean()
       : [];
 
     const pMap = new Map(projects.map(p => [String(p._id), p]));
@@ -183,21 +185,41 @@ export const createQuote = async (req, res) => {
     const totalDrawings = quoteItems.length;
 
     // 6) Generate date-scoped sequential quote number: Q-YYYYMMDD-###
+    // Generate Quote Number: QYY-XXXX
     const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    const datePart = `${yyyy}${mm}${dd}`;
+const year = now.getFullYear();
+const shortYear = String(year).slice(-2);   // 2025 → "25"
+const prefix = `Q${shortYear}-`;            // "Q25-"
 
-    const startOfDay = new Date(yyyy, now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const endOfDay   = new Date(yyyy, now.getMonth(), now.getDate(), 23, 59, 59, 999);
+// Find last quote number for this year
+const lastQuote = await Quote.findOne({
+  quoteNumber: { $regex: `^${prefix}\\d{5}$` },   // Match Q25-xxxxx
+})
+.sort({ quoteNumber: -1 })
+.select("quoteNumber")
+.lean();
 
-    const todaysCount = await Quote.countDocuments({
-      createdAt: { $gte: startOfDay, $lte: endOfDay },
-    });
+let nextSeq = 1;  // Default beginning sequence
 
-    const seq = String(todaysCount + 1).padStart(3, "0");
-    const quoteNumber = `Q-${datePart}-${seq}`;
+if (lastQuote?.quoteNumber) {
+  // Extract numeric part: Q25-00012 → 00012
+  const numberPart = lastQuote.quoteNumber.replace(prefix, ""); 
+  const parsed = parseInt(numberPart, 10);
+
+  if (!isNaN(parsed)) {
+    nextSeq = parsed + 1;   // Always +1
+  }
+}
+
+// Build 5-digit padded sequence
+const seq = String(nextSeq).padStart(5, "0");
+
+// Final quoteNumber output
+const quoteNumber = `${prefix}${seq}`;
+
+
+
+
 
     // 7) If every item has same currency, set top-level quote currency as well
     let quoteCurrency = null;
@@ -508,7 +530,10 @@ export const exportQuoteToExcel = async (req, res) => {
     const quote = await Quote.findById(quoteId)
       .populate("customerId")
       .populate("items.drawingId")
+      .populate("currency","code")
       .lean();
+
+      
 
     if (!quote) {
       return res
@@ -527,7 +552,7 @@ export const exportQuoteToExcel = async (req, res) => {
     const validUntil = D(quote.validUntil);
     const paymentTerms = S(quote?.customerId?.paymentTerms);
     const incoterms = S(quote?.customerId?.incoterms);
-    const currency = S(quote.currency || "USD");
+    const currency = S(quote.currency?.code || "USD");
     const items = Array.isArray(quote.items) ? quote.items : [];
 
     const wb = new ExcelJS.Workbook();
@@ -566,21 +591,21 @@ export const exportQuoteToExcel = async (req, res) => {
     const headerRow = ws.addRow(header);
 
     headerRow.eachCell((cell) => {
-  cell.font = { bold: true };
-  cell.alignment = { horizontal: "center", vertical: "middle" };
-  // optional background for clarity
-  cell.fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: "FFECECEC" }, // light grey
-  };
-  cell.border = {
-    top: { style: "thin" },
-    left: { style: "thin" },
-    bottom: { style: "thin" },
-    right: { style: "thin" },
-  };
-});
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      // optional background for clarity
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFECECEC" }, // light grey
+      };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
 
     headerRow.font = { bold: true };
     headerRow.alignment = { horizontal: "center", vertical: "middle" };
@@ -699,16 +724,17 @@ export const exportQuoteToWord = async (req, res) => {
     const quoteId = req.params.quoteId || req.params.id;
     const quote = await Quote.findById(quoteId)
       .populate("customerId")
-      .populate("items.drawingId");
+      .populate("items.drawingId")
+      .populate("currency","code");
 
     if (!quote) {
       return res.status(404).json({ success: false, message: "Quote not found" });
     }
 
     // --- normalize ---
-    const customerName    = S(quote.customerName || quote.customerId?.name);
+    const customerName = S(quote.customerName || quote.customerId?.name);
     const customerCompany = S(quote.customerCompany || quote.customerId?.companyName);
-    const customerEmail   = S(quote.customerEmail || quote.customerId?.email);
+    const customerEmail = S(quote.customerEmail || quote.customerId?.email);
 
     const addressLines = [
       S(quote.customerAddress1 || quote.customerId?.address1),
@@ -718,24 +744,24 @@ export const exportQuoteToWord = async (req, res) => {
       S(quote.customerCountry || quote.customerId?.country),
     ].filter(Boolean);
 
-   const paymentTerms = S(quote?.customerId?.paymentTerms);
+    const paymentTerms = S(quote?.customerId?.paymentTerms);
     const incoterms = S(quote?.customerId?.incoterms);
-    const currency     = S(quote.currency || "USD");
-    const quoteDate    = D(quote.quoteDate);
-    const validUntil   = D(quote.validUntil);
-    const items        = Array.isArray(quote.items) ? quote.items : [];
+    const currency = S(quote.currency?.code || "USD");
+    const quoteDate = D(quote.quoteDate);
+    const validUntil = D(quote.validUntil);
+    const items = Array.isArray(quote.items) ? quote.items : [];
 
     // --- Title ---
-    const title = P([ T(`QUOTE: ${S(quote.quoteNumber)}`, { bold: true, size: 32 }) ], {
+    const title = P([T(`QUOTE: ${S(quote.quoteNumber)}`, { bold: true, size: 32 })], {
       spacing: { after: 400 }
     });
 
     // --- Header block (company/address/contact) ---
     const headerBlock = [
-       P([T(quoteDate || "-", { bold: true }) ]),
-      P([ T(customerCompany, { bold: true }) ]),
+      P([T(quoteDate || "-", { bold: true })]),
+      P([T(customerCompany, { bold: true })]),
       ...addressLines.map(line => P([T(line)])),
-      P([ T("Attn: "), T(customerName || "-", { bold: true }) ]),
+      P([T("Attn: "), T(customerName || "-", { bold: true })]),
       P([]),
     ];
 
@@ -745,17 +771,17 @@ export const exportQuoteToWord = async (req, res) => {
       children: [
         new TableCell({
           width: { size: termsColWidths[0], type: WidthType.DXA },
-          children: [ P([T("Payment Terms", { bold: true })], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T("Payment Terms", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
         new TableCell({
           width: { size: termsColWidths[1], type: WidthType.DXA },
-          children: [ P([T("Incoterms", { bold: true })], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T("Incoterms", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
         new TableCell({
           width: { size: termsColWidths[2], type: WidthType.DXA },
-          children: [ P([T("Currency", { bold: true })], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T("Currency", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
       ],
@@ -766,15 +792,15 @@ export const exportQuoteToWord = async (req, res) => {
       children: [
         new TableCell({
           width: { size: termsColWidths[0], type: WidthType.DXA },
-          children: [ P([T(paymentTerms || "-")], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T(paymentTerms || "-")], { alignment: AlignmentType.CENTER })],
         }),
         new TableCell({
           width: { size: termsColWidths[1], type: WidthType.DXA },
-          children: [ P([T(incoterms || "-")], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T(incoterms || "-")], { alignment: AlignmentType.CENTER })],
         }),
         new TableCell({
           width: { size: termsColWidths[2], type: WidthType.DXA },
-          children: [ P([T(currency || "-")], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T(currency || "-")], { alignment: AlignmentType.CENTER })],
         }),
       ],
     });
@@ -783,12 +809,12 @@ export const exportQuoteToWord = async (req, res) => {
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [termsHeaderRow, termsValuesRow],
       borders: {
-        top:    { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        top: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
         bottom: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        left:   { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        right:  { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        insideH:{ style: BorderStyle.SINGLE, size: 2, color: "000000" },
-        insideV:{ style: BorderStyle.SINGLE, size: 2, color: "000000" },
+        left: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        right: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        insideH: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+        insideV: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
       },
       columnWidths: termsColWidths,
     });
@@ -800,27 +826,27 @@ export const exportQuoteToWord = async (req, res) => {
       children: [
         new TableCell({
           width: { size: colWidths[0], type: WidthType.DXA },
-          children: [ P([T("No.", { bold: true })], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T("No.", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
         new TableCell({
           width: { size: colWidths[1], type: WidthType.DXA },
-          children: [ P([T("Drawing no / Decription", { bold: true })], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T("Drawing no / Decription", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
         new TableCell({
           width: { size: colWidths[2], type: WidthType.DXA },
-          children: [ P([T("Qty", { bold: true })], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T("Qty", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
         new TableCell({
           width: { size: colWidths[3], type: WidthType.DXA },
-          children: [ P([T("Unit Price", { bold: true })], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T("Unit Price", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
         new TableCell({
           width: { size: colWidths[4], type: WidthType.DXA },
-          children: [ P([T("Total Price", { bold: true })], { alignment: AlignmentType.CENTER }) ],
+          children: [P([T("Total Price", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
       ],
@@ -844,26 +870,26 @@ export const exportQuoteToWord = async (req, res) => {
         children: [
           new TableCell({
             width: { size: colWidths[0], type: WidthType.DXA },
-            children: [ P([T(String(idx + 1))], { alignment: AlignmentType.CENTER }) ],
+            children: [P([T(String(idx + 1))], { alignment: AlignmentType.CENTER })],
           }),
           new TableCell({
             width: { size: colWidths[1], type: WidthType.DXA },
             children: [
-              P([ T(drawingNo || "-") ]),   // line 1: drawing no
-              P([ T(desc || "") ]),         // line 2: description
+              P([T(drawingNo || "-")]),   // line 1: drawing no
+              P([T(desc || "")]),         // line 2: description
             ],
           }),
           new TableCell({
             width: { size: colWidths[2], type: WidthType.DXA },
-            children: [ P([ T(String(qty)) ], { alignment: AlignmentType.RIGHT }) ],
+            children: [P([T(String(qty))], { alignment: AlignmentType.RIGHT })],
           }),
           new TableCell({
             width: { size: colWidths[3], type: WidthType.DXA },
-            children: [ P([ T(N(unit)) ], { alignment: AlignmentType.RIGHT }) ],
+            children: [P([T(N(unit))], { alignment: AlignmentType.RIGHT })],
           }),
           new TableCell({
             width: { size: colWidths[4], type: WidthType.DXA },
-            children: [ P([ T(N(total)) ], { alignment: AlignmentType.RIGHT }) ],
+            children: [P([T(N(total))], { alignment: AlignmentType.RIGHT })],
           }),
         ],
       });
@@ -871,11 +897,11 @@ export const exportQuoteToWord = async (req, res) => {
 
     const totalsRow = new TableRow({
       children: [
-        new TableCell({ width: { size: colWidths[0], type: WidthType.DXA }, children: [ P([T("Totals", { bold: true })]) ] }),
-        new TableCell({ width: { size: colWidths[1], type: WidthType.DXA }, children: [ P([T("")]) ] }),
-        new TableCell({ width: { size: colWidths[2], type: WidthType.DXA }, children: [ P([T(String(totalQty), { bold: true })], { alignment: AlignmentType.RIGHT }) ] }),
-        new TableCell({ width: { size: colWidths[3], type: WidthType.DXA }, children: [ P([T("")]) ] }),
-        new TableCell({ width: { size: colWidths[4], type: WidthType.DXA }, children: [ P([T(N(totalAmount), { bold: true })], { alignment: AlignmentType.RIGHT }) ] }),
+        new TableCell({ width: { size: colWidths[0], type: WidthType.DXA }, children: [P([T("Totals", { bold: true })])] }),
+        new TableCell({ width: { size: colWidths[1], type: WidthType.DXA }, children: [P([T("")])] }),
+        new TableCell({ width: { size: colWidths[2], type: WidthType.DXA }, children: [P([T(String(totalQty), { bold: true })], { alignment: AlignmentType.RIGHT })] }),
+        new TableCell({ width: { size: colWidths[3], type: WidthType.DXA }, children: [P([T("")])] }),
+        new TableCell({ width: { size: colWidths[4], type: WidthType.DXA }, children: [P([T(N(totalAmount), { bold: true })], { alignment: AlignmentType.RIGHT })] }),
       ],
     });
 
@@ -883,12 +909,12 @@ export const exportQuoteToWord = async (req, res) => {
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [itemsHeaderRow, ...itemRows, totalsRow],
       borders: {
-        top:    { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        top: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
         bottom: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        left:   { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        right:  { style: BorderStyle.SINGLE, size: 4, color: "000000" },
-        insideH:{ style: BorderStyle.SINGLE, size: 2, color: "000000" },
-        insideV:{ style: BorderStyle.SINGLE, size: 2, color: "000000" },
+        left: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        right: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+        insideH: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+        insideV: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
       },
       columnWidths: colWidths,
     });
@@ -900,13 +926,15 @@ export const exportQuoteToWord = async (req, res) => {
       creator: "Quote Generator",
       title: `Quote ${S(quote.quoteNumber)}`,
       sections: [
-        { properties: {}, children: [
-          title,
-          ...headerBlock,
-          termsTable,
-          P([]),
-          itemsTable,
-        ]},
+        {
+          properties: {}, children: [
+            title,
+            ...headerBlock,
+            termsTable,
+            P([]),
+            itemsTable,
+          ]
+        },
       ],
     });
 
@@ -977,8 +1005,8 @@ export const exportSelectedQuotesToExcel = async (req, res) => {
     });
     ws.getRow(1).font = { bold: true };
 
-    res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition",'attachment; filename=selected-quotes.xlsx');
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename=selected-quotes.xlsx');
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {

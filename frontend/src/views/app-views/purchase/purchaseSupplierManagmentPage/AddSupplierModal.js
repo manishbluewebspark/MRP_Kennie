@@ -46,11 +46,11 @@ const AddSupplierModal = ({ visible, onCancel, onCreate, onEdit, editData, isEdi
       if (editData) {
         // Edit mode
         await onEdit(editData._id, values);
-        message.success('Supplier updated successfully!');
+        // message.success('Supplier updated successfully!');
       } else {
         // Create mode
         await onCreate(values);
-        message.success('Supplier created successfully!');
+        // message.success('Supplier created successfully!');
       }
 
       form.resetFields();

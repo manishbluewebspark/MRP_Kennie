@@ -322,7 +322,7 @@ export const deletePurchaseOrder = async (req, res) => {
 
 export const getAllPurchaseOrders = async (req, res) => {
   try {
-    let { page = 1, limit = 10, search = "", sortBy = "createdAt", sortOrder = "desc", status } = req.query;
+    let { page = 1, limit = 10, search = "", sortBy = "createdAt", sortOrder = "desc" } = req.query;
     page = parseInt(page);
     limit = parseInt(limit);
 
@@ -330,8 +330,22 @@ export const getAllPurchaseOrders = async (req, res) => {
     if (search) {
       filter.poNumber = { $regex: search, $options: "i" };
     }
-    if (status) {
-      filter.status = status;
+    let rawStatus = req.query.status ?? req.query["status[]"];
+    let statusArray = [];
+
+    if (Array.isArray(rawStatus)) {
+      // e.g. status[]=Pending&status[]=Partially%20Received
+      statusArray = rawStatus.map((s) => s.trim()).filter(Boolean);
+    } else if (typeof rawStatus === "string" && rawStatus.trim() !== "") {
+      // e.g. status=Pending,Partially%20Received
+      statusArray = rawStatus
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    if (statusArray.length > 0) {
+      filter.status = { $in: statusArray };
     }
 
     const total = await PurchaseOrders.countDocuments(filter);
@@ -459,7 +473,7 @@ export const sendPurchaseOrderMail = async (req, res) => {
 
     // Read PDF file and send as response
     const pdfBuffer = fs.readFileSync(pdfPath);
-    
+
     // Clean up temporary PDF
     if (pdfPath && fs.existsSync(pdfPath)) {
       fs.unlinkSync(pdfPath);
@@ -478,7 +492,7 @@ export const sendPurchaseOrderMail = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error:', error);
-    
+
     // Clean up PDF file if exists
     try {
       if (pdfPath && fs.existsSync(pdfPath)) {
@@ -488,9 +502,9 @@ export const sendPurchaseOrderMail = async (req, res) => {
       console.error('Cleanup error:', cleanupError);
     }
 
-    res.status(500).json({ 
-      success: false, 
-      error: `PDF generation failed: ${error.message}` 
+    res.status(500).json({
+      success: false,
+      error: `PDF generation failed: ${error.message}`
     });
   }
 };

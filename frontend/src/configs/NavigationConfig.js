@@ -1147,6 +1147,14 @@ const inventoryNavTree = [{
       icon: UsergroupAddOutlined,
       breadcrumb: false,
       submenu: []
+    },
+    {
+      key: 'recieve-material',
+      path: `${APP_PREFIX_PATH}/inventory/recieve-material`,
+      title: 'inventory.recieve-material',
+      icon: UsergroupAddOutlined,
+      breadcrumb: false,
+      submenu: []
     }
   ]
 }]

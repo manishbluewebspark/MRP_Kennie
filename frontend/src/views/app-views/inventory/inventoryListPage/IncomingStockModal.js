@@ -1,13 +1,13 @@
 import React from 'react';
-import { Modal, Table, Tag, Card, Typography, Space } from 'antd';
+import { Modal, Table, Tag, Card, Typography, Space, DatePicker } from 'antd';
 import { MailOutlined, CalendarOutlined } from '@ant-design/icons';
-
+import dayjs from 'dayjs'
 const { Text, Title } = Typography;
 
 const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
   // Extract the purchaseData array from the inventory item object
   const safePurchaseData = purchaseData?.purchaseData || [];
-
+  console.log('-----safePurchaseData',safePurchaseData)
   // If no purchase data, show empty state
   if (safePurchaseData.length === 0) {
     return (
@@ -39,7 +39,7 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
   const poData = safePurchaseData.map((item, index) => ({
     key: index,
     poNumber: item.poNumber || 'N/A',
-    supplier: item.supplier?.name || (item.supplier?._id ? 'Supplier ID: ' + item.supplier._id : 'N/A'),
+    supplier: item.supplier?.companyName || (item.supplier?.companyName ? 'Supplier ID: ' + item.supplier.contactPerson : 'N/A'),
     qty: item.quantity || 0,
     needDate: item.needDate || 'N/A',
     committedDate: item.committedDate || 'N/A',
@@ -51,7 +51,7 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
   function getStatusIcon(status) {
     const statusIcons = {
       'Emailed': '💹',
-      'Pending': '⏳',
+      'Pending': '',
       'Approved': '✅',
       'Partially Received': '📦',
       'Received': '📬',
@@ -93,7 +93,7 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
       render: (qty) => (
         <Space>
           <Text>{qty}</Text>
-          <Text type="secondary">{productData.uom}</Text>
+          {/* <Text type="secondary">{productData.uom}</Text> */}
         </Space>
       ),
     },
@@ -108,24 +108,40 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
         </Space>
       ),
     },
-    {
-      title: 'Supplier Committed Date',
-      dataIndex: 'committedDate',
-      key: 'committedDate',
-      render: (date) => (
-        <Space>
-          <CalendarOutlined />
-          <Text>{date === 'N/A' ? 'Not Committed' : date}</Text>
-        </Space>
-      ),
-    },
+ {
+  title: 'Supplier Committed Date',
+  dataIndex: 'committedDate',
+  key: 'committedDate',
+  render: (date, record) => {
+    const hasDate = record && date !== "N/A";
+
+    return (
+      <Space>
+        <CalendarOutlined />
+
+        {/* If date exists → show DatePicker for editing */}
+        {hasDate ? (
+          <DatePicker
+            value={dayjs(date)}
+            format="DD/MM/YYYY"
+            // onChange={(newDate) => handleCommitDateChange(record, newDate)}
+          />
+        ) : (
+          // If no date → show plain text
+          <Text type="secondary">Not Committed</Text>
+        )}
+      </Space>
+    );
+  },
+}
+,
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
       render: (status, record) => (
         <Space>
-          <span style={{ fontSize: '16px' }}>{record.statusIcon}</span>
+          {/* <span style={{ fontSize: '16px' }}>{record.statusIcon}</span> */}
           <Tag 
             icon={<MailOutlined />} 
             color={getStatusColor(status)}

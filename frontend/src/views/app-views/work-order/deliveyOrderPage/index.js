@@ -102,6 +102,33 @@ const DeliveryOrderPage = () => {
     }
   };
 
+  // ✔ Check if all delivered
+const isAllDeliveredChecked =
+  data.length > 0 &&
+  data.every((item) => deliveredMap[item._id] === true);
+
+// ✔ Check if some delivered
+const isSomeDeliveredChecked =
+  data.some((item) => deliveredMap[item._id] === true) &&
+  !isAllDeliveredChecked;
+
+// ✔ Select All handler
+const handleSelectAllDelivered = (checked) => {
+  const newState = {};
+  data.forEach((item) => {
+    newState[item._id] = checked;
+  });
+  setDeliveredMap(newState);
+
+  // Optional: Save to DB for each row
+  if (checked) {
+    data.forEach((item) => handleDeliveredToggle(item, true));
+  } else {
+    data.forEach((item) => handleDeliveredToggle(item, false));
+  }
+};
+
+
   useEffect(() => {
     fetchWorkOrders({ page: 1, limit, search });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,18 +271,27 @@ const handleTargetDeliveryChange = async (record, date) => {
       ),
     },
     {
-      title: "Delivered",
-      dataIndex: "delivered",
-      key: "delivered",
-      align: "center",
-      width: 110,
-      render: (_, record) => (
-        <Checkbox
-          checked={!!deliveredMap[record._id]}
-          onChange={(e) => handleDeliveredToggle(record, e.target.checked)}
-        />
-      ),
-    },
+  title: (
+    <Checkbox
+      checked={isAllDeliveredChecked}
+      indeterminate={isSomeDeliveredChecked}
+      onChange={(e) => handleSelectAllDelivered(e.target.checked)}
+    >
+      Delivered
+    </Checkbox>
+  ),
+  dataIndex: "delivered",
+  key: "delivered",
+  align: "center",
+  width: 110,
+  render: (_, record) => (
+    <Checkbox
+      checked={!!deliveredMap[record._id]}
+      onChange={(e) => handleDeliveredToggle(record, e.target.checked)}
+    />
+  ),
+}
+
   ];
 
   const filterConfig = [

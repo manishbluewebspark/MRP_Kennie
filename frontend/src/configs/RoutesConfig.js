@@ -122,6 +122,11 @@ export const protectedRoutes = [
         path: `${APP_PREFIX_PATH}/inventory/mto-inventory`,
         component: React.lazy(() => import('views/app-views/inventory/mtoInventoryList/index')),
     },
+     {
+        key: 'recieve-material',
+        path: `${APP_PREFIX_PATH}/inventory/recieve-material`,
+        component: React.lazy(() => import('views/app-views/inventory/receiveMaterialPage/index')),
+    },
     //purchase
     {
         key: 'purchase-order',

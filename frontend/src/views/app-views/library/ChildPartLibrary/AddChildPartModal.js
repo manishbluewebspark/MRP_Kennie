@@ -1,6 +1,6 @@
 // components/AddChildPartModal.js
 import React, { useEffect, useState } from "react";
-import { Form, Input, Select, InputNumber } from "antd";
+import { Form, Input, Select, InputNumber, notification } from "antd";
 import GlobalModal from "components/GlobalModal";
 
 const { Option } = Select;
@@ -8,17 +8,17 @@ const { Option } = Select;
 const AddChildPartModal = ({ visible, onCancel, onSubmit, formData, mpnOptions, categories = [] }) => {
   const [form] = Form.useForm();
   const [category, setCategory] = useState("");
-  console.log('-----mpnOptions',mpnOptions)
+  console.log('-----formData',formData)
   // Prefill form for edit
   useEffect(() => {
     if (formData) {
       form.setFieldsValue({
-        childPartNo: formData.ChildPartNo,
-        linkedMpn: formData.mpn?._id,
-        LinkedMPNCategory: formData.LinkedMPNCategory || "",
-        status: formData.status || "Active",
+        childPartNo: formData?.ChildPartNo,
+        linkedMpn: formData?.mpn?._id,
+        LinkedMPNCategory: formData?.LinkedMPNCategory || "",
+        status: formData?.status || "Active",
       });
-      setCategory(formData.LinkedMPNCategory || "");
+      setCategory(formData?.LinkedMPNCategory || "");
     } else {
       form.resetFields();
       setCategory("");
@@ -35,13 +35,24 @@ const AddChildPartModal = ({ visible, onCancel, onSubmit, formData, mpnOptions, 
     }
   };
 
-  const handleOk = () => {
-    form.validateFields().then(values => {
-      onSubmit(values); // Add or Update handled by parent
-      form.resetFields();
-      setCategory("");
-    });
-  };
+
+
+const handleOk = () => {
+  form.validateFields().then(values => {
+    // Check category
+    if (!values.LinkedMPNCategory) {
+      notification.warning({
+        message: 'Select Category',
+        description: 'Category is required',
+      });
+      return; // Don't submit
+    }
+    
+    // Submit only with category
+    onSubmit(values);
+    form.resetFields();
+  });
+};
 
   return (
     <GlobalModal

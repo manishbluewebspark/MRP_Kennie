@@ -135,6 +135,7 @@
 	"inventory.inventory":"inventory",
 	"inventory.inventory-list":"Inventory List",
 	"inventory.mto-inventory":"MTO Inventory",
+	"inventory.recieve-material":"Receive Material",
 	"purchase.purchase":"Purchase",
 	"purchase.purchase-order":"Purchase Order",
 	"purchase.purchase-history":"Purchase History",

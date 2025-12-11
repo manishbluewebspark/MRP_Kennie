@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Table, Button, Space, Tag, message, Card, Modal, Drawer, Divider, Tooltip } from "antd";
-import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, CloseOutlined, PlayCircleOutlined, PlayCircleFilled } from "@ant-design/icons";
+import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, CloseOutlined, PlayCircleOutlined, PlayCircleFilled, ClockCircleOutlined, ExperimentOutlined, ToolOutlined, HourglassOutlined, CheckCircleOutlined, PauseCircleOutlined, LoadingOutlined, BarcodeOutlined, TagsOutlined } from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
 import GlobalTableActions from "components/GlobalTableActions";
@@ -22,25 +22,107 @@ const { confirm } = Modal;
 const fmt = (d) => (d ? dayjs(d).format("DD/MM/YYYY") : "-");
 const safe = (v) => (v === 0 ? 0 : v || "-");
 
-// Badge render helper
-const renderBadge = (text, type) => {
-    let color;
-    switch (type) {
-        case "status":
-            if (text === 'on_hold') color = 'orange';
-            else if (text === 'in_progress') color = 'blue';
-            else if (text === 'completed') color = 'green';
-            else if (text === 'cancelled') color = 'red';
-            else color = 'gray';
-            break;
-        case "priority":
-            color = text === "High" ? "red" : text === "Medium" ? "orange" : "green";
-            break;
-        default:
-            color = "gray";
-    }
-    return <Tag color={color}>{text?.replace('_', ' ')?.toUpperCase()}</Tag>;
+
+export const STATUS_META = {
+  "Picking Started": {
+    color: "blue",
+    icon: <PlayCircleOutlined />,
+  },
+  "Picking Completed": {
+    color: "green",
+    icon: <CheckCircleOutlined />,
+  },
+  "Assembly Started": {
+    color: "purple",
+    icon: <ToolOutlined />,
+  },
+  "Assembly Completed": {
+    color: "green",
+    icon: <CheckCircleOutlined />,
+  },
+  "Cable Harness Started": {
+    color: "purple",
+    icon: <ToolOutlined />,
+  },
+  "Cable Harness Completed": {
+    color: "green",
+    icon: <CheckCircleOutlined />,
+  },
+  "Labelling Started": {
+    color: "orange",
+    icon: <TagsOutlined />,
+  },
+  "Labelling Completed": {
+    color: "green",
+    icon: <CheckCircleOutlined />,
+  },
+  "QC Started": {
+    color: "cyan",
+    icon: <BarcodeOutlined />,
+  },
+  "Quality Check Completed": {
+    color: "green",
+    icon: <CheckCircleOutlined />,
+  },
+  Completed: {
+    color: "green",
+    icon: <CheckCircleOutlined />,
+  },
+  no_progress: {
+    color: "default",
+    icon: <PlayCircleOutlined />,
+  },
+  picking_in_progress:{
+    color: "blue",
+    icon: <PlayCircleOutlined />,
+  }
 };
+
+// Badge render helper
+export const renderBadge = (status) => {
+  // safety
+  if (!status) return <Tag>No Status</Tag>;
+
+  // If status contains "%" → (e.g. “Picking: 50% Done”)
+  if (status.includes("%")) {
+    let color = "blue";
+
+    if (status.toLowerCase().includes("picking")) color = "blue";
+    if (status.toLowerCase().includes("assembly") || status.toLowerCase().includes("harness"))
+      color = "purple";
+    if (status.toLowerCase().includes("labelling")) color = "orange";
+    if (status.toLowerCase().includes("quality") || status.toLowerCase().includes("qc"))
+      color = "cyan";
+
+    return (
+      <Tag
+        color={color}
+        style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
+      >
+        <LoadingOutlined />
+        {status}
+      </Tag>
+    );
+  }
+
+  // Static statuses from META
+  const meta = STATUS_META[status] || {
+    color: "default",
+    icon: <LoadingOutlined />,
+  };
+
+  return (
+    <Tag
+      color={meta.color}
+      style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
+    >
+      {meta.icon}
+      {status}
+    </Tag>
+  );
+};
+
+
 
 const DeliveryOrderPage = () => {
     const navigate = useNavigate();
@@ -153,12 +235,19 @@ const DeliveryOrderPage = () => {
             title: "Status",
             dataIndex: "status",
             key: "status",
-            render: (text, record) => (
+            render: (status, record) => (
                 <Space>
-                    {renderBadge(text, "status")}
-                    {record?.status === "on_hold" && (<PlayCircleFilled onClick={() => handleMoveToProduction(record?._id)} style={{ color: "#473bb1ff" }} />)}
+                    {renderBadge(status, "status", record.qcDone, record.qcTotal)}
+
+                    {/* Show Move to Production Icon Only When No Progress */}
+                    {status === "no_progress" && (
+                        <PlayCircleFilled
+                            onClick={() => handleMoveToProduction(record._id)}
+                            style={{ color: "#473bb1ff", cursor: "pointer", fontSize: 18 }}
+                        />
+                    )}
                 </Space>
-            ),
+            )
         },
         {
             title: "Actions",

@@ -13,11 +13,15 @@ const childSchema = new mongoose.Schema(
     LinkedMPNCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
+      default:null
     },
     status: { type: String, enum: ["Active", "Inactive"], default: "active" },
     isDeleted: { type: Boolean, default: false }
   },
   { timestamps: true }
 );
+
+childSchema.index({ childPartNo: 1 }, { unique: true });
+
 
 export default mongoose.model("ChildLibrary", childSchema);

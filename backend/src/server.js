@@ -26,6 +26,7 @@ import purchaseOrdersRoutes from './routes/purchaseOrder.routes.js'
 import receiveMaterialRoutes from './routes/receiveMaterial.routes.js'
 import inventoryRoutes from './routes/inventory.routes.js'
 import mpnTrackerRoutes from './routes/mpnTracker.routes.js'
+import alertRoutes from './routes/alert.routes.js'
 import path from "path";
 import crypto from 'crypto'
 import axios from 'axios'
@@ -78,7 +79,12 @@ app.use("/api/purchase-orders", purchaseOrdersRoutes);
 app.use("/api/receive-material", receiveMaterialRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/mpn-tracker", mpnTrackerRoutes);
+app.use("/api/alerts", alertRoutes);
 // PhonePe Configuration
+
+app.get("/api/system-check", (req, res) => {
+  res.json({ status: "online", message: "System Online" });
+});
 
 
 // const PHONEPE_CONFIG = {

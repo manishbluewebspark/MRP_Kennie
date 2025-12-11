@@ -64,7 +64,7 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                             <RoundedSelect placeholder="Select manufacturer">
                                 <Option value="Alpha">Alpha</Option>
                                 <Option value="Molex">Molex</Option>
-                                  <Option value="Lapp">Lapp</Option>
+                                <Option value="Lapp">Lapp</Option>
                             </RoundedSelect>
                         </Form.Item>
                     </Col>
@@ -94,7 +94,10 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                     </Col>
                     <Col span={12}>
                         <Form.Item label="RFQ Unit Price" name="rfq" rules={[{ required: true, message: "Enter RFQ" }]}>
-                            <RoundedInput placeholder="Enter RFQ" />
+                            <RoundedInput
+                                placeholder="Enter RFQ Unit Price"
+                                addonAfter="$"
+                            />
                         </Form.Item>
                     </Col>
 

@@ -19,4 +19,11 @@ SystemSettingsService.addOrUpdateSystemSettings = (data) => {
   });
 };
 
+SystemSettingsService.systemCheck = () => {
+  return fetch({
+    url: "/system-check",
+    method: "get",
+  });
+};
+
 export default SystemSettingsService;

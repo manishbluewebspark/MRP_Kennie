@@ -19,7 +19,7 @@ import {
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import CostingItems from "../models/costingItem.js";
+import CostingItems from "../models/CostingItem.js";
 import MPN from "../models/library/MPN.js";
 import Inventory from "../models/Inventory.js";
 import UOM from "../models/UOM.js";
@@ -481,7 +481,7 @@ export const createWorkOrder = async (req, res) => {
         remarks: it.remarks || "",
         needDate: finalNeedDate || null,
         commitDate: finalCommitDate || null,
-        status: status || it.status || "on_hold",
+        status: "no_progress",
         isTriggered: Boolean(
           typeof it.isTriggered === "boolean" ? it.isTriggered : isTriggered
         ),
@@ -566,7 +566,7 @@ export const createWorkOrder = async (req, res) => {
         remarks: it.remarks || "",
         needDate: finalNeedDate || null,
         commitDate: finalCommitDate || null,
-        status: status || it.status || "on_hold",
+        status: "no_progress",
         isTriggered: Boolean(
           typeof it.isTriggered === "boolean" ? it.isTriggered : isTriggered
         ),
@@ -2290,7 +2290,17 @@ export const moveToProduction = async (req, res) => {
     // Update only the required fields
     wo.isInProduction = true;
     wo.isTriggered = true;
-    wo.status = "in_progress";
+    wo.status = "picking_in_progress";
+
+    wo.processHistory.push({
+      process: "picking",
+      qty: 0,                     // start with zero qty → process started
+      notes: "Picking started",   // helpful info
+      completedBy: null,
+      completedAt: new Date(),
+      createdAt: new Date(),
+    });
+
 
     await wo.save();
 
@@ -2357,10 +2367,11 @@ export const getAllProductionWordOrders = async (req, res) => {
     ];
 
     const projectIds = [
-      ...new Set(workOrders
-        .map(wo => wo.projectId)
-        .filter(Boolean)
-        .map(id => String(id))
+      ...new Set(
+        workOrders
+          .map(wo => wo.projectId)
+          .filter(Boolean)
+          .map(id => String(id))
       )
     ];
 
@@ -2371,19 +2382,45 @@ export const getAllProductionWordOrders = async (req, res) => {
         .select("drawingNo")
         .lean();
 
-      drawingDocs.forEach(d => drawingMap.set(String(d._id), d.drawingNo));
+      drawingDocs.forEach(d =>
+        drawingMap.set(String(d._id), d.drawingNo)
+      );
     }
 
-    // ---- Lookup Project ----
+    // ---- Lookup Project + Customer ----
     const projectMap = new Map();
+    const customerMap = new Map();
+
     if (projectIds.length) {
+      // 1️⃣ Project ke saath customerId bhi lao
       const projectDocs = await Project.find({ _id: { $in: projectIds } })
-        .select("projectName")
+        .select("projectName customerId")
         .lean();
 
-      projectDocs.forEach(p =>
-        projectMap.set(String(p._id), p.projectName)
-      );
+      projectDocs.forEach(p => {
+        projectMap.set(String(p._id), p); // pura project doc store kar rahe
+      });
+
+      // 2️⃣ Ab in projects se unique customerIds nikalo
+      const customerIds = [
+        ...new Set(
+          projectDocs
+            .map(p => p.customerId)
+            .filter(Boolean)
+            .map(id => String(id))
+        )
+      ];
+
+      // 3️⃣ Customer fetch karo
+      if (customerIds.length) {
+        const customerDocs = await Customer.find({ _id: { $in: customerIds } })
+          .select("companyName contactPerson")   // yaha apne fields ke hisaab se change karna
+          .lean();
+
+        customerDocs.forEach(c => {
+          customerMap.set(String(c._id), c);
+        });
+      }
     }
 
     // ---- Final Flat Output ----
@@ -2392,9 +2429,19 @@ export const getAllProductionWordOrders = async (req, res) => {
         ? drawingMap.get(String(wo.drawingId)) || null
         : null;
 
-      const projectName = wo.projectId
+      // Project + Customer resolve
+      const project = wo.projectId
         ? projectMap.get(String(wo.projectId)) || null
         : null;
+
+      const projectName = project?.projectName || null;
+
+      const customer = project?.customerId
+        ? customerMap.get(String(project.customerId)) || null
+        : null;
+
+      const companyName = customer?.companyName || null;
+      const contactPerson = customer?.contactPerson || null;
 
       // ProjectType formatting
       let projectTypeFormatted = "";
@@ -2420,6 +2467,12 @@ export const getAllProductionWordOrders = async (req, res) => {
         commitDate: wo.commitDate,
         isTriggered: wo.isTriggered,
         isInProduction: wo.isInProduction,
+        processHistory: wo.processHistory,
+
+        // 🆕 customer info added
+        customerId: project?.customerId || null,
+        companyName,
+        contactPerson,
       };
     });
 
@@ -3932,7 +3985,7 @@ export const getCompleteWorkOrders = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // ✔️ Only completed work orders
-    const baseQuery = { status: "on_hold" };
+    const baseQuery = { status: "Completed" };
 
     if (search) {
       baseQuery.$or = [
@@ -4082,6 +4135,213 @@ export const getCompleteWorkOrders = async (req, res) => {
   }
 };
 
+// UI stage -> process key
+const mapStageToProcessKey = (stage) => {
+  switch (stage) {
+    case "Picking":
+      return "picking";
+    case "Cable Harness":
+    case "Assembly":
+      return "assembly";
+    case "Labelling":
+      return "labelling";
+    case "Quality Check":
+      return "quality_check";
+    default:
+      return null;
+  }
+};
+
+// backend projectType -> next stage
+const getNextStageForProject = (wo) => {
+  // wo.projectType is: "cable_harness" | "box_build" | "other"
+  if (wo.projectType === "box_build") {
+    return { stageLabel: "Assembly", processKey: "assembly" };
+  }
+
+  // default Cable Harness project
+  return { stageLabel: "Cable Harness", processKey: "assembly" };
+};
+
+// ----------------- STATUS ENGINE HELPERS -------------------
+
+const calculateStagePercentages = (wo) => {
+  const req = Number(wo.quantity || 0);
+  const hist = wo.processHistory || [];
+
+  const getQty = (k) =>
+    Number(hist.find((p) => p.process === k)?.qty || 0);
+
+  const percent = (q) =>
+    req > 0 ? Math.min(100, Math.round((q / req) * 100)) : 0;
+
+  return {
+    picking: percent(getQty("picking")),
+    assembly: percent(getQty("assembly")),
+    labelling: percent(getQty("labelling")),
+    qc: percent(getQty("quality_check")),
+  };
+};
+
+const updateWorkOrderStatus = (wo) => {
+  const p = calculateStagePercentages(wo);
+
+  // PICKING
+  if (p.picking < 100) {
+    wo.status = p.picking === 0 ? "Picking Started" : `Picking: ${p.picking}% Done`;
+    return;
+  }
+  if (p.picking === 100) wo.status = "Picking Completed";
+
+  // ASSEMBLY
+  if (p.assembly < 100) {
+    const label = wo.projectType === "box_build" ? "Assembly" : "Cable Harness";
+    wo.status = p.assembly === 0 ? `${label} Started` : `${label}: ${p.assembly}% Done`;
+    return;
+  }
+  if (p.assembly === 100) {
+    wo.status = wo.projectType === "box_build"
+      ? "Assembly Completed"
+      : "Cable Harness Completed";
+  }
+
+  // LABELLING
+  if (p.labelling < 100) {
+    wo.status = p.labelling === 0 ? "Labelling Started" : `Labelling: ${p.labelling}% Done`;
+    return;
+  }
+  if (p.labelling === 100) wo.status = "Labelling Completed";
+
+  // QUALITY CHECK
+  if (p.qc < 100) {
+    wo.status = p.qc === 0 ? "QC Started" : `Quality Check: ${p.qc}% Done`;
+    return;
+  }
+  if (p.qc === 100) wo.status = "Quality Check Completed";
+
+  // FINAL COMPLETE
+  if (p.picking === 100 && p.assembly === 100 && p.labelling === 100 && p.qc === 100) {
+    wo.status = "Completed";
+    wo.isProductionComplete = true;
+    wo.isInProduction = false;
+  }
+};
+
+
+// ===============================================================
+//                   SAVE WORK ORDER STAGE
+// ===============================================================
+
+export const saveWorkOrderStage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { stage, comments, stageQty, pickedQuantities, materials = [] } = req.body;
+
+    const wo = await WorkOrder.findById(id);
+    if (!wo) return res.status(404).json({ success: false, message: "Work order not found" });
+
+    const processKey = mapStageToProcessKey(stage);
+    if (!processKey)
+      return res.status(400).json({ success: false, message: "Invalid stage" });
+
+    const qty = Number(stageQty || 0);
+    if (qty <= 0)
+      return res.status(400).json({ success: false, message: "Invalid stageQty" });
+
+    const userId = req.user?._id || null;
+
+    // ---------------- Material Lines ---------------
+    const materialLines = materials.map((m, index) => ({
+      itemNumber: m.itemNumber,
+      costingItemId: m.costingItemId,
+      drawingId: m.drawingId,
+      childPartId: m.childPartId,
+      childPartNo: m.ChildPartNo,
+      mpnId: m.mpnId,
+      mpn: m.mpn,
+      description: m.description,
+      uomId: m.uomId,
+      uom: m.uom,
+      requiredQty: m.quantity,
+      pickedQty: Number(pickedQuantities?.[index] || 0),
+      storageLocation: m.storageLocation,
+    }));
+
+    // ---------------- Stage Update Logic ----------------
+    if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
+
+    const index = wo.processHistory.findIndex((p) => p.process === processKey);
+
+    let entry;
+
+    if (index !== -1) {
+      entry = wo.processHistory[index];
+      entry.qty = Number(entry.qty || 0) + qty;
+      entry.completedBy = userId;
+      entry.completedAt = new Date();
+      entry.notes = comments || entry.notes;
+      entry.details = {
+        ...(entry.details || {}),
+        materials: materialLines,
+        pickedQuantities,
+        lastUpdateAt: new Date(),
+        lastStageQty: qty,
+      };
+      wo.processHistory[index] = entry;
+    } else {
+      entry = {
+        process: processKey,
+        qty,
+        completedBy: userId,
+        completedAt: new Date(),
+        createdAt: new Date(),
+        notes: comments || "",
+        details: {
+          stage,
+          materials: materialLines,
+          pickedQuantities,
+        },
+      };
+      wo.processHistory.push(entry);
+    }
+
+    // ---------------- Auto-start Next Stage (Picking → Assembly) ----------------
+    if (processKey === "picking") {
+      const requiredQty = Number(wo.quantity || 0);
+      if (entry.qty >= requiredQty) {
+        const { stageLabel, processKey: nextKey } = getNextStageForProject(wo);
+
+        const exists = wo.processHistory.some((p) => p.process === nextKey);
+
+        if (!exists) {
+          wo.processHistory.push({
+            process: nextKey,
+            qty: 0,
+            completedBy: null,
+            completedAt: null,
+            createdAt: new Date(),
+            notes: `${stageLabel} started`,
+            details: { stage: stageLabel, autoStarted: true },
+          });
+        }
+      }
+    }
+
+    // ---------------- UPDATE STATUS ENGINE HERE 🔥 ----------------
+    updateWorkOrderStatus(wo);
+
+    await wo.save();
+
+    return res.json({
+      success: true,
+      message: "Stage updated successfully",
+      data: wo,
+    });
+  } catch (err) {
+    console.error("Error saving stage:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 
 

@@ -66,13 +66,13 @@ const adjustmentLogSchema = new mongoose.Schema({
   adjustmentDate: {
     type: Date,
     default: Date.now
-  }
+  },
 }, { timestamps: true });
 
 const inventorySchema = new mongoose.Schema({
   mpnId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "MPN",
+    ref: "MPNLibrary",
     required: true
   },
   balanceQuantity: {
@@ -100,13 +100,51 @@ const inventorySchema = new mongoose.Schema({
   totalAdjustments: {
     type: Number,
     default: 0
+  },
+   workOrders: [
+  {
+    workOrderId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "WorkOrder", 
+      required: true 
+    },
+
+    workOrderNo: {
+      type: String,
+      required: true
+    },
+
+    drawingId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "Drawing", 
+      required: true 
+    },
+
+    requiredQty: {
+      type: Number,
+      required: true
+    },
+    pickedQty:{
+        type: Number,
+      required: true
+    },
+
+    needDate: {
+      type: Date
+    },
+
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
   }
-}, { 
-  timestamps: true 
+]
+}, {
+  timestamps: true
 });
 
 // ✅ Auto-update stockStatus based on balanceQuantity
-inventorySchema.pre('save', function(next) {
+inventorySchema.pre('save', function (next) {
   if (this.balanceQuantity > 10) {
     this.stockStatus = "In Stock";
   } else if (this.balanceQuantity > 0 && this.balanceQuantity <= 10) {
@@ -119,10 +157,10 @@ inventorySchema.pre('save', function(next) {
 });
 
 // ✅ Static method to adjust inventory
-inventorySchema.statics.adjustInventory = async function(
-  inventoryId, 
-  adjustmentQuantity, 
-  reason, 
+inventorySchema.statics.adjustInventory = async function (
+  inventoryId,
+  adjustmentQuantity,
+  reason,
   adjustedBy
 ) {
   const session = await mongoose.startSession();
@@ -130,7 +168,7 @@ inventorySchema.statics.adjustInventory = async function(
 
   try {
     const inventory = await this.findById(inventoryId).session(session);
-    
+
     if (!inventory) {
       throw new Error('Inventory item not found');
     }
@@ -175,9 +213,9 @@ inventorySchema.statics.adjustInventory = async function(
 };
 
 // ✅ Instance method to add adjustment
-inventorySchema.methods.addAdjustment = function(
-  adjustmentQuantity, 
-  reason, 
+inventorySchema.methods.addAdjustment = function (
+  adjustmentQuantity,
+  reason,
   adjustedBy
 ) {
   const previousBalance = this.balanceQuantity;
@@ -206,7 +244,7 @@ inventorySchema.methods.addAdjustment = function(
 };
 
 // ✅ Virtual for latest adjustment
-inventorySchema.virtual('latestAdjustment').get(function() {
+inventorySchema.virtual('latestAdjustment').get(function () {
   if (this.adjustmentLogs.length === 0) return null;
   return this.adjustmentLogs[this.adjustmentLogs.length - 1];
 });

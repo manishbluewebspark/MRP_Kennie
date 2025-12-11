@@ -1764,6 +1764,22 @@ const AddCostingItemModal = ({
     form.setFieldsValue({ salesPrice: Number((unitPrice * qty).toFixed(4)) });
   };
 
+  // inside your component
+
+const handleMpnChange = (mpnId) => {
+  const selected = mpnList.find((m) => m._id === mpnId);
+  console.log('----selected',selected)
+  if (!selected) return;
+
+   const uomId = selected?.UOM?._id || form.getFieldValue('uom');
+  form.setFieldsValue({
+    description: selected.Description || "",   // or selected.description
+    uom: uomId,                      // will auto-select UOM in dropdown
+    // optional: unitPrice: selected.RFQUnitPrice
+  });
+};
+
+
   // ---------- EFFECT: initialize form values on open / edit ----------
   useEffect(() => {
     if (!visible) return;
@@ -2187,7 +2203,7 @@ const AddCostingItemModal = ({
         </Col>
         <Col span={12}>
           <Form.Item label={<Text strong>MPN</Text>} name="mpn">
-            <Select placeholder="Select">
+            <Select placeholder="Select" onChange={handleMpnChange}>
               {mpnList.map((m) => (
                 <Option key={m._id} value={m._id}>{m.MPN}</Option>
               ))}

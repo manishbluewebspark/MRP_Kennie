@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Table, Button, message, Tag, Tooltip } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import ActionButtons from "components/ActionButtons";
@@ -13,6 +13,41 @@ import { hasPermission } from "utils/auth";
 // modules structure (your deep hierarchy)
 import modules from "./modulesConfig"; // optional externalize it
 
+
+
+// permission key -> nice label map
+const buildPermissionLabelMap = (mods, parentKey = "", parentLabels = []) => {
+  const map = {};
+
+  mods.forEach((mod) => {
+    const moduleKey = parentKey ? `${parentKey}.${mod.key}` : mod.key;
+    const labelsPath = [...parentLabels, mod.label];
+
+    if (mod.actions && mod.actions.length) {
+      mod.actions.forEach((action) => {
+        const permKey = `${moduleKey}:${action.key}`;
+        // Label example: "Production / Cable Harness / Picking Process - Process"
+        const niceLabel =
+          labelsPath.length > 1
+            ? `${labelsPath.join(" / ")} - ${action.label}`
+            : `${labelsPath[0]} - ${action.label}`;
+        map[permKey] = niceLabel;
+      });
+    }
+
+    if (mod.children && mod.children.length) {
+      Object.assign(
+        map,
+        buildPermissionLabelMap(mod.children, moduleKey, labelsPath)
+      );
+    }
+  });
+
+  return map;
+};
+
+
+
 const UserList = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -20,9 +55,16 @@ const UserList = () => {
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(false);
 
-   const [page, setPage] = useState(1);
-    const [limit, setLimit] = useState(10);
-    const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [pagination, setPagination] = useState(null)
+
+
+    const permissionLabelMap = useMemo(
+    () => buildPermissionLabelMap(modules),
+    []
+  );
+
 
   const dispatch = useDispatch();
 
@@ -41,7 +83,7 @@ const UserList = () => {
   };
 
   const getUsers = async (params = {}) => {
-     const { page = 1, limit = 10, search = "", ...filters } = params;
+    const { page = 1, limit = 10, search = "", ...filters } = params;
     setLoading(true);
     try {
       const res = await UserService.getAllUsers({ page, limit, search, ...filters });
@@ -84,6 +126,7 @@ const UserList = () => {
   const columns = [
     {
       title: "Username / Email",
+      width: 160,
       render: (_, r) => (
         <div>
           <b>{r.name || r.userName}</b>
@@ -93,97 +136,105 @@ const UserList = () => {
     },
     {
       title: "Status",
+      width: 100,
       render: (r) => (
         <Tag color={r.isActive ? "green" : "red"}>{r.isActive ? "Active" : "Inactive"}</Tag>
       ),
     },
     {
       title: "Role",
+      width: 100,
       render: (r) => <Tag color="blue">{r.role?.name || "N/A"}</Tag>,
     },
     {
       title: "Permissions",
-      width: 200,
+      width: 1000,
       render: (r) => {
+        // Admin role → Full Access pill
+        if (r.role?.name?.toLowerCase() === "admin") {
+          return (
+            <Tag
+              style={{
+                margin: 0,
+                fontSize: "10px",
+                padding: "2px 10px",
+                borderRadius: "20px",
+                background: "#e6ffed",
+                fontWeight: 600,
+                fontFamily: "serif",
+              }}
+            >
+              Full Access
+            </Tag>
+          );
+        }
+
         // Merge role + user permissions, remove duplicates
         const mergedPermissions = Array.from(
           new Set([...(r.role?.permissions || []), ...(r.permissions || [])])
         );
 
         return (
-          <Tooltip
-            title={
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 400 }}>
-                {mergedPermissions.map((permission, index) => (
-                  <Tag key={index} color="blue" style={{ margin: 0 }}>
-                    {permission}
-                  </Tag>
-                ))}
-              </div>
-            }
-            overlayStyle={{ maxWidth: 500 }}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 6,
+              maxWidth: "100%",
+            }}
           >
-            <div
-              style={{
-                display: 'flex',
-                gap: 4,
-                flexWrap: 'nowrap',
-                overflow: 'hidden',
-                alignItems: 'center'
-              }}
-            >
-              {mergedPermissions.length > 0 ? (
-                <>
-                  {mergedPermissions.slice(0, 3).map((permission, index) => (
-                    <Tag
-                      key={index}
-                      color="blue"
-                      style={{
-                        margin: 0,
-                        fontSize: '10px',
-                        padding: '1px 6px',
-                        lineHeight: '1.3',
-                        flexShrink: 0,
-                        maxWidth: 80,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {permission}
-                    </Tag>
-                  ))}
-                  {mergedPermissions.length > 3 && (
-                    <Tag
-                      color="default"
-                      style={{
-                        margin: 0,
-                        fontSize: '10px',
-                        padding: '1px 6px',
-                        flexShrink: 0
-                      }}
-                    >
-                      +{mergedPermissions.length - 3}
-                    </Tag>
-                  )}
-                </>
-              ) : (
-                <Tag color="default" style={{ margin: 0, fontSize: '10px', padding: '1px 6px' }}>
-                  None
+            {mergedPermissions?.length > 0 ? (
+              mergedPermissions.map((p, i) => {
+                                const displayLabel = permissionLabelMap[p] || p;
+
+                return (
+                <Tag
+                  key={i}
+                  style={{
+                    margin: 0,
+                    fontSize: "11px",
+                    padding: "2px 8px",
+                    borderRadius: "20px",
+                    border: "1px solid #d9d9d9",
+                    background: "#fff",
+                    color: "#555",
+                    lineHeight: "2",
+                    cursor: "default",
+                  }}
+                >
+                  {displayLabel}
                 </Tag>
-              )}
-            </div>
-          </Tooltip>
+              )})
+            ) : (
+              <Tag
+                style={{
+                  margin: 0,
+                  fontSize: "10px",
+                  padding: "2px 8px",
+                  borderRadius: "20px",
+                  border: "1px solid #d9d9d9",
+                  background: "#fafafa",
+                  color: "#999",
+                }}
+              >
+                None
+              </Tag>
+            )}
+          </div>
         );
       },
     },
+
+
     {
       title: "Created",
+      width: 170,
       dataIndex: "createdAt",
       render: (date) => new Date(date).toLocaleString(),
     },
     {
       title: "Actions",
+      width: 100,
       key: "actions",
       fixed: "right",
       render: (_, record) => (
@@ -209,19 +260,19 @@ const UserList = () => {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowAddModal(true)}>
             Add User
           </Button>
-         )}
+        )}
       </div>
 
-      <Table columns={columns} dataSource={users} rowKey="_id" loading={loading}  pagination={{
-                    current: page,
-                    pageSize: limit,
-                    total: pagination?.total || 0,
-                    onChange: (p, l) => {
-                        setPage(p);
-                        setLimit(l);
-                        getUsers({ page: p, limit: l });
-                    }
-                }} />
+      <Table columns={columns} dataSource={users} rowKey="_id" loading={loading} pagination={{
+        current: page,
+        pageSize: limit,
+        total: pagination?.total || 0,
+        onChange: (p, l) => {
+          setPage(p);
+          setLimit(l);
+          getUsers({ page: p, limit: l });
+        }
+      }} />
 
       <AddUserModal
         visible={showAddModal}

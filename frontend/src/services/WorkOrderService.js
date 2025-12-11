@@ -28,6 +28,16 @@ WorkOrderService.createWorkOrder = (data) => {
   });
 };
 
+WorkOrderService.saveProcessStage = (workOrderId, data) => {
+  return fetch({
+    url: `/work-orders/workorder/production/${workOrderId}/stage`,
+    method: "post",
+    data,
+  });
+};
+
+
+
 // Update work order
 WorkOrderService.updateWorkOrder = (id, data) => {
   return fetch({

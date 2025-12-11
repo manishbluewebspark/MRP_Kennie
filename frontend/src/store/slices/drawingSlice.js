@@ -71,7 +71,7 @@ export const importDrawings = createAsyncThunk(
       const res = await DrawingService.importDrawings(formData);
       return res.data;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || err.message);
+      return rejectWithValue(err.response?.data?.errors || err.message);
     }
   }
 );

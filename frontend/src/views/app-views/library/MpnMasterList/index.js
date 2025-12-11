@@ -40,10 +40,22 @@ const getPurchaseHistoryColumns = (maxPurchaseCount = MAX_PURCHASE_HISTORY) => {
     for (let i = 0; i < maxPurchaseCount; i++) {
         const index = i + 1;
         cols.push(
+
             {
-                title: `MOQ#${index}`,
-                dataIndex: ["purchaseHistory", i, "MOQ"],
-                key: `purchaseHistory_MOQ_${index}`,
+                title: `Purchased Price#${index}`,
+                dataIndex: ["purchaseHistory", i, "purchasedPrice"],
+                key: `purchaseHistory_purchasedPrice_${index}`,
+                render: (price, record) => {
+                    const currency = record.purchaseHistory?.[i]?.currency || "USD";
+                    const symbol = {
+                        "USD": "$",
+                        "EUR": "€",
+                        "GBP": "£",
+                        "INR": "₹"
+                    }[currency] || currency;
+
+                    return price ? `${symbol} ${parseFloat(price).toFixed(2)}` : "-";
+                }
             },
             {
                 title: `Purchased Date#${index}`,
@@ -52,9 +64,9 @@ const getPurchaseHistoryColumns = (maxPurchaseCount = MAX_PURCHASE_HISTORY) => {
                 render: (date) => (date ? new Date(date).toLocaleDateString("en-GB") : "-"),
             },
             {
-                title: `Purchased Price#${index}`,
-                dataIndex: ["purchaseHistory", i, "purchasedPrice"],
-                key: `purchaseHistory_purchasedPrice_${index}`,
+                title: `MOQ#${index}`,
+                dataIndex: ["purchaseHistory", i, "MOQ"],
+                key: `purchaseHistory_MOQ_${index}`,
             },
             {
                 title: `Supplier#${index}`,
@@ -99,11 +111,37 @@ const MpnMasterList = () => {
         {
             title: "No.",
             key: "rowIndex",
+            ellipsis: true,
+            align: 'center',
+            fixed: 'left',
             render: (text, record, index) => index + 1,
         },
-        { title: "MPN", dataIndex: "MPN", key: "MPN" },
-        { title: "Manufacture", dataIndex: "Manufacturer", key: "Manufacturer" },
-        { title: "Description", dataIndex: "Description", key: "Description" },
+        {
+            title: "MPN",
+            dataIndex: "MPN",
+            key: "MPN",
+            fixed: 'left',
+            width: 450,
+            ellipsis: true,
+            sorter: (a, b) => (a.MPN || '').localeCompare(b.MPN || ''),
+        },
+        {
+            title: "Manufacturer",
+            dataIndex: "Manufacturer",
+            key: "Manufacturer",
+            fixed: 'left',
+            width: 450,
+            ellipsis: true,
+            sorter: (a, b) => (a.Manufacturer || '').localeCompare(b.Manufacturer || ''),
+        },
+        {
+            title: "Description",
+            dataIndex: "Description",
+            key: "Description",
+            fixed: 'left',
+            width: 250,
+            ellipsis: true,
+        },
         {
             title: "Storage Location",
             dataIndex: "StorageLocation",

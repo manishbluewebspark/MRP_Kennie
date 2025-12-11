@@ -337,6 +337,7 @@ const ChildPartLibrary = () => {
                 onCancel={() => {
                     setShowAddChildPart(false);
                     setEditingRecord(null);
+                    setFormData()
                 }}
                 formData={formData}
                 onSubmit={handleSubmit}

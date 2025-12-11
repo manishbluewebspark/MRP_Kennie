@@ -11,6 +11,7 @@ import {
     Form,
     InputNumber,
     Checkbox,
+    message,
 } from "antd";
 import {
     ShoppingCartOutlined,
@@ -20,6 +21,7 @@ import {
     SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import WorkOrderService from "services/WorkOrderService";
+import InventoryService from "services/InventoryService";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -77,6 +79,47 @@ const PickingDetailModal = ({
                 console.error("Error loading child parts", err);
             });
     }, [visible]);   // RUN ONLY WHEN MODAL OPENS
+
+
+    const handleShortageToggle = async (checked, record,workOrder) => {
+        try {
+         
+            // If checkbox is unchecked → do nothing for now
+            if (!checked) {
+                message.info("Shortage removed (API pending)");
+                return;
+            }
+
+                    const pickedQty = Number(pickedQuantities[record.key] || 0);
+        const totalQty = Number(record.quantity || 0);
+
+        // shortage = total - picked
+        const shortageQty = Math.max(totalQty - pickedQty, 0);
+
+
+            // When shortage is marked → call backend
+            const payload = {
+                mpnId: record.mpnId,              // Inventory item ID
+                workOrderId: workOrder?.workOrderId,
+                drawingId: workOrder?.drawingId,
+                requiredQty: shortageQty,
+                pickedQty:pickedQty,
+                needDate: workOrder?.needDate,
+                workOrderNo: workOrder?.workOrderNo
+            };
+
+            const res = await InventoryService.addShortage(payload);
+
+            if (res?.success) {
+                message.success("Shortage updated successfully");
+            } else {
+                message.error(res?.message || "Failed to update shortage");
+            }
+        } catch (err) {
+            console.error("Shortage update error:", err);
+            message.error("Error updating shortage");
+        }
+    };
 
 
 
@@ -195,20 +238,20 @@ const PickingDetailModal = ({
     ];
 
     // ---------- TABLE (Materials for Picking) ----------
+    // ---------- TABLE (Materials for Picking) ----------
     const multipliedParts = childParts.map((p, index) => {
-        const qty = Number(p.quantity || 0);
-        const finalQty = stageQty ? qty * stageQty : qty;
+        const intoQty = Number(p.quantity || 0);    // child part ka "into" (per unit)
+        const totalRequired = intoQty * workQty;    // Work order quantity se multiply
 
         return {
             ...p,
             key: p.key || index,
-            quantity: finalQty,
-            maxQty: finalQty,
+            quantity: intoQty,   // Qty column me dikhane ke liye
+            maxQty: totalRequired,     // Picked Qty ka MAX bhi yehi
         };
     });
 
     const dataSource = multipliedParts.length ? multipliedParts : dummyData;
-
 
     const columns = [
         { title: "Item", dataIndex: "itemNumber", key: "itemNumber", width: 70 },
@@ -226,7 +269,7 @@ const PickingDetailModal = ({
             render: (_, record) => (
                 <InputNumber
                     min={0}
-                    max={record.maxQty}
+                    // max={record.maxQty}
                     placeholder={`Max: ${record.maxQty}`}
                     style={{ width: "100%" }}
                     value={pickedQuantities[record.key]}
@@ -247,10 +290,11 @@ const PickingDetailModal = ({
             render: (_, record) => (
                 <Checkbox
                     checked={!!record.shortage}
-                // onChange={...} // backend logic baad me add kar sakte ho
+                    onChange={(e) => handleShortageToggle(e.target.checked, record, wo)}
                 />
             ),
-        },
+        }
+
     ];
 
     // ---------- SAVE ----------
@@ -347,11 +391,13 @@ const PickingDetailModal = ({
                             <Text strong>{stageConfig.labels.single}</Text>
                             <InputNumber
                                 min={0}
+                                max={workQty}        // ⬅️ yaha workQty ka max limit set ho jayega
                                 value={stageQty}
                                 onChange={(val) => setStageQty(val)}
                                 style={{ width: "100%", marginTop: 4 }}
                                 placeholder="Enter quantity"
                             />
+
                             <div style={{ marginTop: 4 }}>
                                 <Text type="secondary" style={{ fontSize: 11 }}>
                                     {stageConfig.helpers.single}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Button, Col, Input, Radio, Row, Space, Table, Tag, Card, Typography, message } from "antd";
-import { CalendarOutlined, CloudDownloadOutlined, FileExcelOutlined, FileWordOutlined, PlusOutlined, SearchOutlined, UserOutlined } from "@ant-design/icons";
+import { BankOutlined, CalendarOutlined, CloudDownloadOutlined, DollarOutlined, FileDoneOutlined, FileExcelOutlined, FileWordOutlined, NumberOutlined, PlusOutlined, SearchOutlined, UserOutlined, UserSwitchOutlined } from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
 import CustomerSelectionModal from "./CustomerSelectionModal";
@@ -90,10 +90,12 @@ const CreateQuote = () => {
   const [projectData, setProjectData] = useState([])
   const [exportMode, setExportMode] = React.useState("excel");
   const dispatch = useDispatch();
+  const [selectedQuoteNumber, setSelectedQuoteNumber] = useState(null);
 
-    const [page, setPage] = useState(1);
-      const [limit, setLimit] = useState(10);
-      const [pagination, setPagination] = useState(null)
+
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [pagination, setPagination] = useState(null)
   // component
   // React component
   const onExportExcel = async (quoteId) => {
@@ -118,7 +120,7 @@ const CreateQuote = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Quote_${quoteId}.xlsx`;
+      a.download = `${selectedQuoteNumber}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -143,7 +145,7 @@ const CreateQuote = () => {
       const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
-      link.download = `Quote_${quoteId}.docx`;
+      link.download = `${selectedQuoteNumber}.docx`;
       link.click();
       fetchQuotes();
     } catch (error) {
@@ -165,14 +167,16 @@ const CreateQuote = () => {
     return [];
   };
 
-  const handleExportExcel = (quoteId) => {
+  const handleExportExcel = (quoteId, quoteNumber) => {
     setSelectedQuoteId(quoteId || null);
+    setSelectedQuoteNumber(quoteNumber || null); // <-- NEW
     setExportMode("excel");
     setExportModalVisible(true);
   };
 
-  const handleExportWord = (quoteId) => {
+  const handleExportWord = (quoteId, quoteNumber) => {
     setSelectedQuoteId(quoteId || null);
+    setSelectedQuoteNumber(quoteNumber || null); // <-- NEW
     setExportMode("word");
     setExportModalVisible(true);
   };
@@ -180,28 +184,76 @@ const CreateQuote = () => {
 
   // Dummy data for quotes table
   const columns = [
-    {
-      title: "Select All",
-      key: "projectDetails",
-      render: (_, record) => (
-        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+{
+  title: "Select All",
+  key: "projectDetails",
+  render: (_, record) => {
+    const totalQty = record.totalQuantity ?? 0;
+    const totalDrawings = record.totalDrawings ?? 0;
 
-          <Space direction="vertical" style={{ width: '100%' }} size={0}>
-            <Title level={4} style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
-              {record.customerId?.name || record.customerName || 'Manish Shukla - Web Design'}
-            </Title>
-            <Text type="secondary" style={{ fontSize: '14px' }}>
-              {record.customerCompany || record.customerId?.companyName || 'EXXEL TECHNOLOGY PTE LTD'}
+    return (
+      <div style={{ display: "flex", alignItems: "flex-start", padding: "4px 0" }}>
+        <Space direction="vertical" style={{ width: "100%" }} size={2}>
+
+          {/* Quote Number + Date Row */}
+          <Space size={12} align="center">
+            <Text strong style={{ fontSize: 13 }}>
+              <NumberOutlined style={{ marginRight: 6, color: "#0369A1" }} />
+              {record.quoteNumber || "Q--"}
             </Text>
-            <Space size="middle" style={{ marginTop: 4 }}>
-              <Text strong style={{ fontSize: '14px' }}>
-                Total: ${record.totalQuoteValue.toFixed(2)}
-              </Text>
-            </Space>
+
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              <CalendarOutlined style={{ marginRight: 6, color: "#16A34A" }} />
+              {record?.quoteDate
+                ? new Date(record.quoteDate).toLocaleDateString("en-GB")
+                : "No date"}
+            </Text>
           </Space>
-        </div>
-      )
-    },
+
+          {/* Customer Name */}
+          <Title
+            level={4}
+            style={{
+              margin: 0,
+              fontSize: "16px",
+              fontWeight: 600,
+              lineHeight: "20px",
+            }}
+          >
+            <UserSwitchOutlined style={{ marginRight: 6, color: "#0F172A" }} />
+            {record.customerId?.name || record.customerName || "Customer Name"}
+          </Title>
+
+          {/* Company Name */}
+          <Text type="secondary" style={{ fontSize: 14 }}>
+            <FileDoneOutlined style={{ marginRight: 6, color: "#475569" }} />
+            {record.customerCompany || record.customerId?.companyName || "Company"}
+          </Text>
+
+          {/* Totals Row */}
+          <Space size="large" style={{ marginTop: 4 }} align="center">
+            <Text strong style={{ fontSize: 14 }}>
+              <DollarOutlined style={{ marginRight: 6, color: "#16A34A" }} />
+              Total: ${record.totalQuoteValue.toFixed(2)}
+            </Text>
+
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              <FileDoneOutlined
+               style={{ marginRight: 6, color: "#2563EB" }} />
+              Drawings: <Text strong>{totalDrawings}</Text>
+            </Text>
+
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              <NumberOutlined style={{ marginRight: 6, color: "#7C3AED" }} />
+              Total Qty: <Text strong>{totalQty}</Text>
+            </Text>
+          </Space>
+
+        </Space>
+      </div>
+    );
+  },
+},
     {
       title: "",
       key: "status",
@@ -219,12 +271,12 @@ const CreateQuote = () => {
       render: (_, record) => (
         <Space>
 
-          {record?.status === "pending" && hasPermission('sales.quote:export') && (
+          {/* {record?.status === "pending" && hasPermission('sales.quote:export') && ( */}
           <Space>
             <Button
               type="text"
               icon={<FileExcelOutlined style={{ color: "#217346", fontSize: 18 }} />}
-              onClick={() => handleExportExcel && handleExportExcel(record?._id)}
+              onClick={() => handleExportExcel && handleExportExcel(record?._id, record?.quoteNumber)}
               style={{
                 background: "#E6F4EA",
                 borderRadius: 6,
@@ -238,7 +290,7 @@ const CreateQuote = () => {
             <Button
               type="text"
               icon={<FileWordOutlined style={{ color: "#2B579A", fontSize: 18 }} />}
-              onClick={() => handleExportWord && handleExportWord(record?._id)}
+              onClick={() => handleExportWord && handleExportWord(record?._id, record?.quoteNumber)}
               style={{
                 background: "#EBF3FB",
                 borderRadius: 6,
@@ -249,9 +301,8 @@ const CreateQuote = () => {
             >
               Word
             </Button>
-
           </Space>
-           )}
+          {/* )} */}
           <Space
             direction="vertical"
             size={8}
@@ -336,10 +387,10 @@ const CreateQuote = () => {
     try {
       const res = await QuoteService.getAllQuotes({ page, limit, ...filters });
       console.log('=====', res)
-      if (res.success){ 
+      if (res.success) {
         setQuotesData(res.data)
         setPagination(res?.pagination)
-         
+
       }
     } catch (err) { console.error(err); }
   };
@@ -448,6 +499,14 @@ const CreateQuote = () => {
     }
   };
 
+  const resetExportModal = () => {
+    setExportModalVisible(false);
+    setSelectedQuoteId(null);
+    setSelectedQuoteNumber(null);
+    setExportMode(null);
+  };
+
+
 
   const handleUpdateQuote = (updatedQuoteData) => {
     // Your update logic here
@@ -511,40 +570,40 @@ const CreateQuote = () => {
   const filteredData = activeTab === "all" ? quotesData : quotesData.filter(d => d.status === activeTab);
 
 
- const exportAllQuotes = async () => {
-  if (!selectedRowKeys || selectedRowKeys.length === 0) {
-    message.warning("Please select at least one quote to export.");
-    return;
-  }
+  const exportAllQuotes = async () => {
+    if (!selectedRowKeys || selectedRowKeys.length === 0) {
+      message.warning("Please select at least one quote to export.");
+      return;
+    }
 
-  try {
-    // 👇 Call your service
-    const res = await QuoteService.exportSelectedQuotesToExcel(selectedRowKeys);
+    try {
+      // 👇 Call your service
+      const res = await QuoteService.exportSelectedQuotesToExcel(selectedRowKeys);
 
-    // ✅ Extract filename from Content-Disposition (if available)
-    const contentDisposition = res.headers?.["content-disposition"];
-    const match = contentDisposition?.match(/filename="?([^"]+)"?/);
-    const filename = match ? match[1] : "selected-quotes.xlsx";
+      // ✅ Extract filename from Content-Disposition (if available)
+      const contentDisposition = res.headers?.["content-disposition"];
+      const match = contentDisposition?.match(/filename="?([^"]+)"?/);
+      const filename = match ? match[1] : "selected-quotes.xlsx";
 
-    // ✅ Create and trigger file download
-    const blob = new Blob([res.data], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+      // ✅ Create and trigger file download
+      const blob = new Blob([res.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
 
-    message.success("Quotes exported successfully!");
-  } catch (error) {
-    console.error("Export error:", error);
-    message.error("Failed to export quotes. Please try again.");
-  }
-};
+      message.success("Quotes exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      message.error("Failed to export quotes. Please try again.");
+    }
+  };
 
   return (
     <div style={{ padding: 24 }}>
@@ -554,20 +613,20 @@ const CreateQuote = () => {
           <Text type="secondary">All Quote List</Text>
         </Col>
         <Col>
-        <Space>
-          {hasPermission('sales.quote:create') &&
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowAddModal(true)}>Create Quote</Button>
-          }
-          <Button
-            icon={<CloudDownloadOutlined />}
-            type="default"
-            onClick={exportAllQuotes}
-          >
-            Export
-          </Button>
+          <Space>
+            {hasPermission('sales.quote:create') &&
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowAddModal(true)}>Create Quote</Button>
+            }
+            <Button
+              icon={<CloudDownloadOutlined />}
+              type="default"
+              onClick={exportAllQuotes}
+            >
+              Export
+            </Button>
           </Space>
         </Col>
-       
+
       </Row>
 
 
@@ -602,15 +661,15 @@ const CreateQuote = () => {
           rowKey={(record) => record._id || record.id} // 👈 IMPORTANT
           rowSelection={rowSelection}
           pagination={{
-                    current: page,
-                    pageSize: limit,
-                    total: pagination?.totalItems || 0,
-                    onChange: (p, l) => {
-                        setPage(p);
-                        setLimit(l);
-                        fetchQuotes({ page: p, limit: l });
-                    }
-                }}
+            current: page,
+            pageSize: limit,
+            total: pagination?.totalItems || 0,
+            onChange: (p, l) => {
+              setPage(p);
+              setLimit(l);
+              fetchQuotes({ page: p, limit: l });
+            }
+          }}
           size="small"
           onRow={(record) => ({
             style: {
@@ -666,7 +725,7 @@ const CreateQuote = () => {
       <ExportExcelModal
         visible={exportModalVisible}
         mode={exportMode} // optional prop if the modal shows which mode is selected
-        onCancel={() => setExportModalVisible(false)}
+        onCancel={resetExportModal}
         onConfirm={() => {
           if (!selectedQuoteId) {
             message.error("Quote ID missing for export");

@@ -178,6 +178,7 @@ export const getMpnById = async (req, res) => {
 // };
 
 import mongoose from "mongoose"; // make sure this is imported where your controllers live
+import Currency from "../../models/Currency.js";
 
 
 export const getAllMpn = async (req, res) => {
@@ -199,9 +200,9 @@ export const getAllMpn = async (req, res) => {
       query.Category = new mongoose.Types.ObjectId(category);
     }
 
- if (status && status.trim().toLowerCase() !== "all") {
-  query.Status = status.trim().toLowerCase();
-}
+    if (status && status.trim().toLowerCase() !== "all") {
+      query.Status = status.trim().toLowerCase();
+    }
 
 
     // ⚙️ Common find (without skip/limit)
@@ -548,12 +549,21 @@ export const importMpn = async (req, res) => {
 
         // Handle main Supplier
         if (mappedRow.Supplier) {
-          const supplierDoc = await Suppliers.findOne({ 
-            companyName: mappedRow.Supplier 
+          const supplierDoc = await Suppliers.findOne({
+            companyName: mappedRow.Supplier
           });
           mappedRow.Supplier = supplierDoc ? supplierDoc._id : null;
         } else {
           mappedRow.Supplier = null;
+        }
+
+        if (mappedRow.currency) {
+          const currencyDoc = await Currency.findOne({
+            companyName: mappedRow.currency
+          });
+          mappedRow.currency = currencyDoc ? currencyDoc._id : null;
+        } else {
+          mappedRow.currency = null;
         }
 
         if (mappedRow.Category) {
@@ -565,7 +575,7 @@ export const importMpn = async (req, res) => {
 
         // --- Process purchase history from #1, #2, etc. columns ---
         const purchaseHistory = [];
-        
+
         // Process purchase history entries (up to 5 entries as example)
         for (let i = 1; i <= 3; i++) {
           const purchasedPrice = row[`Purchased Price#${i}`];
@@ -578,8 +588,8 @@ export const importMpn = async (req, res) => {
           if (purchasedPrice || moq || purchasedDate || supplier || leadTime) {
             let supplierId = null;
             if (supplier) {
-              const supplierDoc = await Suppliers.findOne({ 
-                companyName: supplier 
+              const supplierDoc = await Suppliers.findOne({
+                companyName: supplier
               });
               supplierId = supplierDoc ? supplierDoc._id : null;
             }
@@ -606,11 +616,11 @@ export const importMpn = async (req, res) => {
         if (existing) {
           // Update existing document - preserve existing purchaseHistory if not provided in import
           const updateData = { ...mappedRow };
-          
+
           // If new purchase history is provided, merge with existing (avoid duplicates)
           if (mappedRow.purchaseHistory && mappedRow.purchaseHistory.length > 0) {
             const existingHistory = existing.purchaseHistory || [];
-            
+
             // Simple merge - you might want more sophisticated duplicate detection
             updateData.purchaseHistory = [
               ...mappedRow.purchaseHistory,
@@ -687,6 +697,145 @@ export const importMpn = async (req, res) => {
 
 
 
+// export const exportMpn = async (req, res) => {
+//   try {
+//     const mpns = await MPN.find()
+//       .populate("UOM", "code")
+//       .populate("Supplier", "companyName")
+//       .populate("Category", "name")
+//       .lean();
+
+//     // 1) Column schema: header order, keys, and base width hints
+//     const COLUMNS = [
+//       { header: "MPN", key: "MPN", min: 12 },
+//       { header: "Manufacturer", key: "Manufacturer", min: 14 },
+//       { header: "Description", key: "Description", min: 24, max: 60 },
+//       { header: "UOM", key: "UOM", min: 6 },
+//       { header: "Storage Location", key: "StorageLocation", min: 16 },
+//       { header: "RFQ Unit Price", key: "RFQUnitPrice", min: 14 },
+//       { header: "MOQ", key: "MOQ", min: 8 },
+//       { header: "RFQ Date", key: "RFQDate", min: 12 },
+//       { header: "Supplier", key: "Supplier", min: 16 },
+//       { header: "Lead Time (wk)", key: "LeadTime_WK", min: 12 },
+//       { header: "Category", key: "Category", min: 14 },
+//       { header: "Status", key: "Status", min: 12 },
+//       { header: "Note", key: "note", min: 24, max: 60 },
+//     ];
+
+//     // 2) Map DB docs -> rows with proper JS types
+//     const rows = (mpns || []).map((item) => ({
+//       MPN: item.MPN ?? "",
+//       Manufacturer: item.Manufacturer ?? "",
+//       Description: item.Description ?? "",
+//       UOM: item.UOM?.code ?? item.UOM ?? "",
+//       StorageLocation: item.StorageLocation ?? "",
+//       RFQUnitPrice: item.RFQUnitPrice ?? "",
+//       MOQ: item.MOQ ?? "",
+//       RFQDate: item.RFQDate ? new Date(item.RFQDate) : "",
+//       Supplier: item.Supplier?.companyName ?? item.Supplier ?? "",
+//       LeadTime_WK: item.LeadTime_WK ?? "",
+//       Category: item.Category?.name ?? item.Category ?? "",
+//       Status: item.Status ?? "",
+//       note: item.note ?? "",
+//     }));
+
+
+//     // 3) Build a dataset in the exact header order
+//     const headers = COLUMNS.map((c) => c.header);
+//     const keyByHeader = Object.fromEntries(COLUMNS.map((c) => [c.header, c.key]));
+
+//     const ordered = rows.map((r) =>
+//       headers.reduce((acc, h) => {
+//         acc[h] = r[keyByHeader[h]];
+//         return acc;
+//       }, {})
+//     );
+
+//     // 4) Create worksheet: preserve dates & numbers
+//     const ws = XLSX.utils.json_to_sheet(ordered, {
+//       header: headers,
+//       skipHeader: false,
+//       cellDates: true,       // keep Date cells as dates
+//     });
+
+//     // 5) Apply a date number format to the RFQ Date column
+//     // Find its 1-based column index
+//     const rfqDateColIdx = headers.indexOf("RFQ Date") + 1; // 1..N
+//     if (rfqDateColIdx > 0) {
+//       const range = XLSX.utils.decode_range(ws["!ref"]);
+//       for (let R = range.s.r + 1; R <= range.e.r; ++R) { // skip header (row 0)
+//         const addr = XLSX.utils.encode_cell({ r: R, c: rfqDateColIdx - 1 });
+//         const cell = ws[addr];
+//         if (cell && cell.t === "d") {
+//           // set display format to DD/MM/YYYY
+//           cell.z = "dd/mm/yyyy";
+//         }
+//       }
+//     }
+
+//     // 6) Auto column widths (based on header + cell text length)
+//     const autoCols = headers.map((h, cIdx) => {
+//       const baseMin = COLUMNS[cIdx]?.min ?? 10;
+//       const baseMax = COLUMNS[cIdx]?.max ?? 40;
+
+//       const range = XLSX.utils.decode_range(ws["!ref"]);
+//       let maxLen = String(h).length;
+
+//       for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+//         const cellAddr = XLSX.utils.encode_cell({ r: R, c: cIdx });
+//         const cell = ws[cellAddr];
+
+//         let v = "";
+//         if (cell) {
+//           if (cell.t === "n") v = String(cell.v);
+//           else if (cell.t === "d") v = XLSX.SSF.format(cell.z || "dd/mm/yyyy", cell.v);
+//           else v = String(cell.v ?? "");
+//         }
+//         maxLen = Math.max(maxLen, v.length);
+//       }
+
+//       // padding + clamp
+//       const wch = Math.min(Math.max(maxLen + 2, baseMin), baseMax);
+//       return { wch };
+//     });
+//     ws["!cols"] = autoCols;
+
+//     // 7) Freeze header row & enable AutoFilter
+//     const totalCols = headers.length;
+//     const lastColLetter = XLSX.utils.encode_col(totalCols - 1);
+//     const lastRowNumber =
+//       XLSX.utils.decode_range(ws["!ref"]).e.r + 1; // 1-based
+
+//     ws["!autofilter"] = { ref: `A1:${lastColLetter}1` };
+//     // Freeze top row (supported in modern SheetJS)
+//     ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft" };
+
+//     // 8) Build workbook and return buffer
+//     const wb = XLSX.utils.book_new();
+//     XLSX.utils.book_append_sheet(wb, ws, "MPNs");
+
+//     const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx", cellDates: true });
+//     if (!buffer || buffer.length === 0) {
+//       throw new Error("Generated Excel buffer is empty");
+//     }
+
+//     res.setHeader(
+//       "Content-Disposition",
+//       `attachment; filename=mpn_export_${new Date().toISOString().slice(0, 10)}.xlsx`
+//     );
+//     res.setHeader(
+//       "Content-Type",
+//       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+//     );
+//     res.setHeader("Content-Length", buffer.length);
+
+//     return res.send(buffer);
+//   } catch (err) {
+//     console.error("exportMpn error:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+
 export const exportMpn = async (req, res) => {
   try {
     const mpns = await MPN.find()
@@ -694,6 +843,14 @@ export const exportMpn = async (req, res) => {
       .populate("Supplier", "companyName")
       .populate("Category", "name")
       .lean();
+
+    // Determine max purchase history count
+    let maxPurchaseHistoryCount = 0;
+    mpns.forEach(item => {
+      if (item.purchaseHistory && item.purchaseHistory.length > maxPurchaseHistoryCount) {
+        maxPurchaseHistoryCount = item.purchaseHistory.length;
+      }
+    });
 
     // 1) Column schema: header order, keys, and base width hints
     const COLUMNS = [
@@ -712,23 +869,51 @@ export const exportMpn = async (req, res) => {
       { header: "Note", key: "note", min: 24, max: 60 },
     ];
 
-    // 2) Map DB docs -> rows with proper JS types
-    const rows = (mpns || []).map((item) => ({
-      MPN: item.MPN ?? "",
-      Manufacturer: item.Manufacturer ?? "",
-      Description: item.Description ?? "",
-      UOM: item.UOM?.code ?? item.UOM ?? "",
-      StorageLocation: item.StorageLocation ?? "",
-      RFQUnitPrice: item.RFQUnitPrice ?? "",
-      MOQ: item.MOQ ?? "",
-      RFQDate: item.RFQDate ? new Date(item.RFQDate) : "",
-      Supplier: item.Supplier?.companyName ?? item.Supplier ?? "",
-      LeadTime_WK: item.LeadTime_WK ?? "",
-      Category: item.Category?.name ?? item.Category ?? "",
-      Status: item.Status ?? "",
-      note: item.note ?? "",
-    }));
+    // Add Purchase History columns
+    for (let i = 0; i < maxPurchaseHistoryCount; i++) {
+      const index = i + 1;
+      COLUMNS.push(
+        { header: `Purchased Price #${index}`, key: `purchaseHistory_${i}_price`, min: 16 },
+        { header: `Currency #${index}`, key: `purchaseHistory_${i}_currency`, min: 10 },
+        { header: `Purchased Date #${index}`, key: `purchaseHistory_${i}_date`, min: 14 },
+        { header: `MOQ #${index}`, key: `purchaseHistory_${i}_moq`, min: 10 },
+        { header: `Supplier #${index}`, key: `purchaseHistory_${i}_supplier`, min: 16 },
+        { header: `Lead Time #${index} (Wk)`, key: `purchaseHistory_${i}_leadTime`, min: 14 }
+      );
+    }
 
+    // 2) Map DB docs -> rows with proper JS types
+    const rows = (mpns || []).map((item) => {
+      const row = {
+        MPN: item.MPN ?? "",
+        Manufacturer: item.Manufacturer ?? "",
+        Description: item.Description ?? "",
+        UOM: item.UOM?.code ?? item.UOM ?? "",
+        StorageLocation: item.StorageLocation ?? "",
+        RFQUnitPrice: item.RFQUnitPrice ?? "",
+        MOQ: item.MOQ ?? "",
+        RFQDate: item.RFQDate ? new Date(item.RFQDate) : "",
+        Supplier: item.Supplier?.companyName ?? item.Supplier ?? "",
+        LeadTime_WK: item.LeadTime_WK ?? "",
+        Category: item.Category?.name ?? item.Category ?? "",
+        Status: item.Status ?? "",
+        note: item.note ?? "",
+      };
+
+      // Add purchase history data
+      if (item.purchaseHistory && Array.isArray(item.purchaseHistory)) {
+        item.purchaseHistory.forEach((purchase, index) => {
+          row[`Purchased Price#${index}`] = purchase.purchasedPrice ?? "";
+          // row[`Purchased Currency#${index}`] = purchase.currency ?? "USD";
+          row[`Purchased Date#${index}`] = purchase.entryDate ? new Date(purchase.entryDate) : "";
+          row[`MOQ#${index}`] = purchase.MOQ ?? "";
+          row[`Supplier#${index}`] = purchase.Supplier ?? "";
+          row[`Lead Time#${index}_WK`] = purchase.LeadTime_WK ?? "";
+        });
+      }
+
+      return row;
+    });
 
     // 3) Build a dataset in the exact header order
     const headers = COLUMNS.map((c) => c.header);
@@ -748,18 +933,30 @@ export const exportMpn = async (req, res) => {
       cellDates: true,       // keep Date cells as dates
     });
 
-    // 5) Apply a date number format to the RFQ Date column
-    // Find its 1-based column index
-    const rfqDateColIdx = headers.indexOf("RFQ Date") + 1; // 1..N
-    if (rfqDateColIdx > 0) {
+    // 5) Apply date number format to RFQ Date and Purchase Date columns
+    const dateColumns = [];
+    
+    // Find RFQ Date column
+    const rfqDateColIdx = headers.indexOf("RFQ Date") + 1;
+    if (rfqDateColIdx > 0) dateColumns.push(rfqDateColIdx - 1);
+    
+    // Find Purchase Date columns
+    for (let i = 0; i < maxPurchaseHistoryCount; i++) {
+      const dateColIdx = headers.indexOf(`Purchased Date #${i + 1}`) + 1;
+      if (dateColIdx > 0) dateColumns.push(dateColIdx - 1);
+    }
+
+    if (dateColumns.length > 0) {
       const range = XLSX.utils.decode_range(ws["!ref"]);
       for (let R = range.s.r + 1; R <= range.e.r; ++R) { // skip header (row 0)
-        const addr = XLSX.utils.encode_cell({ r: R, c: rfqDateColIdx - 1 });
-        const cell = ws[addr];
-        if (cell && cell.t === "d") {
-          // set display format to DD/MM/YYYY
-          cell.z = "dd/mm/yyyy";
-        }
+        dateColumns.forEach(colIdx => {
+          const addr = XLSX.utils.encode_cell({ r: R, c: colIdx });
+          const cell = ws[addr];
+          if (cell && cell.t === "d") {
+            // set display format to DD/MM/YYYY
+            cell.z = "dd/mm/yyyy";
+          }
+        });
       }
     }
 
@@ -800,7 +997,28 @@ export const exportMpn = async (req, res) => {
     // Freeze top row (supported in modern SheetJS)
     ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft" };
 
-    // 8) Build workbook and return buffer
+    // 8) Apply styling for Purchase History section (optional)
+    // You can add background color to distinguish sections
+    const purchaseHistoryStartCol = headers.indexOf("Purchased Price #1") + 1;
+    if (purchaseHistoryStartCol > 0) {
+      const startLetter = XLSX.utils.encode_col(purchaseHistoryStartCol - 1);
+      const endLetter = XLSX.utils.encode_col(totalCols - 1);
+      
+      // Add background to header
+      const headerAddr = XLSX.utils.encode_cell({ r: 0, c: purchaseHistoryStartCol - 1 });
+      if (!ws[headerAddr]) ws[headerAddr] = { v: headers[purchaseHistoryStartCol - 1] };
+      ws[headerAddr].s = { 
+        fill: { 
+          fgColor: { rgb: "FFE6F3FF" } // Light blue background
+        },
+        font: {
+          bold: true,
+          color: { rgb: "FF0066CC" } // Dark blue text
+        }
+      };
+    }
+
+    // 9) Build workbook and return buffer
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "MPNs");
 

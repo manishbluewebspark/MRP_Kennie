@@ -1,5 +1,5 @@
 import express from "express";
-import { createWorkOrder, deleteWorkOrder, exportDeliveryWorkOrdersPDF, exportDeliveryWorkOrdersWord, exportDeliveryWorkOrdersXlsx, exportWorkOrders, getAllChilPartByDrawingId, getAllProductionWordOrders, getAllWorkOrders, getCompleteWorkOrders, getDeliveryOrders, getEachMPNUsage, getTotalMPNNeeded, getWorkOrderById, importWorkOrders, moveToProduction, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
+import { createWorkOrder, deleteWorkOrder, exportDeliveryWorkOrdersPDF, exportDeliveryWorkOrdersWord, exportDeliveryWorkOrdersXlsx, exportWorkOrders, getAllChilPartByDrawingId, getAllProductionWordOrders, getAllWorkOrders, getCompleteWorkOrders, getDeliveryOrders, getEachMPNUsage, getTotalMPNNeeded, getWorkOrderById, importWorkOrders, moveToProduction, saveWorkOrderStage, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { upload } from "..//middlewares/upload.js";
 
@@ -27,6 +27,10 @@ router.get(
   authenticate,
   getTotalMPNNeeded
 );
+
+router.post("/workorder/production/:id/stage", saveWorkOrderStage);
+
+
 
 router.get("/workOrder/getEachMPNUsage",authenticate,getEachMPNUsage)
 

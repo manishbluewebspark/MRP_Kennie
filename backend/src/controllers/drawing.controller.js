@@ -594,7 +594,10 @@ export const createDrawing = async (req, res) => {
     const { drawingNo, qty = 1, unitPrice = 0 } = data;
 
     // 1) Prevent duplicates
-    const exists = await Drawing.findOne({ drawingNo }).lean();
+     const exists = await Drawing.findOne({
+      drawingNo: { $regex: new RegExp(`^${drawingNo}$`, "i") },
+    }).lean();
+
     if (exists) {
       return res
         .status(400)
@@ -1202,83 +1205,209 @@ export const exportDrawings = async (req, res) => {
 export const duplicateDrawing = async (req, res) => {
   try {
     const { id } = req.params; // Original drawing ID
-    const { newDrawingNumber } = req.body; // New drawing number from frontend
+    let { newDrawingNumber } = req.body; // New drawing number from frontend
 
-    console.log('Duplicating drawing:', id, 'with new number:', newDrawingNumber);
+    // 0️⃣ Basic validations
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid drawing id",
+      });
+    }
 
-    // 1. Find original drawing
+    newDrawingNumber = (newDrawingNumber || "").trim();
+
+    if (!newDrawingNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "New drawing number is required",
+      });
+    }
+
+    console.log("Duplicating drawing:", id, "with new number:", newDrawingNumber);
+
+    // 1️⃣ Find original drawing
     const originalDrawing = await Drawing.findById(id);
 
     if (!originalDrawing) {
       return res.status(404).json({
         success: false,
-        message: 'Original drawing not found'
+        message: "Original drawing not found",
       });
     }
 
-    // 2. Create duplicate drawing object
+    // 2️⃣ New number should not be same as original
+    if (
+      originalDrawing.drawingNo &&
+      originalDrawing.drawingNo.toString().trim().toLowerCase() ===
+        newDrawingNumber.toLowerCase()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "New drawing number cannot be same as original drawing number",
+      });
+    }
+
+    // 3️⃣ Check if newDrawingNumber already exists in DB (case-insensitive)
+    const exists = await Drawing.findOne({
+      drawingNo: { $regex: new RegExp(`^${newDrawingNumber}$`, "i") },
+    }).lean();
+
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: `Drawing number already exists: ${newDrawingNumber}`,
+      });
+    }
+
+    // 4️⃣ Create duplicate drawing object (clean copy)
+    const {
+      _id,
+      __v,
+      createdAt,
+      updatedAt,
+      originalDrawingId,
+      isDuplicate,
+      ...plain
+    } = originalDrawing.toObject();
+
     const duplicateData = {
-      ...originalDrawing.toObject(), // Copy all fields
-      _id: undefined, // Remove original ID
-      drawingNo: newDrawingNumber, // New drawing number
-      drawingName: `${originalDrawing.drawingName} - Copy`, // New name
+      ...plain,
+      drawingNo: newDrawingNumber, // ✅ new drawing number
+      drawingName: originalDrawing.drawingName
+        ? `${originalDrawing.drawingName} - Copy`
+        : undefined,
       isDuplicate: true,
-      originalDrawingId: id, // Reference to original
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      // Reset some fields if needed
-      quoteStatus: 'active',
-      lastEditedBy: req.user?._id, // If you have user auth
+      originalDrawingId: originalDrawing._id, // reference to original
+      quoteStatus: "active",
+      lastEditedBy: req.user?._id || originalDrawing.lastEditedBy || null,
+      // timestamps will be set by Mongoose
     };
 
-    // 3. Remove unwanted fields
-    delete duplicateData.createdAt;
-    delete duplicateData.updatedAt;
-    delete duplicateData.__v;
-
-    // 4. Create new drawing
     const duplicatedDrawing = new Drawing(duplicateData);
     await duplicatedDrawing.save();
 
-    // 5. Find all costing items of original drawing
+    // 5️⃣ Find all costing items of original drawing
     const originalCostingItems = await CostingItems.find({ drawingId: id });
 
     console.log(`Found ${originalCostingItems.length} costing items to duplicate`);
 
-    // 6. Duplicate all costing items with new drawing ID
+    // 6️⃣ Duplicate all costing items with new drawing ID
     if (originalCostingItems.length > 0) {
-      const duplicateCostingItems = originalCostingItems.map(item => ({
-        ...item.toObject(),
-        _id: undefined, // Remove original ID
-        drawingId: duplicatedDrawing._id, // Set new drawing ID
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
+      const duplicateCostingItems = originalCostingItems.map((item) => {
+        const { _id, __v, createdAt, updatedAt, ...rest } = item.toObject();
+        return {
+          ...rest,
+          drawingId: duplicatedDrawing._id, // ✅ Set new drawing ID
+          // itemNumber yahi ka yahi copy ho raha hai
+          // agar re-sequence chahiye to yahan logic change kar sakte ho
+        };
+      });
 
-      // 7. Insert all duplicated costing items
       await CostingItems.insertMany(duplicateCostingItems);
       console.log(`Duplicated ${duplicateCostingItems.length} costing items`);
     }
 
-    // 8. Send response
+    // 7️⃣ Send response
     res.status(201).json({
       success: true,
-      message: 'Drawing duplicated successfully with all costing items',
+      message: `Drawing duplicated successfully with new number ${newDrawingNumber}`,
       data: {
         drawing: duplicatedDrawing,
-        costingItemsCount: originalCostingItems.length
-      }
+        costingItemsCount: originalCostingItems.length,
+      },
     });
-
   } catch (error) {
-    console.error('Error duplicating drawing:', error);
+    console.error("Error duplicating drawing:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
+
+
+// export const duplicateDrawing = async (req, res) => {
+//   try {
+//     const { id } = req.params; // Original drawing ID
+//     const { newDrawingNumber } = req.body; // New drawing number from frontend
+
+//     console.log('Duplicating drawing:', id, 'with new number:', newDrawingNumber);
+
+//     // 1. Find original drawing
+//     const originalDrawing = await Drawing.findById(id);
+
+//     if (!originalDrawing) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Original drawing not found'
+//       });
+//     }
+
+//     // 2. Create duplicate drawing object
+//     const duplicateData = {
+//       ...originalDrawing.toObject(), // Copy all fields
+//       _id: undefined, // Remove original ID
+//       drawingNo: newDrawingNumber, // New drawing number
+//       drawingName: `${originalDrawing.drawingName} - Copy`, // New name
+//       isDuplicate: true,
+//       originalDrawingId: id, // Reference to original
+//       createdAt: new Date(),
+//       updatedAt: new Date(),
+//       // Reset some fields if needed
+//       quoteStatus: 'active',
+//       lastEditedBy: req.user?._id, // If you have user auth
+//     };
+
+//     // 3. Remove unwanted fields
+//     delete duplicateData.createdAt;
+//     delete duplicateData.updatedAt;
+//     delete duplicateData.__v;
+
+//     // 4. Create new drawing
+//     const duplicatedDrawing = new Drawing(duplicateData);
+//     await duplicatedDrawing.save();
+
+//     // 5. Find all costing items of original drawing
+//     const originalCostingItems = await CostingItems.find({ drawingId: id });
+
+//     console.log(`Found ${originalCostingItems.length} costing items to duplicate`);
+
+//     // 6. Duplicate all costing items with new drawing ID
+//     if (originalCostingItems.length > 0) {
+//       const duplicateCostingItems = originalCostingItems.map(item => ({
+//         ...item.toObject(),
+//         _id: undefined, // Remove original ID
+//         drawingId: duplicatedDrawing._id, // Set new drawing ID
+//         createdAt: new Date(),
+//         updatedAt: new Date(),
+//       }));
+
+//       // 7. Insert all duplicated costing items
+//       await CostingItems.insertMany(duplicateCostingItems);
+//       console.log(`Duplicated ${duplicateCostingItems.length} costing items`);
+//     }
+
+//     // 8. Send response
+//     res.status(201).json({
+//       success: true,
+//       message: 'Drawing duplicated successfully with all costing items',
+//       data: {
+//         drawing: duplicatedDrawing,
+//         costingItemsCount: originalCostingItems.length
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('Error duplicating drawing:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Internal server error',
+//       error: error.message
+//     });
+//   }
+// };
 
 // 🟢 STATS
 export const getDrawingStats = async (req, res) => {
@@ -1611,6 +1740,7 @@ export const getAllCostingItems = async (req, res) => {
         ],
       })
       .populate("mpn", "MPN")
+      .populate('childPart', "ChildPartNo")
       .populate("uom", "code")
       .populate("lastEditedBy", "name")
       .sort({ itemNumber: 1 });
@@ -1695,157 +1825,287 @@ export const importCostingItems = async (req, res) => {
     let nextItemNumber = lastItem ? Number(lastItem.itemNumber) + 1 : 1;
 
     const newItems = [];
+    const errors = []; // ✅ collect all row-level errors here
+
+    let rowIndex = 0;
 
     // 3) row loop
     for (const row of rows) {
+      rowIndex += 1;
+
+      // Excel me generally row 2 se data start hota hai (row 1 = header)
+      const rowNumber = rowIndex + 1;
+
       let newItem = null;
 
-      /** =========================
-       *  PACKING
-       *  Columns expected: MPN Name | Description | UOM | Quantity | Unit Price | SGA % | Max Burden % | Freight %
-       *  ========================= */
-      if (quoteType === "packing") {
-        const mpnName = (row["MPN Name"] ?? "").toString().trim();
-        const descriptionIn = (row["Description"] ?? row.Description ?? "").toString().trim();
-        const uomCode = (row["UOM"] ?? row.UOM ?? "").toString().trim();
+      try {
+        /** =========================
+         *  PACKING
+         *  Columns expected: MPN Name | Description | UOM | Quantity | Unit Price | SGA % | Max Burden % | Freight %
+         *  ========================= */
+        if (quoteType === "packing") {
+          const mpnName = (row["MPN Name"] ?? "").toString().trim();
+          const descriptionIn = (row["Description"] ?? row.Description ?? "").toString().trim();
+          const uomCode = (row["UOM"] ?? row.UOM ?? "").toString().trim();
 
-        const quantity = toNum(row["Quantity"]);
-        const unitPrice = toNum(row["Unit Price"]);
-        const sgaPercent = toNum(row["SGA %"]);
-        const maxBurden = toNum(row["Max Burden %"]);
-        const freightPercent = toNum(row["Freight %"]);
+          const quantity = toNum(row["Quantity"]);
+          const unitPrice = toNum(row["Unit Price"]);
+          const sgaPercent = toNum(row["SGA %"]);
+          const maxBurden = toNum(row["Max Burden %"]);
+          const freightPercent = toNum(row["Freight %"]);
 
-        if (!mpnName) throw new Error("MPN Name is required");
-        if (!uomCode) throw new Error("UOM is required");
-        if (!(quantity > 0)) throw new Error("Quantity must be > 0");
+          if (!mpnName) {
+            errors.push({
+              row: rowNumber,
+              type: "packing",
+              field: "MPN Name",
+              value: mpnName,
+              message: "MPN Name is required",
+            });
+            continue;
+          }
+          if (!uomCode) {
+            errors.push({
+              row: rowNumber,
+              type: "packing",
+              field: "UOM",
+              value: uomCode,
+              message: "UOM is required",
+            });
+            continue;
+          }
+          if (!(quantity > 0)) {
+            errors.push({
+              row: rowNumber,
+              type: "packing",
+              field: "Quantity",
+              value: row["Quantity"],
+              message: "Quantity must be > 0",
+            });
+            continue;
+          }
 
-        const mpn = await MPN.findOne({ MPN: mpnName }).select("_id Description Manufacturer").lean();
-        if (!mpn) throw new Error(`MPN not found: ${mpnName}`);
+          const mpn = await MPN.findOne({ MPN: mpnName }).select("_id Description Manufacturer").lean();
+          if (!mpn) {
+            errors.push({
+              row: rowNumber,
+              type: "packing",
+              field: "MPN Name",
+              value: mpnName,
+              message: `MPN not found: ${mpnName}`,
+            });
+            continue;
+          }
 
-        const uomDoc = await UOM.findOne({ code: uomCode }).select("_id code").lean();
-        if (!uomDoc) throw new Error(`UOM not found: ${uomCode}`);
+          const uomDoc = await UOM.findOne({ code: uomCode }).select("_id code").lean();
+          if (!uomDoc) {
+            errors.push({
+              row: rowNumber,
+              type: "packing",
+              field: "UOM",
+              value: uomCode,
+              message: `UOM not found: ${uomCode}`,
+            });
+            continue;
+          }
 
-        const extPrice = round2(quantity * unitPrice);
-        const upliftPct = (sgaPercent + maxBurden + freightPercent) / 100;
-        const salesPrice = round2(extPrice * (1 + upliftPct));
+          const extPrice = round2(quantity * unitPrice);
+          const upliftPct = (sgaPercent + maxBurden + freightPercent) / 100;
+          const salesPrice = round2(extPrice * (1 + upliftPct));
 
-        newItem = {
-          drawingId,
-          quoteType, // packing
-          itemNumber: String(nextItemNumber).padStart(4, "0"),
+          newItem = {
+            drawingId,
+            quoteType, // packing
+            itemNumber: String(nextItemNumber).padStart(4, "0"),
 
-          mpn: mpn._id,
-          description: descriptionIn || (mpn.Description ?? ""),
-          manufacturer: mpn.Manufacturer ?? "",
-          uom: uomDoc._id,
+            mpn: mpn._id,
+            description: descriptionIn || (mpn.Description ?? ""),
+            manufacturer: mpn.Manufacturer ?? "",
+            uom: uomDoc._id,
 
-          quantity,
-          unitPrice,
-          sgaPercent,
-          maxBurden,
-          freightPercent,
+            quantity,
+            unitPrice,
+            sgaPercent,
+            maxBurden,
+            freightPercent,
 
-          extPrice,
-          salesPrice,
+            extPrice,
+            salesPrice,
 
-          moq: 0,
-          tolerance: 0,
-          actualQty: quantity,
-          lastEditedBy: req.user?._id || null,
-        };
-      }
+            moq: 0,
+            tolerance: 0,
+            actualQty: quantity,
+            lastEditedBy: req.user?._id || null,
+          };
+        }
 
-      /** =========================
-       *  MANHOUR
-       *  Columns expected: Skill Level | Remarks | Quantity
-       *  ========================= */
-      else if (quoteType === "manhour") {
-        const skillName = (row["Skill Level"] ?? "").toString().trim();
-        const remarks = (row["Remarks"] ?? "").toString().trim();
-        const quantity = toNum(row["Quantity"]);
+        /** =========================
+         *  MANHOUR
+         *  Columns expected: Skill Level | Remarks | Quantity
+         *  ========================= */
+        else if (quoteType === "manhour") {
+          const skillName = (row["Skill Level"] ?? "").toString().trim();
+          const remarks = (row["Remarks"] ?? "").toString().trim();
+          const quantity = toNum(row["Quantity"]);
 
-        if (!skillName || !(quantity > 0)) continue;
+          if (!skillName) {
+            // empty row → skip silently
+            continue;
+          }
+          if (!(quantity > 0)) {
+            errors.push({
+              row: rowNumber,
+              type: "manhour",
+              field: "Quantity",
+              value: row["Quantity"],
+              message: "Quantity must be > 0",
+            });
+            continue;
+          }
 
-        const skillLevel = await SkillLevelCosting.findOne({ skillLevelName: skillName }).populate("type");
-        if (!skillLevel) throw new Error(`Skill Level not found: ${skillName}`);
+          const skillLevel = await SkillLevelCosting.findOne({ skillLevelName: skillName }).populate("type");
+          if (!skillLevel) {
+            errors.push({
+              row: rowNumber,
+              type: "manhour",
+              field: "Skill Level",
+              value: skillName,
+              message: `Skill Level not found: ${skillName}`,
+            });
+            continue;
+          }
 
-        const unitPrice = toNum(skillLevel.unitPrice ?? skillLevel.rate);
-        const extPrice = round2(unitPrice * quantity);
-        const salesPrice = extPrice; // same for manhour
+          const unitPrice = toNum(skillLevel.unitPrice ?? skillLevel.rate);
+          const extPrice = round2(unitPrice * quantity);
+          const salesPrice = extPrice; // same for manhour
 
-        newItem = {
-          drawingId,
-          quoteType, // manhour
-          itemNumber: String(nextItemNumber).padStart(4, "0"),
+          newItem = {
+            drawingId,
+            quoteType, // manhour
+            itemNumber: String(nextItemNumber).padStart(4, "0"),
 
-          description: skillLevel.skillLevelName,
-          uom: skillLevel.type?._id || null,
-          skillLevel: skillLevel._id,
+            description: skillLevel.skillLevelName,
+            uom: skillLevel.type?._id || null,
+            skillLevel: skillLevel._id,
 
-          quantity,
-          remarks,
+            quantity,
+            remarks,
 
-          unitPrice,
-          salesPrice,
-          extPrice,
+            unitPrice,
+            salesPrice,
+            extPrice,
 
-          lastEditedBy: req.user?._id || null,
-        };
-      }
+            lastEditedBy: req.user?._id || null,
+          };
+        }
 
-      /** =========================
-       *  MATERIAL
-       *  Columns expected: ChildPart/Part Number | UOM | Child Qty | Tolerance | SGA % | Mat Burden % | Freight Cost % | Fixed Freight Cost
-       *  ========================= */
-      else if (quoteType === "material") {
-        const childKey = row.ChildPart || row["Part Number"];
-        const childPart = await Child.findOne({ ChildPartNo: childKey }).populate("mpn");
-        if (!childPart || !childPart.mpn) throw new Error(`MPN not found for ChildPart: ${childKey}`);
+        /** =========================
+         *  MATERIAL
+         *  Columns expected: ChildPart/Part Number | UOM | Child Qty | Tolerance | SGA % | Mat Burden % | Freight Cost % | Fixed Freight Cost
+         *  ========================= */
+        else if (quoteType === "material") {
+          const childKey = row.ChildPart || row["Part Number"];
+          if (!childKey) {
+            errors.push({
+              row: rowNumber,
+              type: "material",
+              field: "ChildPart / Part Number",
+              value: childKey,
+              message: "ChildPart / Part Number is required",
+            });
+            continue;
+          }
 
-        const uomId = await getUomId(row["UOM"]);
-        const quantity = toNum(row["Qty"]);
-        const unitPrice = toNum(childPart?.mpn?.RFQUnitPrice);
-        const tolerance = toNum(row["Tolerance"]);
+          const childPart = await Child.findOne({ ChildPartNo: childKey }).populate("mpn");
+          if (!childPart || !childPart.mpn) {
+            errors.push({
+              row: rowNumber,
+              type: "material",
+              field: "ChildPart / Part Number",
+              value: childKey,
+              message: `MPN not found for ChildPart: ${childKey}`,
+            });
+            continue;
+          }
 
-        const sgaPercent = toNum(row["SGA %"]);
-        const matBurden = toNum(row["Mat Burden %"]);
-        const freightPercent = toNum(row["Freight Cost %"]);
-        const fixedFreightCost = toNum(row["Fixed Freight Cost"]);
+          const uomRaw = row["UOM"];
+          const uomId = await getUomId(uomRaw);
+          if (!uomId) {
+            errors.push({
+              row: rowNumber,
+              type: "material",
+              field: "UOM",
+              value: uomRaw,
+              message: `UOM not found: ${uomRaw}`,
+            });
+            continue;
+          }
 
-        const actualQty = round2(quantity + (quantity * tolerance) / 100);
-        const extPrice = round2(quantity * unitPrice);
-        const salesPrice = round2(
-          extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) + fixedFreightCost
-        );
+          const quantity = toNum(row["Qty"]);
+          if (!(quantity > 0)) {
+            errors.push({
+              row: rowNumber,
+              type: "material",
+              field: "Qty",
+              value: row["Qty"],
+              message: "Qty must be > 0",
+            });
+            continue;
+          }
 
-        newItem = {
-          drawingId,
-          quoteType, // material
-          itemNumber: String(nextItemNumber).padStart(4, "0"),
-          childPart: childPart?._id,
-          mpn: childPart?.mpn?._id,
-          description: S(childPart?.mpn?.Description).trim(),
-          manufacturer: childPart?.mpn?.Manufacturer || "",
-          uom: uomId,
-          moq: toNum(childPart?.mpn?.MOQ),
-          leadTime: toNum(childPart?.mpn?.LeadTime_WK),
-          rfqDate: childPart?.mpn?.RFQDate,
-          supplier: childPart?.mpn?.Supplier,
-          unitPrice,
+          const unitPrice = toNum(childPart?.mpn?.RFQUnitPrice);
+          const tolerance = toNum(row["Tolerance"]);
 
-          quantity,
-          tolerance,
-          actualQty,
-          sgaPercent,
-          matBurden,
-          freightPercent,
-          fixedFreightCost,
+          const sgaPercent = toNum(row["SGA %"]);
+          const matBurden = toNum(row["Mat Burden %"]);
+          const freightPercent = toNum(row["Freight Cost %"]);
+          const fixedFreightCost = toNum(row["Fixed Freight Cost"]);
 
-          extPrice,
-          salesPrice,
+          const actualQty = round2(quantity + (quantity * tolerance) / 100);
+          const extPrice = round2(quantity * unitPrice);
+          const salesPrice = round2(
+            extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) + fixedFreightCost
+          );
 
-          lastEditedBy: req.user?._id || "System",
-        };
+          newItem = {
+            drawingId,
+            quoteType, // material
+            itemNumber: String(nextItemNumber).padStart(4, "0"),
+            childPart: childPart?._id,
+            mpn: childPart?.mpn?._id,
+            description: S(childPart?.mpn?.Description).trim(),
+            manufacturer: childPart?.mpn?.Manufacturer || "",
+            uom: uomId,
+            moq: toNum(childPart?.mpn?.MOQ),
+            leadTime: toNum(childPart?.mpn?.LeadTime_WK),
+            rfqDate: childPart?.mpn?.RFQDate,
+            supplier: childPart?.mpn?.Supplier,
+            unitPrice,
+
+            quantity,
+            tolerance,
+            actualQty,
+            sgaPercent,
+            matBurden,
+            freightPercent,
+            fixedFreightCost,
+
+            extPrice,
+            salesPrice,
+
+            lastEditedBy: req.user?._id || "System",
+          };
+        }
+      } catch (rowErr) {
+        // koi unexpected error hua is row ke liye – usko bhi capture kar lo
+        errors.push({
+          row: rowNumber,
+          type: quoteType,
+          field: "row",
+          value: row,
+          message: rowErr.message || "Unexpected error while processing row",
+        });
+        continue;
       }
 
       if (newItem) {
@@ -1854,7 +2114,22 @@ export const importCostingItems = async (req, res) => {
       }
     }
 
-    // 4) bulk insert
+    // 4) Agar errors hai to import fail karo, insert mat karo
+   if (errors.length > 0) {
+  // Create detailed error messages
+  const errorMessages = errors.map(error => 
+    `Row ${error.row}: ${error.message}`
+  ).join(', ');
+  
+  return res.status(400).json({
+    success: false,
+    message: `Import failed due to validation errors: ${errorMessages}`,
+    errorCount: errors.length,
+    errors, // detailed errors array for frontend
+  });
+}
+
+    // 5) bulk insert (only if no errors)
     if (newItems.length > 0) {
       await CostingItems.insertMany(newItems);
     }
@@ -1868,7 +2143,6 @@ export const importCostingItems = async (req, res) => {
       {
         $group: {
           _id: "$quoteType",
-          // 👉 If extPrice is canonical, switch to { $sum: { $toDouble: "$extPrice" } }
           bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
         },
       },
@@ -1904,7 +2178,7 @@ export const importCostingItems = async (req, res) => {
     const importedMaxLTW = Math.max(0, ...newItems.map(x => toNum(x.leadTime ?? x.leadTimeWeeks)));
     const finalLTW = Math.max(existingLTW, importedMaxLTW);
 
-    // 5) persist on drawing
+    // 6) persist on drawing
     drawing.materialTotal        = round2(materialTotal);
     drawing.manhourTotal         = round2(manhourTotal);
     drawing.packingTotal         = round2(packingTotal);
@@ -1915,7 +2189,7 @@ export const importCostingItems = async (req, res) => {
 
     await drawing.save();
 
-    // 6) done
+    // 7) done
     return res.json({
       success: true,
       message: `✅ ${quoteType} import successful`,
@@ -1940,12 +2214,291 @@ export const importCostingItems = async (req, res) => {
       error: error.message,
     });
   } finally {
-    // best-effort cleanup of temp file
     if (filePath) {
       try { await fs.unlink(filePath); } catch {}
     }
   }
 };
+
+
+// export const importCostingItems = async (req, res) => {
+//   let filePath = null;
+//   try {
+//     const { drawingId } = req.params;
+//     const { quoteType } = req.body;
+//     const file = req.file;
+
+//     if (!file) return res.status(400).json({ success: false, message: "No file uploaded" });
+//     filePath = file.path;
+
+//     // 0) base validations
+//     if (!mongoose.Types.ObjectId.isValid(drawingId)) {
+//       return res.status(400).json({ success: false, message: "Invalid drawingId" });
+//     }
+//     const drawing = await Drawing.findById(drawingId);
+//     if (!drawing) return res.status(404).json({ success: false, message: "Drawing not found" });
+
+//     // 1) read Excel
+//     const workbook = XLSX.readFile(filePath);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const rows = XLSX.utils.sheet_to_json(sheet);
+
+//     // 2) last itemNumber seed
+//     const lastItem = await CostingItems.findOne({ drawingId, quoteType }).sort({ itemNumber: -1 }).lean();
+//     let nextItemNumber = lastItem ? Number(lastItem.itemNumber) + 1 : 1;
+
+//     const newItems = [];
+
+//     // 3) row loop
+//     for (const row of rows) {
+//       let newItem = null;
+
+//       /** =========================
+//        *  PACKING
+//        *  Columns expected: MPN Name | Description | UOM | Quantity | Unit Price | SGA % | Max Burden % | Freight %
+//        *  ========================= */
+//       if (quoteType === "packing") {
+//         const mpnName = (row["MPN Name"] ?? "").toString().trim();
+//         const descriptionIn = (row["Description"] ?? row.Description ?? "").toString().trim();
+//         const uomCode = (row["UOM"] ?? row.UOM ?? "").toString().trim();
+
+//         const quantity = toNum(row["Quantity"]);
+//         const unitPrice = toNum(row["Unit Price"]);
+//         const sgaPercent = toNum(row["SGA %"]);
+//         const maxBurden = toNum(row["Max Burden %"]);
+//         const freightPercent = toNum(row["Freight %"]);
+
+//         if (!mpnName) throw new Error("MPN Name is required");
+//         if (!uomCode) throw new Error("UOM is required");
+//         if (!(quantity > 0)) throw new Error("Quantity must be > 0");
+
+//         const mpn = await MPN.findOne({ MPN: mpnName }).select("_id Description Manufacturer").lean();
+//         if (!mpn) throw new Error(`MPN not found: ${mpnName}`);
+
+//         const uomDoc = await UOM.findOne({ code: uomCode }).select("_id code").lean();
+//         if (!uomDoc) throw new Error(`UOM not found: ${uomCode}`);
+
+//         const extPrice = round2(quantity * unitPrice);
+//         const upliftPct = (sgaPercent + maxBurden + freightPercent) / 100;
+//         const salesPrice = round2(extPrice * (1 + upliftPct));
+
+//         newItem = {
+//           drawingId,
+//           quoteType, // packing
+//           itemNumber: String(nextItemNumber).padStart(4, "0"),
+
+//           mpn: mpn._id,
+//           description: descriptionIn || (mpn.Description ?? ""),
+//           manufacturer: mpn.Manufacturer ?? "",
+//           uom: uomDoc._id,
+
+//           quantity,
+//           unitPrice,
+//           sgaPercent,
+//           maxBurden,
+//           freightPercent,
+
+//           extPrice,
+//           salesPrice,
+
+//           moq: 0,
+//           tolerance: 0,
+//           actualQty: quantity,
+//           lastEditedBy: req.user?._id || null,
+//         };
+//       }
+
+//       /** =========================
+//        *  MANHOUR
+//        *  Columns expected: Skill Level | Remarks | Quantity
+//        *  ========================= */
+//       else if (quoteType === "manhour") {
+//         const skillName = (row["Skill Level"] ?? "").toString().trim();
+//         const remarks = (row["Remarks"] ?? "").toString().trim();
+//         const quantity = toNum(row["Quantity"]);
+
+//         if (!skillName || !(quantity > 0)) continue;
+
+//         const skillLevel = await SkillLevelCosting.findOne({ skillLevelName: skillName }).populate("type");
+//         if (!skillLevel) throw new Error(`Skill Level not found: ${skillName}`);
+
+//         const unitPrice = toNum(skillLevel.unitPrice ?? skillLevel.rate);
+//         const extPrice = round2(unitPrice * quantity);
+//         const salesPrice = extPrice; // same for manhour
+
+//         newItem = {
+//           drawingId,
+//           quoteType, // manhour
+//           itemNumber: String(nextItemNumber).padStart(4, "0"),
+
+//           description: skillLevel.skillLevelName,
+//           uom: skillLevel.type?._id || null,
+//           skillLevel: skillLevel._id,
+
+//           quantity,
+//           remarks,
+
+//           unitPrice,
+//           salesPrice,
+//           extPrice,
+
+//           lastEditedBy: req.user?._id || null,
+//         };
+//       }
+
+//       /** =========================
+//        *  MATERIAL
+//        *  Columns expected: ChildPart/Part Number | UOM | Child Qty | Tolerance | SGA % | Mat Burden % | Freight Cost % | Fixed Freight Cost
+//        *  ========================= */
+//       else if (quoteType === "material") {
+//         const childKey = row.ChildPart || row["Part Number"];
+//         const childPart = await Child.findOne({ ChildPartNo: childKey }).populate("mpn");
+//         if (!childPart || !childPart.mpn) throw new Error(`MPN not found for ChildPart: ${childKey}`);
+
+//         const uomId = await getUomId(row["UOM"]);
+//         const quantity = toNum(row["Qty"]);
+//         const unitPrice = toNum(childPart?.mpn?.RFQUnitPrice);
+//         const tolerance = toNum(row["Tolerance"]);
+
+//         const sgaPercent = toNum(row["SGA %"]);
+//         const matBurden = toNum(row["Mat Burden %"]);
+//         const freightPercent = toNum(row["Freight Cost %"]);
+//         const fixedFreightCost = toNum(row["Fixed Freight Cost"]);
+
+//         const actualQty = round2(quantity + (quantity * tolerance) / 100);
+//         const extPrice = round2(quantity * unitPrice);
+//         const salesPrice = round2(
+//           extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) + fixedFreightCost
+//         );
+
+//         newItem = {
+//           drawingId,
+//           quoteType, // material
+//           itemNumber: String(nextItemNumber).padStart(4, "0"),
+//           childPart: childPart?._id,
+//           mpn: childPart?.mpn?._id,
+//           description: S(childPart?.mpn?.Description).trim(),
+//           manufacturer: childPart?.mpn?.Manufacturer || "",
+//           uom: uomId,
+//           moq: toNum(childPart?.mpn?.MOQ),
+//           leadTime: toNum(childPart?.mpn?.LeadTime_WK),
+//           rfqDate: childPart?.mpn?.RFQDate,
+//           supplier: childPart?.mpn?.Supplier,
+//           unitPrice,
+
+//           quantity,
+//           tolerance,
+//           actualQty,
+//           sgaPercent,
+//           matBurden,
+//           freightPercent,
+//           fixedFreightCost,
+
+//           extPrice,
+//           salesPrice,
+
+//           lastEditedBy: req.user?._id || "System",
+//         };
+//       }
+
+//       if (newItem) {
+//         newItems.push(newItem);
+//         nextItemNumber++;
+//       }
+//     }
+
+//     // 4) bulk insert
+//     if (newItems.length > 0) {
+//       await CostingItems.insertMany(newItems);
+//     }
+
+//     /** =========================
+//      *  RECOMPUTE TOTALS + MARKUPS
+//      *  ========================= */
+//     const oid = new mongoose.Types.ObjectId(drawingId);
+//     const grouped = await CostingItems.aggregate([
+//       { $match: { drawingId: oid } },
+//       {
+//         $group: {
+//           _id: "$quoteType",
+//           // 👉 If extPrice is canonical, switch to { $sum: { $toDouble: "$extPrice" } }
+//           bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
+//         },
+//       },
+//     ]);
+
+//     let materialTotal = 0;
+//     let manhourTotal = 0;
+//     let packingTotal = 0;
+
+//     for (const g of grouped) {
+//       const t = toNum(g.bucketTotal);
+//       switch ((g._id || "").toLowerCase()) {
+//         case "material": materialTotal = t; break;
+//         case "manhour":  manhourTotal  = t; break;
+//         case "packing":  packingTotal  = t; break;
+//         default: break;
+//       }
+//     }
+
+//     const materialMarkup = toNum(drawing.materialMarkup);
+//     const manhourMarkup = toNum(drawing.manhourMarkup);
+//     const packingMarkup = toNum(drawing.packingMarkup);
+
+//     const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
+//     const manhourWithMarkup  = round2(manhourTotal  + (manhourTotal  * manhourMarkup)  / 100);
+//     const packingWithMarkup  = round2(packingTotal  + (packingTotal  * packingMarkup)  / 100);
+
+//     const totalPriceRaw        = round2(materialTotal + manhourTotal + packingTotal);
+//     const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+
+//     // Lead time bump (optional): max(existing, any imported’s)
+//     const existingLTW = toNum(drawing.leadTimeWeeks);
+//     const importedMaxLTW = Math.max(0, ...newItems.map(x => toNum(x.leadTime ?? x.leadTimeWeeks)));
+//     const finalLTW = Math.max(existingLTW, importedMaxLTW);
+
+//     // 5) persist on drawing
+//     drawing.materialTotal        = round2(materialTotal);
+//     drawing.manhourTotal         = round2(manhourTotal);
+//     drawing.packingTotal         = round2(packingTotal);
+//     drawing.totalPrice           = totalPriceRaw;
+//     drawing.totalPriceWithMarkup = totalPriceWithMarkup;
+//     drawing.leadTimeWeeks        = finalLTW;
+//     drawing.lastEditedBy         = req?.user?._id || drawing.lastEditedBy;
+
+//     await drawing.save();
+
+//     // 6) done
+//     return res.json({
+//       success: true,
+//       message: `✅ ${quoteType} import successful`,
+//       count: newItems.length,
+//       totals: {
+//         materialTotal: drawing.materialTotal,
+//         manhourTotal : drawing.manhourTotal,
+//         packingTotal : drawing.packingTotal,
+//         materialWithMarkup,
+//         manhourWithMarkup,
+//         packingWithMarkup,
+//         totalPrice: drawing.totalPrice,
+//         totalPriceWithMarkup: drawing.totalPriceWithMarkup,
+//         leadTimeWeeks: drawing.leadTimeWeeks,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("❌ Import Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to import costing items",
+//       error: error.message,
+//     });
+//   } finally {
+//     // best-effort cleanup of temp file
+//     if (filePath) {
+//       try { await fs.unlink(filePath); } catch {}
+//     }
+//   }
+// };
 
 
 const pick = (row, ...keys) => {
@@ -2336,7 +2889,15 @@ export const importDrawings = async (req, res) => {
           groups.get(drawingNo).push({ r, rowIndex });
         } else {
           if (!current) {
-            results.errors.push({ row: rowIndex, error: "Row found before any 'Drawing no' header" });
+            // row aa gaya but abhi tak koi Drawing no nahi
+            results.errors.push({
+              drawingNo: null,
+              row: rowIndex,
+              type: "header",
+              field: "Drawing no",
+              value: "",
+              message: "Row found before any 'Drawing no' header",
+            });
             continue;
           }
           groups.get(current).push({ r, rowIndex });
@@ -2377,7 +2938,14 @@ export const importDrawings = async (req, res) => {
       // Avoid duplicates
       const exists = await Drawing.findOne({ drawingNo }).lean();
       if (exists) {
-        results.errors.push({ drawingNo, error: "Duplicate drawing number (already exists)" });
+        results.errors.push({
+          drawingNo,
+          row: null,
+          type: "drawing",
+          field: "drawingNo",
+          value: drawingNo,
+          message: "Duplicate drawing number (already exists)",
+        });
         continue;
       }
 
@@ -2391,7 +2959,7 @@ export const importDrawings = async (req, res) => {
         currency: projectData?.currency || null,
         unitPrice: 0,
         totalPrice: 0,
-        quoteType: incomingQuoteType,  // 'other' or 'cable_harness'
+        quoteType: incomingQuoteType, // 'other' or 'cable_harness'
         quoteStatus: "active",
         materialMarkup: masterMaterial,
         manhourMarkup: masterManhour,
@@ -2404,9 +2972,9 @@ export const importDrawings = async (req, res) => {
       let nextManNo = await getNextItemNumberForType(drawingDoc._id, "manhour");
 
       const materialItems = [];
-      const manhourItems  = [];
+      const manhourItems = [];
 
-      for (const { r } of list) {
+      for (const { r, rowIndex } of list) {
         // Skip truly empty lines
         const anyVal =
           toStr(pick(r, "Child Part", "ChildPart", "childPart")) ||
@@ -2422,97 +2990,244 @@ export const importDrawings = async (req, res) => {
         /* -------- Material line (if Child Part present) -------- */
         const childParts = toStr(pick(r, "Child Part", "ChildPart", "childPart"));
         if (childParts) {
-          const childPart = await Child.findOne({ ChildPartNo: childParts }).populate("mpn");
-          const uomCell = toStr(pick(r, "UOM", "uom"));
-          const uomId = await getUomId(uomCell);
+          let materialHasError = false;
 
-          const childDesc = toStr(pick(r, "Description", "Child Description", "Part Description"));
-          const manufacturer = toStr(pick(r, "Manufacturer", "manufacturer"));
+          const childPart = await Child.findOne({ ChildPartNo: childParts }).populate("mpn");
+
+          if (!childPart) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "Child Part",
+              value: childParts,
+              message: `Child Part not found in system: ${childParts}`,
+            });
+            materialHasError = true;
+          } else if (!childPart.mpn) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "MPN",
+              value: childParts,
+              message: `No MPN linked to Child Part: ${childParts}`,
+            });
+            materialHasError = true;
+          }
+
+          const uomCell = toStr(pick(r, "UOM", "uom"));
+          if (!uomCell) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "UOM",
+              value: "",
+              message: "UOM is required for material line",
+            });
+            materialHasError = true;
+          }
+
+          const uomId = uomCell ? await getUomId(uomCell) : null;
+          if (uomCell && !uomId) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "UOM",
+              value: uomCell,
+              message: `UOM not found: ${uomCell}`,
+            });
+            materialHasError = true;
+          }
 
           const ChildQty = toNum(pick(r, "Child Qty", "child qty"), 0);
-          const tolPct   = toNum(pick(r, "Tol-%", "Tolerance %", "tolPct"), 0);
-          const sgaPct   = toNum(pick(r, "SGA-%", "SGA %", "sgaPct"), 0);
-          const matBurdenPct = toNum(pick(r, "Mat Burden-% (9)", "Mat Burden-%", "Mat Burden %"), 0);
-          const freightPct   = toNum(pick(r, "Freight cost-% (10)", "Freight cost-%", "Freight Cost %"), 0);
-          const fixedFreight = toNum(pick(r, "Fixed Freight cost", "Fixed Freight", "Fixed Freight Cost"), 0);
+          if (!(ChildQty > 0)) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "Child Qty",
+              value: ChildQty,
+              message: "Child Qty must be > 0",
+            });
+            materialHasError = true;
+          }
 
           const unitPrice = toNum(childPart?.mpn?.RFQUnitPrice);
-          const quantity  = toNum(ChildQty);
-          const extPrice  = round2(quantity * unitPrice);
-          const salesPrice = round2(
-            extPrice * (1 + (sgaPct + matBurdenPct + freightPct) / 100) + fixedFreight
-          );
+          if (!materialHasError && !(unitPrice > 0)) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "RFQUnitPrice",
+              value: unitPrice,
+              message: `RFQUnitPrice for MPN of Child Part ${childParts} is missing or 0`,
+            });
+            materialHasError = true;
+          }
 
-          materialItems.push({
-            drawingId: drawingDoc._id,
-            quoteType: "material",
-            itemNumber: fmtNo4(nextMatNo),
+          if (!materialHasError) {
+            const childDesc = toStr(pick(r, "Description", "Child Description", "Part Description"));
+            const manufacturer = toStr(pick(r, "Manufacturer", "manufacturer"));
 
-            childPart: childPart?._id || null,
-            mpn: childPart?.mpn?._id || null,
-            description: toStr(childPart?.mpn?.Description) || childDesc || "",
-            manufacturer: childPart?.mpn?.Manufacturer || manufacturer || "",
-            uom: uomId,
-            rfqDate: childPart?.mpn?.RFQDate,
-            supplier: childPart?.mpn?.Supplier,
-            leadTime: toNum(childPart?.mpn?.LeadTime_WK),
+            const tolPct = toNum(pick(r, "Tol-%", "Tolerance %", "tolPct"), 0);
+            const sgaPct = toNum(pick(r, "SGA-%", "SGA %", "sgaPct"), 0);
+            const matBurdenPct = toNum(pick(r, "Mat Burden-% (9)", "Mat Burden-%", "Mat Burden %"), 0);
+            const freightPct = toNum(
+              pick(r, "Freight cost-% (10)", "Freight cost-%", "Freight Cost %"),
+              0
+            );
+            const fixedFreight = toNum(
+              pick(r, "Fixed Freight cost", "Fixed Freight", "Fixed Freight Cost"),
+              0
+            );
 
-            quantity,
-            tolerance: tolPct,
-            sgaPercent: sgaPct,
-            matBurden: matBurdenPct,
-            freightPercent: freightPct,
-            fixedFreightCost: fixedFreight,
+            const quantity = toNum(ChildQty);
+            const extPrice = round2(quantity * unitPrice);
+            const salesPrice = round2(
+              extPrice * (1 + (sgaPct + matBurdenPct + freightPct) / 100) + fixedFreight
+            );
 
-            unitPrice,
-            extPrice,
-            salesPrice,
+            materialItems.push({
+              drawingId: drawingDoc._id,
+              quoteType: "material",
+              itemNumber: fmtNo4(nextMatNo),
 
-            lastEditedBy: req.user?._id || null,
-          });
-          nextMatNo++;
+              childPart: childPart?._id || null,
+              mpn: childPart?.mpn?._id || null,
+              description: toStr(childPart?.mpn?.Description) || childDesc || "",
+              manufacturer: childPart?.mpn?.Manufacturer || manufacturer || "",
+              uom: uomId,
+              rfqDate: childPart?.mpn?.RFQDate,
+              supplier: childPart?.mpn?.Supplier,
+              leadTime: toNum(childPart?.mpn?.LeadTime_WK),
+
+              quantity,
+              tolerance: tolPct,
+              sgaPercent: sgaPct,
+              matBurden: matBurdenPct,
+              freightPercent: freightPct,
+              fixedFreightCost: fixedFreight,
+
+              unitPrice,
+              extPrice,
+              salesPrice,
+
+              lastEditedBy: req.user?._id || null,
+            });
+            nextMatNo++;
+          }
         }
 
         /* -------- Labour line (if labour columns present) -------- */
         const labourSkill = toStr(pick(r, "Labour Skill Level", "Skill Level", "Labour Level"));
-        const labourDesc  = toStr(pick(r, "Labour Description", "Labour Remarks", "Remarks")) || labourSkill;
+        const labourDesc =
+          toStr(pick(r, "Labour Description", "Labour Remarks", "Remarks")) || labourSkill;
         const labourUomTx = toStr(pick(r, "Labour UOM", "UOM (Labour)", "LabourUOM"));
-        const labourQty   = toNum(pick(r, "Labour Qty", "Qty (Labour)", "Labour Quantity", "Quantity"), 0);
+        const labourQty = toNum(
+          pick(r, "Labour Qty", "Qty (Labour)", "Labour Quantity", "Quantity"),
+          0
+        );
 
         const hasLabour = (labourSkill || labourDesc || labourUomTx) && labourQty > 0;
+
         if (hasLabour) {
-          const labourUomId = await getUomId(labourUomTx);
+          let labourHasError = false;
+
+          if (!(labourQty > 0)) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "manhour",
+              field: "Labour Qty",
+              value: labourQty,
+              message: "Labour Qty must be > 0",
+            });
+            labourHasError = true;
+          }
+
+          if (!labourUomTx) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "manhour",
+              field: "Labour UOM",
+              value: "",
+              message: "Labour UOM is required",
+            });
+            labourHasError = true;
+          }
+
+          const labourUomId = labourUomTx ? await getUomId(labourUomTx) : null;
+          if (labourUomTx && !labourUomId) {
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "manhour",
+              field: "Labour UOM",
+              value: labourUomTx,
+              message: `Labour UOM not found: ${labourUomTx}`,
+            });
+            labourHasError = true;
+          }
+
           let skillLevel = null;
-          try {
-            if (labourSkill) {
+          if (labourSkill) {
+            try {
               skillLevel = await SkillLevelCosting
                 .findOne({ skillLevelName: labourSkill })
                 .select("_id skillLevelName unitPrice rate type")
                 .populate("type")
                 .lean();
+            } catch (e) {
+              results.errors.push({
+                drawingNo,
+                row: rowIndex,
+                type: "manhour",
+                field: "Labour Skill Level",
+                value: labourSkill,
+                message: `Error while fetching skill level: ${e.message}`,
+              });
+              labourHasError = true;
             }
-          } catch { /* ignore */ }
 
-          const unitRate = toNum(skillLevel?.unitPrice ?? skillLevel?.rate);
-          const extPrice = round2(unitRate * labourQty);
-          const salesPrice = extPrice; // same for manhour
+            if (!skillLevel) {
+              results.errors.push({
+                drawingNo,
+                row: rowIndex,
+                type: "manhour",
+                field: "Labour Skill Level",
+                value: labourSkill,
+                message: `Skill Level not found: ${labourSkill}`,
+              });
+              labourHasError = true;
+            }
+          }
 
-          manhourItems.push({
-            drawingId: drawingDoc._id,
-            quoteType: "manhour",
-            itemNumber: fmtNo4(nextManNo),
+          if (!labourHasError) {
+            const unitRate = toNum(skillLevel?.unitPrice ?? skillLevel?.rate);
+            const extPrice = round2(unitRate * labourQty);
+            const salesPrice = extPrice; // same for manhour
 
-            description: labourDesc,
-            uom: labourUomId,
-            quantity: labourQty,
-            skillLevel: skillLevel?._id || null,
-            unitPrice: unitRate,
-            extPrice,
-            salesPrice,
+            manhourItems.push({
+              drawingId: drawingDoc._id,
+              quoteType: "manhour",
+              itemNumber: fmtNo4(nextManNo),
 
-            lastEditedBy: req.user?._id || null,
-          });
-          nextManNo++;
+              description: labourDesc,
+              uom: labourUomId,
+              quantity: labourQty,
+              skillLevel: skillLevel?._id || null,
+              unitPrice: unitRate,
+              extPrice,
+              salesPrice,
+
+              lastEditedBy: req.user?._id || null,
+            });
+            nextManNo++;
+          }
         }
       }
 
@@ -2534,48 +3249,57 @@ export const importDrawings = async (req, res) => {
           {
             $group: {
               _id: "$quoteType",
-              // 👉 If your truth is extPrice, switch to: { $sum: { $toDouble: "$extPrice" } }
               bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
             },
           },
         ]);
 
-        let materialTotal = 0, manhourTotal = 0, packingTotal = 0;
+        let materialTotal = 0,
+          manhourTotal = 0,
+          packingTotal = 0;
         for (const g of grouped) {
           const t = toNum(g.bucketTotal);
           switch ((g._id || "").toLowerCase()) {
-            case "material": materialTotal = t; break;
-            case "manhour":  manhourTotal  = t; break;
-            case "packing":  packingTotal  = t; break;
-            default: break;
+            case "material":
+              materialTotal = t;
+              break;
+            case "manhour":
+              manhourTotal = t;
+              break;
+            case "packing":
+              packingTotal = t;
+              break;
+            default:
+              break;
           }
         }
 
         const materialMarkup = toNum(drawingDoc.materialMarkup);
-        const manhourMarkup  = toNum(drawingDoc.manhourMarkup);
-        const packingMarkup  = toNum(drawingDoc.packingMarkup);
+        const manhourMarkup = toNum(drawingDoc.manhourMarkup);
+        const packingMarkup = toNum(drawingDoc.packingMarkup);
 
         const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
-        const manhourWithMarkup  = round2(manhourTotal  + (manhourTotal  * manhourMarkup)  / 100);
-        const packingWithMarkup  = round2(packingTotal  + (packingTotal  * packingMarkup)  / 100);
+        const manhourWithMarkup = round2(manhourTotal + (manhourTotal * manhourMarkup) / 100);
+        const packingWithMarkup = round2(packingTotal + (packingTotal * packingMarkup) / 100);
 
-        const totalPriceRaw        = round2(materialTotal + manhourTotal + packingTotal);
-        const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
-
-        // Optional: bump lead time by imported lines’ leadTime
-        const importedMaxLTW = Math.max(
-          toNum(drawingDoc.leadTimeWeeks),
-          ...materialItems.map(x => toNum(x.leadTime)),
-          ...manhourItems.map(x => toNum(x.leadTime))
+        const totalPriceRaw = round2(materialTotal + manhourTotal + packingTotal);
+        const totalPriceWithMarkup = round2(
+          materialWithMarkup + manhourWithMarkup + packingWithMarkup
         );
 
-        drawingDoc.materialTotal        = round2(materialTotal);
-        drawingDoc.manhourTotal         = round2(manhourTotal);
-        drawingDoc.packingTotal         = round2(packingTotal);
-        drawingDoc.totalPrice           = totalPriceRaw;
+        const importedMaxLTW = Math.max(
+          toNum(drawingDoc.leadTimeWeeks),
+          ...materialItems.map((x) => toNum(x.leadTime)),
+          ...manhourItems.map((x) => toNum(x.leadTime))
+        );
+
+        drawingDoc.materialTotal = round2(materialTotal);
+        drawingDoc.manhourTotal = round2(manhourTotal);
+        drawingDoc.packingTotal = round2(packingTotal);
+        drawingDoc.totalPrice = totalPriceRaw;
         drawingDoc.totalPriceWithMarkup = totalPriceWithMarkup;
-        drawingDoc.leadTimeWeeks        = importedMaxLTW;
-        drawingDoc.lastEditedBy         = req?.user?._id || drawingDoc.lastEditedBy;
+        drawingDoc.leadTimeWeeks = importedMaxLTW;
+        drawingDoc.lastEditedBy = req?.user?._id || drawingDoc.lastEditedBy;
 
         await drawingDoc.save();
       }
@@ -2590,15 +3314,47 @@ export const importDrawings = async (req, res) => {
       });
     }
 
-    // 10) Done
-    try { fs.unlinkSync(req.file.path); } catch {}
+    // 🔟 Helper: errors ko single string me convert karo
+    const formatErrorsToSingleMessage = (errors = []) => {
+      if (!errors.length) return "";
+      return errors
+        .map((e) => {
+          const parts = [];
+          if (e.drawingNo) parts.push(`Drawing ${e.drawingNo}`);
+          if (e.row != null) parts.push(`Row ${e.row}`);
+          if (e.field) parts.push(`${e.field}: ${e.value ?? "-"}`);
+          if (e.message) parts.push(e.message);
+          return parts.join(" ");
+        })
+        .join(", ");
+    };
+
+    const errorMessage = formatErrorsToSingleMessage(results.errors);
+
+    // File cleanup
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch {}
+
+    // 🔚 If there are errors -> 400 with combined message
+    if (results.errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: errorMessage, // 👈 ye hi frontend pe message.error() me dikhana
+        data: results, // (optional) agar UI ko counts chahiye to
+      });
+    }
+
+    // No errors -> Success
     return res.status(200).json({
       success: true,
-      message: `Import complete — Drawings: ${results.drawingsAdded.length}, Material lines: ${results.itemsAdded}, Manhour lines: ${results.manhourAdded}, Errors: ${results.errors.length}`,
+      message: `Import complete — Drawings: ${results.drawingsAdded.length}, Material lines: ${results.itemsAdded}, Manhour lines: ${results.manhourAdded}`,
       data: results,
     });
   } catch (error) {
-    try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch {}
+    try {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+    } catch {}
     return res.status(500).json({
       success: false,
       message: "Error importing drawings",
@@ -2606,6 +3362,7 @@ export const importDrawings = async (req, res) => {
     });
   }
 };
+
 
 // export const importDrawings = async (req, res) => {
 //   try {
