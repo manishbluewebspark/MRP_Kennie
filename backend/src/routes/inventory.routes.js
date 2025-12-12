@@ -1,5 +1,5 @@
 import express from "express";
-import { addShortage, adjustInventory, exportExcel, exportInventoryAlertsExcel, exportInventoryListExcel, exportMaterialRequiredExcel, getInventoryList, getLowStockAlerts, getMaterialRequiredList, getMaterialShortages } from "../controllers/inventory.controller.js";
+import { addShortage, adjustInventory, exportExcel, exportInventoryAlertsExcel, exportInventoryListExcel, exportMaterialRequiredExcel, getCompleteDrawingsMTO, getInventoryList, getLowStockAlerts, getMaterialRequiredList, getMaterialShortages } from "../controllers/inventory.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 const router = express.Router();
 
@@ -16,6 +16,8 @@ router.get(
   authenticate,
   exportMaterialRequiredExcel
 );
+
+router.get("/inventory/get-mto-inventory",authenticate,getCompleteDrawingsMTO)
 
 // INVENTORY LIST EXPORT
 router.get(

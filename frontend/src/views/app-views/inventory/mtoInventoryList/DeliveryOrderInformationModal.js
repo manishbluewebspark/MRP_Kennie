@@ -3,7 +3,8 @@ import { Modal, Descriptions, Typography, Tag } from 'antd';
 
 const { Title, Text } = Typography;
 
-const DeliveryOrderInformationModal = ({ visible, onCancel }) => {
+const DeliveryOrderInformationModal = ({ visible, onCancel, data }) => {
+  console.log('-----data',data)
   return (
     <Modal
       title="Delivery Order Information"
@@ -15,7 +16,7 @@ const DeliveryOrderInformationModal = ({ visible, onCancel }) => {
     >
       <div style={{ marginBottom: 16 }}>
         <Text>
-          Delivery order details for <Text strong>11223355-C</Text>
+          Delivery order details for <Text strong>{data?.drawingNo}</Text>
         </Text>
       </div>
 
@@ -32,30 +33,30 @@ const DeliveryOrderInformationModal = ({ visible, onCancel }) => {
         }}
       >
         <Descriptions.Item label="Drawing No:">
-          <Text>11223355-C</Text>
+          <Text>{data?.drawingNo}</Text>
         </Descriptions.Item>
         
         <Descriptions.Item label="Work Order:">
-          <Text>2508-03</Text>
+          <Text>{data?.workOrders[0]}</Text>
         </Descriptions.Item>
         
         <Descriptions.Item label="Outgoing Qty:">
-          <Text>1</Text>
+          <Text>{data?.outgoingQty}</Text>
         </Descriptions.Item>
         
         <Descriptions.Item label="DO Number:">
-          <Tag color="orange">Not assigned</Tag>
+          <Tag color="orange">{data?.doNumbers[0] ? data?.doNumbers[0] : "Not Assigned"}</Tag>
         </Descriptions.Item>
       </Descriptions>
 
       <div style={{ marginTop: 16, marginBottom: 8 }}>
         <Text strong>Customer: </Text>
-        <Text>VDL Enabling Technologies Group (S) Pte Ltd</Text>
+        <Text>{data?.customers[0]}</Text>
       </div>
 
       <div style={{ marginBottom: 16 }}>
         <Text strong>Project: </Text>
-        <Text>EPIK</Text>
+        <Text>{data?.projects[0]}</Text>
       </div>
 
       <div style={{ textAlign: 'right', marginTop: 24 }}>

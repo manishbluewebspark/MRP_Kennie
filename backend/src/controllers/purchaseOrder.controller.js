@@ -157,14 +157,66 @@ export const addPurchaseOrder = async (req, res) => {
 /**
  * Update Purchase Order
  */
+
 export const updatePurchaseOrder = async (req, res) => {
   try {
     const { id } = req.params;
     const data = req.body || {};
 
     if (!id) {
-      return res.status(400).json({ success: false, error: "Missing purchase order ID" });
+      return res
+        .status(400)
+        .json({ success: false, error: "Missing purchase order ID" });
     }
+
+    // 1️⃣ SPECIAL CASE:
+    // Agar sirf ek item ka committedDate update aaya hai
+    // payload: { idNumber, mpn, committedDate }
+    if (
+      !Array.isArray(data.items) &&               // full items update nahi hai
+      data.idNumber &&
+      data.mpn &&
+      data.committedDate
+    ) {
+      const po = await PurchaseOrders.findById(id);
+      if (!po) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Purchase order not found" });
+      }
+
+      // Item find by idNumber + mpn
+      const idx = po.items.findIndex(
+        (it) =>
+          String(it.idNumber) === String(data.idNumber) &&
+          String(it.mpn) === String(data.mpn)
+      );
+
+      if (idx === -1) {
+        return res.status(404).json({
+          success: false,
+          error: "PO item not found for given idNumber + mpn",
+        });
+      }
+
+      // ✅ committedDate update
+      po.items[idx].committedDate = new Date(data.committedDate);
+
+      // Agar status / koi aur field bhi aai ho to optionally update kar sakte ho:
+      if (data.status) {
+        po.status = data.status;
+      }
+
+      await po.save();
+
+      return res.json({
+        success: true,
+        message: "Committed date updated successfully",
+        data: po,
+      });
+    }
+
+    // 2️⃣ DEFAULT FLOW (tumhara existing full PO update) – YE WAISA HI RHEGA
 
     // helper to force numeric values
     const num = (v, def = 0) => {
@@ -174,7 +226,7 @@ export const updatePurchaseOrder = async (req, res) => {
 
     // compute extPrice for each item and subtotal
     let subTotal = 0;
-    const items = (data.items || []).map((item, i) => {
+    const items = (data.items || []).map((item) => {
       const qty = num(item.qty);
       const unitPrice = num(item.unitPrice);
       const discount = num(item.discount ?? item.discPercentage);
@@ -194,7 +246,9 @@ export const updatePurchaseOrder = async (req, res) => {
     });
 
     // compute totals
-    const freightAmount = num(data.totals?.freightAmount ?? data.freightAmount);
+    const freightAmount = num(
+      data.totals?.freightAmount ?? data.freightAmount
+    );
     const ostTax = +(subTotal * 0.09);
     const finalAmount = +(subTotal + freightAmount + ostTax);
 
@@ -215,7 +269,9 @@ export const updatePurchaseOrder = async (req, res) => {
     );
 
     if (!updated) {
-      return res.status(404).json({ success: false, error: "Purchase order not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Purchase order not found" });
     }
 
     res.json({ success: true, data: updated });
@@ -224,6 +280,74 @@ export const updatePurchaseOrder = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// export const updatePurchaseOrder = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const data = req.body || {};
+
+//     if (!id) {
+//       return res.status(400).json({ success: false, error: "Missing purchase order ID" });
+//     }
+
+//     // helper to force numeric values
+//     const num = (v, def = 0) => {
+//       const n = Number(v);
+//       return Number.isFinite(n) ? n : def;
+//     };
+
+//     // compute extPrice for each item and subtotal
+//     let subTotal = 0;
+//     const items = (data.items || []).map((item, i) => {
+//       const qty = num(item.qty);
+//       const unitPrice = num(item.unitPrice);
+//       const discount = num(item.discount ?? item.discPercentage);
+
+//       const extPrice = +(qty * unitPrice * (1 - discount / 100));
+
+//       // accumulate subtotal
+//       subTotal += extPrice;
+
+//       return {
+//         ...item,
+//         qty,
+//         unitPrice,
+//         discount,
+//         extPrice,
+//       };
+//     });
+
+//     // compute totals
+//     const freightAmount = num(data.totals?.freightAmount ?? data.freightAmount);
+//     const ostTax = +(subTotal * 0.09);
+//     const finalAmount = +(subTotal + freightAmount + ostTax);
+
+//     // perform update
+//     const updated = await PurchaseOrders.findByIdAndUpdate(
+//       id,
+//       {
+//         ...data,
+//         items,
+//         totals: {
+//           freightAmount,
+//           subTotalAmount: subTotal,
+//           ostTax,
+//           finalAmount,
+//         },
+//       },
+//       { new: true, runValidators: true }
+//     );
+
+//     if (!updated) {
+//       return res.status(404).json({ success: false, error: "Purchase order not found" });
+//     }
+
+//     res.json({ success: true, data: updated });
+//   } catch (error) {
+//     console.error("❌ updatePurchaseOrder error:", error);
+//     res.status(500).json({ success: false, error: error.message });
+//   }
+// };
 
 export const updatePurchaseOrderStatus = async (req, res) => {
   try {

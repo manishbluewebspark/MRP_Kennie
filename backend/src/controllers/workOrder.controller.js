@@ -4224,6 +4224,7 @@ const updateWorkOrderStatus = (wo) => {
     wo.status = "Completed";
     wo.isProductionComplete = true;
     wo.isInProduction = false;
+    wo.completeDate = new Date()
   }
 };
 

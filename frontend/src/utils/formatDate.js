@@ -1,5 +1,6 @@
 // utils/formatDate.js
 export const formatDate = (date, options = {}) => {
+  console.log('-----completedDate',date)
   if (!date) return "-";
 
   try {

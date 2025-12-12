@@ -29,9 +29,6 @@ router.get(
 );
 
 router.post("/workorder/production/:id/stage", saveWorkOrderStage);
-
-
-
 router.get("/workOrder/getEachMPNUsage",authenticate,getEachMPNUsage)
 
 router.get("/workOrder/getCompleteWorkOrders",authenticate,getCompleteWorkOrders)

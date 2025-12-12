@@ -3,6 +3,10 @@ import Inventory from "../models/Inventory.js";
 import MPN from "../models/library/MPN.js";
 import PurchaseOrders from "../models/PurchaseOrders.js";
 import XLSX from 'xlsx'
+import WorkOrder from "../models/WorkingOrders.js";
+import Drawing from "../models/Drwaing.js";
+import Customer from "../models/Customer.js";
+import Project from "../models/Project.js";
 
 // controllers/inventoryController.js
 // export const getInventoryList = async (req, res) => {
@@ -201,13 +205,13 @@ export const getInventoryList = async (req, res) => {
             status: { $in: ["Pending", "Approved", "Partially Received"] },
           })
             .select(
-              "poNumber supplier needDate  items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt"
+              "_id poNumber supplier needDate  items.mpn items.idNumber items.qty items.receivedQtyTotal items.pendingQty items.committedDate items.needDate status createdAt updatedAt"
             )
             .populate("items.mpn", "MPN Description Manufacturer UOM") // UOM id yahan tak
             .populate("supplier", "companyName contactPerson companyAddress")
             .lean();
 
-            console.log('--------pendingPOs',pendingPOs)
+          console.log('--------pendingPOs', pendingPOs)
 
           let totalIncomingQty = 0;
           let incomingPONumbers = [];
@@ -218,7 +222,7 @@ export const getInventoryList = async (req, res) => {
             po.items.forEach((poItem) => {
               if (poItem.mpn && String(poItem.mpn._id) === mpnIdStr) {
                 const remainingQty =
-                  (poItem.qty || 0) - (poItem.receivedQty || 0);
+                  (poItem.qty || 0) - (poItem.receivedQtyTotal || 0);
 
                 if (remainingQty > 0) {
                   totalIncomingQty += remainingQty;
@@ -232,16 +236,20 @@ export const getInventoryList = async (req, res) => {
                   }
 
                   purchaseData.push({
+                    _id: po?._id,
+                    idNumber: poItem?.idNumber,
+                    mpn: poItem?.mpn,
                     poNumber: po.poNumber,
                     supplier: po.supplier || { name: "N/A" },
                     quantity: remainingQty,
                     totalQuantity: poItem.qty || 0,
-                    receivedQuantity: poItem.receivedQty || 0,
+                    receivedQuantity: poItem.receivedQtyTotal || 0,
+                    pendingQuantity: poItem.pendingQty || 0,
                     needDate: po.needDate
                       ? new Date(po.needDate).toLocaleDateString()
                       : "N/A",
-                    committedDate: po.commitDate
-                      ? new Date(po.commitDate).toLocaleDateString()
+                    committedDate: poItem.committedDate
+                      ? new Date(poItem.committedDate).toLocaleDateString()
                       : "N/A",
                     status: po.status,
                     createdAt: po.createdAt,
@@ -1250,7 +1258,7 @@ export const getMaterialShortages = async (req, res) => {
           workOrderNo: wo.workOrderNo,
           drawingId: wo.drawingId,
           requiredQty: wo.requiredQty,
-          pickedQty:wo?.pickedQty,
+          pickedQty: wo?.pickedQty,
           needDate: wo.needDate,
           createdAt: wo.createdAt,
         });
@@ -1268,6 +1276,236 @@ export const getMaterialShortages = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+export const getCompleteDrawingsMTO = async (req, res) => {
+  try {
+    let { page = 1, limit = 20, search } = req.query;
+
+    page = Number(page) || 1;
+    limit = Number(limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // 1️⃣ Base query: sirf woh WorkOrders jo drawing ke saath linked hain
+    const woQuery = {
+      drawingId: { $exists: true, $ne: null },
+    };
+
+    // Optional search on drawing no / project / customer later handle karenge UI level par
+    // Ya tum yaha bhi search attach kar sakte ho (agar drawingNo, projectName ke basis par chahiye to aggregation se karein)
+
+    // 2️⃣ Fetch WorkOrders (no pagination yaha, aggregation drawing level par hai)
+    const workOrders = await WorkOrder.find(woQuery)
+      .select(
+        "drawingId doNumber quantity status completeDate  delivered projectId workOrderNo isInProduction"
+      )
+      .lean();
+
+    if (!workOrders.length) {
+      return res.json({
+        success: true,
+        message: "No work orders found for drawings",
+        data: [],
+        pagination: { total: 0, page, limit, pages: 0 },
+      });
+    }
+
+    // 3️⃣ Collect all IDs for lookups
+    const drawingIds = [
+      ...new Set(workOrders.map((wo) => String(wo.drawingId)).filter(Boolean)),
+    ];
+
+    const projectIds = [
+      ...new Set(
+        workOrders
+          .map((wo) => (wo.projectId ? String(wo.projectId) : null))
+          .filter(Boolean)
+      ),
+    ];
+
+    // 4️⃣ Lookups: Drawings, Projects, Customers
+    const [drawingDocs, projectDocs] = await Promise.all([
+      Drawing.find({ _id: { $in: drawingIds } })
+        .select("drawingNo description")
+        .lean(),
+      Project.find({ _id: { $in: projectIds } })
+        .select("projectName customerId")
+        .lean(),
+    ]);
+
+    const drawingMap = new Map();
+    drawingDocs.forEach((d) =>
+      drawingMap.set(String(d._id), {
+        drawingNo: d.drawingNo,
+        description: d.description || "",
+      })
+    );
+
+    const projectMap = new Map();
+    const customerIds = [];
+
+    projectDocs.forEach((p) => {
+      projectMap.set(String(p._id), {
+        projectName: p.projectName,
+        customerId: p.customerId ? String(p.customerId) : null,
+      });
+      if (p.customerId) customerIds.push(String(p.customerId));
+    });
+
+    const uniqueCustomerIds = [...new Set(customerIds)];
+
+    // Customer model se companyName nikaalo
+    const customerDocs = await Customer.find({
+      _id: { $in: uniqueCustomerIds },
+    })
+      .select("companyName")
+      .lean();
+
+    const customerMap = new Map();
+    customerDocs.forEach((c) =>
+      customerMap.set(String(c._id), c.companyName || "")
+    );
+
+    // 5️⃣ Aggregate per drawing
+    const drawingAggMap = new Map();
+    let doNumber;
+    workOrders.forEach((wo) => {
+      const dId = String(wo.drawingId);
+      if (!dId) return;
+
+      const drawingInfo = drawingMap.get(dId) || {
+        drawingNo: null,
+        description: "",
+      };
+
+      doNumber = wo?.doNumber;
+      const projInfo = wo.projectId
+        ? projectMap.get(String(wo.projectId))
+        : null;
+
+      const customerName =
+        projInfo?.customerId
+          ? customerMap.get(projInfo.customerId) || ""
+          : "";
+
+      let agg = drawingAggMap.get(dId);
+      if (!agg) {
+        agg = {
+          drawingId: dId,
+          drawingNo: drawingInfo.drawingNo,
+          description: drawingInfo.description,
+          totalQty: 0,
+          completedQty: 0,
+          workOrders: new Set(),
+          projects: new Set(),
+          customers: new Set(),
+          doNumbers: new Set(), // ✅ add
+          completeDates:[]
+        };
+      }
+
+
+      const qty = Number(wo.quantity || 0);
+      agg.totalQty += qty;
+      agg.workOrders.add(wo.workOrderNo);
+
+        if (wo.completeDate) {
+    agg.completeDates.push(new Date(wo.completeDate));
+  }
+
+
+      if (projInfo?.projectName) {
+        agg.projects.add(projInfo.projectName);
+      }
+
+      if (wo?.doNumber) {
+        agg.doNumbers.add(wo.doNumber);
+      }
+
+
+      if (customerName) {
+        agg.customers.add(customerName);
+      }
+
+      // ✅ Completed logic: status===completed ya delivered === true
+      const isCompletedStage =
+        wo.status === "completed" || wo.delivered === true;
+
+      if (isCompletedStage) {
+        agg.completedQty += qty;
+      }
+
+      drawingAggMap.set(dId, agg);
+    });
+
+    // 6️⃣ Convert map → array + compute Balance & Completed %
+    let rows = Array.from(drawingAggMap.values()).map((agg, index) => {
+      const balanceQty = Math.max(0, agg.totalQty - agg.completedQty);
+      const outgoingQty = agg.completedQty;
+      const completedPercent =
+        agg.totalQty > 0
+          ? Number(((agg.completedQty / agg.totalQty) * 100).toFixed(1))
+          : 0;
+
+           const completeDate =
+    agg.completeDates.length > 0
+      ? new Date(Math.max(...agg.completeDates.map(d => d.getTime())))
+      : null;
+
+
+      return {
+        no: index + 1,
+        drawingId: agg.drawingId,
+        drawingNo: agg.drawingNo,
+        description: agg.description,
+        balanceQty,
+        outgoingQty,
+        doNumbers: Array.from(agg.doNumbers), // ✅ array of DOs
+        workOrders: Array.from(agg.workOrders),
+        projects: Array.from(agg.projects),
+        customers: Array.from(agg.customers),
+        completedPercent,
+        isCompleted: balanceQty === 0,
+        completeDate
+      };
+
+    });
+
+    // 7️⃣ Optional search (frontend friendly: by drawingNo / project / customer)
+    if (search) {
+      const s = String(search).toLowerCase();
+      rows = rows.filter((r) => {
+        return (
+          (r.drawingNo || "").toLowerCase().includes(s) ||
+          (r.description || "").toLowerCase().includes(s) ||
+          r.projects.some((p) => p.toLowerCase().includes(s)) ||
+          r.customers.some((c) => c.toLowerCase().includes(s))
+        );
+      });
+    }
+
+    const total = rows.length;
+    const pagedRows = rows.slice(skip, skip + limit);
+
+    return res.json({
+      success: true,
+      message: "Complete drawings MTO fetched",
+      data: pagedRows,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (err) {
+    console.error("Error getCompleteDrawingsMTO:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 
 
 

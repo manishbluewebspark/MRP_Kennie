@@ -6,6 +6,7 @@ import useDebounce from "utils/debouce";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import WorkOrderService from "services/WorkOrderService"; // ← make sure this exists
 import dayjs from "dayjs";
+import { formatDate } from "utils/formatDate";
 const renderBadge = (text, type) => {
   let color = "default";
   if (type === "status") {
@@ -46,8 +47,8 @@ const DeliveryOrderPage = () => {
       customer: wo.customerName || wo.customer?.companyName || "-",
       qty: wo?.quantity ?? wo.qty ?? "-",
       poNumber: wo.poNumber || "-",
-      completedDate: wo.completeDate
-        ? new Date(wo.completeDate).toLocaleDateString("en-GB")
+      completedDate: wo.completedDate
+        ? new Date(wo.completedDate).toLocaleDateString("en-GB")
         : "-",
       targetDeliveryDate: wo.targetDeliveryDate
         ? new Date(wo.targetDeliveryDate).toLocaleDateString("en-GB")
@@ -160,7 +161,7 @@ const handleTargetDeliveryChange = async (record, date) => {
     await WorkOrderService.updateWorkOrder(record._id, {             // ensure backend knows which item
       targetDeliveryDate: isoDate,         // ISO date string
     });
-
+   fetchWorkOrders()
     message.success("Target Delivery Date updated");
   } catch (e) {
     console.error(e);
@@ -228,9 +229,9 @@ const handleTargetDeliveryChange = async (record, date) => {
       title: "Completed Date",
       dataIndex: "completedDate",
       key: "completedDate",
-      render: (text) => (
+      render: (_,record) => (
         <Tag style={{ borderRadius: 12, background: "#16A34A", color: "#fff", border: "none", padding: "2px 10px" }}>
-          {text}
+          {formatDate(record?.completedDate)}
         </Tag>
       ),
     },
@@ -238,16 +239,27 @@ const handleTargetDeliveryChange = async (record, date) => {
   title: "Target Delivery Date",
   dataIndex: "targetDeliveryDate",
   key: "targetDeliveryDate",
-  render: (_, record) => (
-    <DatePicker
-      value={record.targetDeliveryDate ? dayjs(record.targetDeliveryDate) : null}
-      onChange={(date) => handleTargetDeliveryChange(record, date)}
-      format="DD/MM/YYYY"
-      style={{ width: 130 }}
-      disabled={loading}
-    />
-  ),
-},
+  render: (_, record) => {
+    const raw = record?.targetDeliveryDate;
+
+    // --- SAFE DATE PARSING ---
+    const dateValue =
+      raw && dayjs(raw).isValid()
+        ? dayjs(raw)
+        : null;
+
+    return (
+      <DatePicker
+        value={dateValue}
+        onChange={(date) => handleTargetDeliveryChange(record, date)}
+        format="DD/MM/YYYY"
+        style={{ width: 130 }}
+        disabled={loading}
+      />
+    );
+  },
+}
+,
     {
       title: "Status",
       dataIndex: "status",

@@ -52,6 +52,14 @@ InventoryService.getMaterialShortages = function (params = {}) {
   });
 };
 
+InventoryService.getCompleteDrawingsMTO = function (params = {}) {
+  return fetch({
+    url: "/inventory/inventory/get-mto-inventory",
+    method: "get",
+    params,
+  });
+};
+
 
 
 InventoryService.exportMaterialRequired = () => {

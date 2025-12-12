@@ -9,6 +9,8 @@ import WorkOrderService from "services/WorkOrderService";
 import useDebounce from "utils/debouce";
 import UpdateOutgoingQuantityModal from "./UpdateOutgoingQuantityModal";
 import DeliveryOrderInformationModal from "./DeliveryOrderInformationModal";
+import InventoryService from "services/InventoryService";
+import { formatDate } from "utils/formatDate";
 
 const { confirm } = Modal;
 
@@ -43,109 +45,151 @@ const MtoInventoryList = () => {
     const [editingWorkOrder, setEditingWorkOrder] = useState(null);
     const [totalCount, setTotalCount] = useState(0);
     const [isViewQtyModal, setIsViewQtyModal] = useState(false);
-
-
-    const tableData = [
-        {
-            key: '1',
-            no: '1',
-            drawingNo: 'Th22aas5C',
-            description: 'Aphacable',
-            balanceQty: '10',
-            gly: '10°',
-            outgoingQty: '2508-03',
-            workOrder: 'pk',
-            project: 'VoL',
-            customer: 'Enabing Technologies ¢roup(S)PteLts',
-            completed: '9/20/2028'
-        }
-    ];
-
+const [selectedDORecord, setSelectedDORecord] = useState(null);
 
     const columns = [
+        { title: "No.", dataIndex: "no", key: "no", width: 60 },
+        { title: "Drawing No.", dataIndex: "drawingNo", key: "drawingNo" },
+        { title: "Description", dataIndex: "description", key: "description" },
+        { title: "Balance Qty", dataIndex: "balanceQty", key: "balanceQty" },
         {
-            title: 'No.',
-            dataIndex: 'no',
-            key: 'no',
-            width: 60,
-            align: 'center',
-            fixed: 'left'
-        },
-        {
-            title: 'Drawing No.',
-            dataIndex: 'drawingNo',
-            key: 'drawingNo',
-            width: 100,
-        },
-        {
-            title: 'Description',
-            dataIndex: 'description',
-            key: 'description',
+            title: "Outgoing Qty",
+            dataIndex: "outgoingQty",
+            key: "outgoingQty",
             width: 120,
-        },
-        {
-            title: 'Balance Qty',
-            dataIndex: 'balanceQty',
-            key: 'balanceQty',
-            width: 100,
-            align: 'center',
-        },
-        {
-            title: 'Outgoing Qty',
-            dataIndex: 'outgoingQty',
-            key: 'outgoingQty',
-            width: 100,
-            align: 'center',
-            render: (qty) => (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    {qty}
-                    <EyeFilled style={{ fontSize: 17, color: '#1890ff' }}  onClick={()=>{setIsViewQtyModal(true)}}/>
+            align: "center",
+            render: (qty, record) => (
+                <span
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                    }}
+                >
+                    <b>{qty ?? 0}</b>
+                    <EyeFilled
+                        style={{ fontSize: 17, color: "#1890ff", cursor: "pointer" }}
+                        onClick={() => {
+                            setSelectedDORecord(record);      // ✅ add this state
+                            setIsViewQtyModal(true);
+                        }}
+                    />
                 </span>
             ),
         },
+        ,
         {
-            title: 'WorkOrder',
-            dataIndex: 'workOrder',
-            key: 'workOrder',
-            width: 100,
+            title: "Work Order",
+            dataIndex: "workOrders",
+            key: "workOrders",
+            render: (arr) => arr?.join(", "),
         },
         {
-            title: 'Project',
-            dataIndex: 'project',
-            key: 'project',
-            width: 120,
+            title: "Project",
+            dataIndex: "projects",
+            key: "projects",
+            render: (arr) => arr?.join(", "),
         },
         {
-            title: 'Customer',
-            dataIndex: 'customer',
-            key: 'customer',
-            width: 200,
-            ellipsis: true,
+            title: "Customer",
+            dataIndex: "customers",
+            key: "customers",
+            render: (arr) => arr?.join(", "),
         },
         {
-            title: 'Competed',
-            dataIndex: 'completed',
-            key: 'completed',
-            width: 100,
-            align: 'center',
-            render: (date) => <Tag color="green">{date}</Tag>
-        },
-        {
-            title: '',
-            key: 'actions',
-            width: 120,
-            align: 'center',
-            fixed: 'right',
-            render: (_, record) => (
-                <Space size="small">
-                    <ActionButtons
-                        showEdit
-                        onEdit={() => handleEdit(record)}
-                    />
-                </Space>
-            ),
+            title: "Completed",
+            dataIndex: "completeDate",
+            key: "completeDate",
+            render: (val) => formatDate(val),
         },
     ];
+
+
+    // const columns = [
+    //     {
+    //         title: 'No.',
+    //         dataIndex: 'no',
+    //         key: 'no',
+    //         width: 60,
+    //         align: 'center',
+    //         fixed: 'left'
+    //     },
+    //     {
+    //         title: 'Drawing No.',
+    //         dataIndex: 'drawingNo',
+    //         key: 'drawingNo',
+    //         width: 100,
+    //     },
+    //     {
+    //         title: 'Description',
+    //         dataIndex: 'description',
+    //         key: 'description',
+    //         width: 120,
+    //     },
+    //     {
+    //         title: 'Balance Qty',
+    //         dataIndex: 'balanceQty',
+    //         key: 'balanceQty',
+    //         width: 100,
+    //         align: 'center',
+    //     },
+    // {
+    //     title: 'Outgoing Qty',
+    //     dataIndex: 'outgoingQty',
+    //     key: 'outgoingQty',
+    //     width: 100,
+    //     align: 'center',
+    //     render: (qty) => (
+    //         <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+    //             {qty}
+    //             <EyeFilled style={{ fontSize: 17, color: '#1890ff' }}  onClick={()=>{setIsViewQtyModal(true)}}/>
+    //         </span>
+    //     ),
+    // },
+    //     {
+    //         title: 'WorkOrder',
+    //         dataIndex: 'workOrder',
+    //         key: 'workOrder',
+    //         width: 100,
+    //     },
+    //     {
+    //         title: 'Project',
+    //         dataIndex: 'project',
+    //         key: 'project',
+    //         width: 120,
+    //     },
+    //     {
+    //         title: 'Customer',
+    //         dataIndex: 'customer',
+    //         key: 'customer',
+    //         width: 200,
+    //         ellipsis: true,
+    //     },
+    //     {
+    //         title: 'Competed',
+    //         dataIndex: 'completed',
+    //         key: 'completed',
+    //         width: 100,
+    //         align: 'center',
+    //         render: (date) => <Tag color="green">{date}</Tag>
+    //     },
+    //     {
+    //         title: '',
+    //         key: 'actions',
+    //         // width: 120,
+    //         align: 'center',
+    //         fixed: 'right',
+    //         render: (_, record) => (
+    //             <Space size="small">
+    //                 <ActionButtons
+    //                     showEdit
+    //                     onEdit={() => handleEdit(record)}
+    //                 />
+    //             </Space>
+    //         ),
+    //     },
+    // ];
 
     const handleEdit = (record) => {
         setEditingWorkOrder(record);
@@ -185,7 +229,7 @@ const MtoInventoryList = () => {
         setLoading(true);
         try {
             const { page = 1, limit = 10, search = "" } = params;
-            const response = await WorkOrderService.getAllWorkOrders({
+            const response = await InventoryService.getCompleteDrawingsMTO({
                 page,
                 limit,
                 search,
@@ -307,7 +351,7 @@ const MtoInventoryList = () => {
 
 
     const handleUpdateSubmit = async (values) => {
-      console.log('--------data subit',values)
+        console.log('--------data subit', values)
     }
     return (
         <div>
@@ -335,7 +379,7 @@ const MtoInventoryList = () => {
             <Card>
                 <Table
                     columns={columns}
-                    dataSource={tableData}
+                    dataSource={data}
                     loading={loading}
                     pagination={{
                         current: page,
@@ -346,22 +390,24 @@ const MtoInventoryList = () => {
                         showTotal: (total, range) =>
                             `${range[0]}-${range[1]} of ${total} items`
                     }}
-                    scroll={{ x: 1000 }}
+                    // scroll={{ x: 1000 }}
                     onChange={handleTableChange}
                 />
             </Card>
 
 
-      <UpdateOutgoingQuantityModal
-        visible={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
-        onUpdate={handleUpdateSubmit}
-      />
+            <UpdateOutgoingQuantityModal
+                visible={isModalVisible}
+                onCancel={() => setIsModalVisible(false)}
+                onUpdate={handleUpdateSubmit}
+            />
 
-      <DeliveryOrderInformationModal
-        visible={isViewQtyModal}
-        onCancel={() => setIsViewQtyModal(false)}
-      />
+           <DeliveryOrderInformationModal
+  visible={isViewQtyModal}
+  onCancel={() => setIsViewQtyModal(false)}
+  data={selectedDORecord}
+/>
+
 
 
 

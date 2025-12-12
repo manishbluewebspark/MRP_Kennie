@@ -1,13 +1,37 @@
 import React from 'react';
-import { Modal, Table, Tag, Card, Typography, Space, DatePicker } from 'antd';
+import { Modal, Table, Tag, Card, Typography, Space, DatePicker, message } from 'antd';
 import { MailOutlined, CalendarOutlined } from '@ant-design/icons';
-import dayjs from 'dayjs'
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import PurchaseOrderService from 'services/PurchaseOrderService';
 const { Text, Title } = Typography;
+
+
+
+dayjs.extend(customParseFormat);
+
+
+const parseCommittedDate = (raw) => {
+  if (!raw) return null;
+  if (raw === "N/A") return null;
+
+  // 1) Try ISO / normal date string
+  let d = dayjs(raw);
+  if (d.isValid()) return d;
+
+  // 2) Try DD/MM/YYYY (agar aise store kiya ho DB me)
+  d = dayjs(raw, "DD/MM/YYYY", true);
+  if (d.isValid()) return d;
+
+  // 3) Kuch bhi samajh na aaye → null (no crash)
+  return null;
+};
+
 
 const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
   // Extract the purchaseData array from the inventory item object
   const safePurchaseData = purchaseData?.purchaseData || [];
-  console.log('-----safePurchaseData',safePurchaseData)
+  console.log('-----safePurchaseData',purchaseData)
   // If no purchase data, show empty state
   if (safePurchaseData.length === 0) {
     return (
@@ -37,7 +61,10 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
 
   // Transform purchaseData for the table
   const poData = safePurchaseData.map((item, index) => ({
+    poID:item?._id,
     key: index,
+    mpn:item?.mpn?._id,
+    idNumber:item?.idNumber,
     poNumber: item.poNumber || 'N/A',
     supplier: item.supplier?.companyName || (item.supplier?.companyName ? 'Supplier ID: ' + item.supplier.contactPerson : 'N/A'),
     qty: item.quantity || 0,
@@ -72,6 +99,27 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
     };
     return statusColors[status] || 'default';
   }
+
+  const handleCommitDateChange = async (record, newDate) => {
+  try {
+    console.log('--------re',record,newDate)
+    const formatted = newDate ? newDate.toISOString() : null;
+
+    await PurchaseOrderService.updatePurchaseOrder(record?.poID, {
+      idNumber:record?.idNumber,
+      mpn:record?.mpn,
+      committedDate: formatted,
+    });
+
+    message.success("Committed date updated");
+
+    // getWorkOrders(); // refresh table
+  } catch (err) {
+    console.error(err);
+    message.error("Failed to update committed date");
+  }
+};
+
 
   // Columns for the PO table
   const poColumns = [
@@ -108,31 +156,27 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
         </Space>
       ),
     },
- {
+{
   title: 'Supplier Committed Date',
   dataIndex: 'committedDate',
   key: 'committedDate',
   render: (date, record) => {
-    const hasDate = record && date !== "N/A";
+    const value = parseCommittedDate(record.committedDate);
+
 
     return (
       <Space>
-        <CalendarOutlined />
-
-        {/* If date exists → show DatePicker for editing */}
-        {hasDate ? (
-          <DatePicker
-            value={dayjs(date)}
-            format="DD/MM/YYYY"
-            // onChange={(newDate) => handleCommitDateChange(record, newDate)}
-          />
-        ) : (
-          // If no date → show plain text
-          <Text type="secondary">Not Committed</Text>
-        )}
+        <DatePicker
+          value={value}
+          placeholder="Add Date"
+          format="DD/MM/YYYY"
+          onChange={(newDate) => handleCommitDateChange(record, newDate)}
+          allowClear={true}
+          style={{ width: 140 }}
+        />
       </Space>
     );
-  },
+  }
 }
 ,
     {

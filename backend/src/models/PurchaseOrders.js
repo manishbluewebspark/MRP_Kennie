@@ -96,7 +96,7 @@ const PurchaseOrderItemSchema = new Schema({
   receivedQtyTotal: { type: Number, default: 0 },   // total received so far (all GRNs)
   rejectedQtyTotal: { type: Number, default: 0 },   // total rejected so far
   pendingQty:       { type: Number, default: 0 },   // remaining to be accepted = qty - acceptedTotal
-
+  committedDate:{type:Date},
   remarks: { type: String, default: "" },           // last/overall remarks for this PO line
 
   status: {
