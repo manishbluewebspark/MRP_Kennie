@@ -6,7 +6,7 @@ import moment from "moment";
 import { Select } from "antd";
 const { Option } = Select;
 
-const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], suppliers = [], categories = [] }) => {
+const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], suppliers = [], categories = [], currencies = [] }) => {
     const [form] = Form.useForm();
 
     // Prefill form for Edit
@@ -26,6 +26,7 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                 category: formData.Category,
                 note: formData.note,
                 status: formData.Status,
+                currency: formData.currency
             });
         } else {
             form.resetFields(); // Add case
@@ -59,7 +60,7 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                             <RoundedInput placeholder="Enter part number" />
                         </Form.Item>
                     </Col>
-                    <Col span={12}>
+                    {/* <Col span={12}>
                         <Form.Item label="Manufacture" name="manufacture" rules={[{ required: true, message: "Select manufacturer" }]}>
                             <RoundedSelect placeholder="Select manufacturer">
                                 <Option value="Alpha">Alpha</Option>
@@ -67,7 +68,41 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                                 <Option value="Lapp">Lapp</Option>
                             </RoundedSelect>
                         </Form.Item>
+                    </Col> */}
+                    <Col span={12}>
+                        <Form.Item
+                            label="Manufacture"
+                            name="manufacture"
+                            rules={[{ required: true, message: "Select or enter manufacturer" }]}
+                        >
+                            <RoundedSelect
+                                placeholder="Select or type manufacturer"
+                                mode="tags"
+                                maxTagCount={1}
+                                onChange={(value) => {
+                                    // Always keep only last entered value
+                                    if (value.length > 1) {
+                                        const lastValue = value[value.length - 1];
+                                        form.setFieldsValue({ manufacture: [lastValue] });
+                                    }
+                                }}
+                            >
+                                <Option value="Alpha">Alpha</Option>
+                                <Option value="Molex">Molex</Option>
+                                <Option value="Lapp">Lapp</Option>
+                                <Option value="Turck">Turck</Option>
+                                <Option value="Pan Sun">Pan Sun</Option>
+                                <Option value="Altech">Altech</Option>
+                                <Option value="Brady">Brady</Option>
+                                <Option value="Beckhoff">Beckhoff</Option>
+                                <Option value="Phoenix Contact">Phoenix Contact</Option>
+
+
+                            </RoundedSelect>
+                        </Form.Item>
                     </Col>
+
+
 
                     <Col span={24}>
                         <Form.Item label="UOM" name="uom" rules={[{ required: true, message: "Select UOM" }]}>
@@ -87,12 +122,30 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col span={8}>
                         <Form.Item label="Storage Location" name="storageLocation" rules={[{ required: true, message: "Enter storage location" }]}>
                             <RoundedInput placeholder="Enter storage location" />
                         </Form.Item>
                     </Col>
-                    <Col span={12}>
+
+                    <Col span={8}>
+                        <Form.Item
+                            label="Currency (RFQ Unit Price)"
+                            name="currency"
+                            rules={[{ required: true, message: "Select currency type" }]}
+                        >
+                            <Select placeholder="Select currency">
+                                {currencies.map((c) => (
+                                    <Option key={c._id} value={c._id}>
+                                        {c.symbol} {c.code} - {c.name}
+                                    </Option>
+                                ))}
+                            </Select>
+                        </Form.Item>
+                    </Col>
+
+
+                    <Col span={8}>
                         <Form.Item label="RFQ Unit Price" name="rfq" rules={[{ required: true, message: "Enter RFQ" }]}>
                             <RoundedInput
                                 placeholder="Enter RFQ Unit Price"
@@ -100,6 +153,7 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                             />
                         </Form.Item>
                     </Col>
+
 
                     <Col span={12}>
                         <Form.Item label="MOQ" name="moq" rules={[{ required: true, message: "Enter MOQ" }]}>

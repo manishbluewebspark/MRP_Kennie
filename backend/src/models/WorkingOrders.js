@@ -60,15 +60,15 @@ const workOrderSchema = new mongoose.Schema(
     status: {
       type: String,
       // enum: [
-      //   "no_progress",
-      //   "picking_in_progress",
+      //   "No Progress Yet",
+      //   "Picking In Progress",
       //   "quality_check_done",
       //   "cable_harness_done",
       //   "qc_partial",         // QC: 1/2, 2/3 etc.
       //   "completed",          // NEW
       //   "on_hold"             // NEW
       // ],
-      default: "no_progress",
+      default: "No Progress Yet",
     }
     ,
     isProductionComplete: {

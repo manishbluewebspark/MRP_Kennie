@@ -68,11 +68,11 @@ export const STATUS_META = {
     color: "green",
     icon: <CheckCircleOutlined />,
   },
-  no_progress: {
+  "No Progress Yet": {
     color: "default",
     icon: <PlayCircleOutlined />,
   },
-  picking_in_progress:{
+  "Picking In Progress":{
     color: "blue",
     icon: <PlayCircleOutlined />,
   }
@@ -155,9 +155,10 @@ const DeliveryOrderPage = () => {
     const [moving, setMoving] = useState(false);
     const [lastWorkOrderNo, setLastOrderNumber] = useState('')
 
-    const handleMoveToProduction = (id) => {
+    const handleMoveToProduction = (record) => {
+        setSelectedRecord(record);
         setisProductionvisible(true);
-        setMoveToProdId(id)
+        setMoveToProdId(record?._id)
     }
 
 
@@ -240,9 +241,9 @@ const DeliveryOrderPage = () => {
                     {renderBadge(status, "status", record.qcDone, record.qcTotal)}
 
                     {/* Show Move to Production Icon Only When No Progress */}
-                    {status === "no_progress" && (
+                    {status === "No Progress Yet" && (
                         <PlayCircleFilled
-                            onClick={() => handleMoveToProduction(record._id)}
+                            onClick={() => handleMoveToProduction(record)}
                             style={{ color: "#473bb1ff", cursor: "pointer", fontSize: 18 }}
                         />
                     )}
@@ -642,7 +643,7 @@ const DeliveryOrderPage = () => {
                 visible={isProductionvisible}
                 onCancel={() => setisProductionvisible(false)}
                 onConfirm={handleConfirm}
-                projectName="Project Alpha"
+                projectName={selectedRecord?.workOrderNo}
                 loading={moving}
             />
 

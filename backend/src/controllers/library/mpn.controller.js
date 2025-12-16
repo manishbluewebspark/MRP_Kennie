@@ -583,6 +583,7 @@ export const importMpn = async (req, res) => {
           const purchasedDate = row[`Purchased Date#${i}`];
           const supplier = row[`Supplier#${i}`];
           const leadTime = row[`Lead Time#${i}_Wk`];
+          const currency = row[`Currency#${i}`];
 
           // Only add if at least one field has value
           if (purchasedPrice || moq || purchasedDate || supplier || leadTime) {
@@ -600,7 +601,8 @@ export const importMpn = async (req, res) => {
               purchasedDate: purchasedDate ? new Date(purchasedDate) : null,
               Supplier: supplierId,
               leadTime_Wk: leadTime || null,
-              entryDate: new Date()
+              entryDate: new Date(),
+              currency
             });
           }
         }

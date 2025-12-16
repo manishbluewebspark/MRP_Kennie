@@ -1,0 +1,195 @@
+<%
+  const fmtDate = (d) => {
+    if (!d) return "-";
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return "-";
+    const dd = String(dt.getDate()).padStart(2, "0");
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const yyyy = dt.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  const money = (n) => {
+    const x = Number(n || 0);
+    return x.toFixed(2);
+  };
+
+  const poNo = po?.poNumber || "-";
+  const currency = po?.currency || "SGD";
+  const supplier = po?.supplier || {};
+  const shipTo = po?.shipToAddress || "";
+  const terms = po?.termsConditions || "";
+  const items = Array.isArray(po?.items) ? po.items : [];
+  const totals = po?.totals || {};
+%>
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; }
+    .page { width: 100%; }
+    .header { display:flex; justify-content: space-between; align-items:flex-start; }
+    .company h1 { margin:0; font-size: 18px; letter-spacing: .2px; }
+    .company p { margin:3px 0; font-size: 11px; color:#333; line-height: 1.35; }
+    .po-title { margin-top: 20px; display:flex; justify-content: space-between; align-items:flex-end; }
+    .po-title h2 { margin:0; font-size: 22px; letter-spacing: .3px; }
+    .po-no { font-size: 22px; font-weight: 700; }
+
+    .info-row { margin-top: 14px; border: 1px solid #ddd; display:flex; }
+    .info-cell { flex:1; padding: 8px 10px; font-size: 11px; border-right: 1px solid #ddd; }
+    .info-cell:last-child { border-right: none; }
+    .info-cell b { font-weight: 700; }
+
+    .two-col { margin-top: 14px; display:flex; gap: 14px; }
+    .box { flex:1; border: 1px solid #ddd; padding: 10px; min-height: 92px; }
+    .box-title { font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+    .box p { margin: 2px 0; font-size: 11px; color:#222; line-height: 1.35; }
+
+    .section-title { margin-top: 18px; font-size: 12px; font-weight: 700; }
+    .delivery { margin-top: 6px; border: 1px solid #ddd; }
+    .delivery .row { display:flex; }
+    .delivery .cell { flex:1; padding: 8px 10px; font-size: 11px; border-right: 1px solid #ddd; border-bottom: 1px solid #ddd; }
+    .delivery .cell:last-child { border-right:none; }
+    .delivery .row:last-child .cell { border-bottom:none; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    thead th {
+      background:#3b3b3b; color:#fff; font-size: 11px; padding: 8px;
+      text-align: left;
+    }
+    tbody td {
+      border: 1px solid #ddd;
+      font-size: 11px;
+      padding: 8px;
+      vertical-align: top;
+    }
+    .num { text-align: right; white-space: nowrap; }
+    .center { text-align:center; }
+
+    .totals { margin-top: 10px; display:flex; justify-content:flex-end; }
+    .totals-box { width: 280px; }
+    .totals-line { display:flex; justify-content: space-between; padding: 6px 0; font-size: 11px; }
+    .grand { font-size: 14px; font-weight: 800; padding-top: 8px; border-top: 1px solid #ddd; }
+
+    .terms { margin-top: 24px; }
+    .terms h3 { margin:0 0 6px 0; font-size: 12px; }
+    .terms pre {
+      white-space: pre-wrap;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11px;
+      margin:0;
+      color:#222;
+      line-height: 1.35;
+    }
+  </style>
+</head>
+
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="company">
+      <h1>EXXEL TECHNOLOGY PTE LTD</h1>
+      <p>1 Kaki Bukit Ave 3, KB-1 #03-07 Singapore 416087</p>
+      <p>Tel:(65) 6743-4553 &nbsp;&nbsp; Fax:(65) 6743-6929 &nbsp;&nbsp; Email:sales@exxeltech.com &nbsp;&nbsp; UEN/GST: 199407327W</p>
+    </div>
+  </div>
+
+  <div class="po-title">
+    <h2>PURCHASE ORDER</h2>
+    <div class="po-no">PO No: <%= poNo %></div>
+  </div>
+
+  <div class="info-row">
+    <div class="info-cell"><b>Date:</b> <%= fmtDate(po?.poDate) %></div>
+    <div class="info-cell"><b>Currency:</b> <%= currency %></div>
+    <div class="info-cell"><b>Buyer:</b> Procurement Dept</div>
+    <div class="info-cell"><b>Page:</b> 1 of 1</div>
+  </div>
+
+  <div class="two-col">
+    <div class="box">
+      <div class="box-title">Order To:</div>
+      <p><b><%= supplier?.companyName || supplier?.name || "-" %></b></p>
+      <p><%= supplier?.address || "" %></p>
+      <p>Tel: <%= supplier?.phone || "-" %></p>
+      <p>Attn: <%= supplier?.contactPerson || supplier?.name || "-" %></p>
+      <p>Email: <%= supplier?.email || "-" %></p>
+    </div>
+
+    <div class="box">
+      <div class="box-title">Ship To:</div>
+      <p><pre style="margin:0"><%= shipTo %></pre></p>
+      <p>Attn: <%= po?.shipToAttn || "Kennie Seow" %></p>
+    </div>
+  </div>
+
+  <div class="section-title">Delivery &amp; Payment</div>
+  <div class="delivery">
+    <div class="row">
+      <div class="cell"><b>Need Date:</b> <%= fmtDate(po?.needDate) %></div>
+      <div class="cell"><b>ETA Date:</b> <%= fmtDate(po?.etaDate) %></div>
+    </div>
+    <div class="row">
+      <div class="cell"><b>Incoterms:</b> <%= po?.incoterms || "-" %></div>
+      <div class="cell"><b>Payment Terms:</b> <%= po?.paymentTerms || "30 days" %></div>
+    </div>
+  </div>
+
+  <div class="section-title">Order Details</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:50px">No.</th>
+        <th style="width:120px">Part Number</th>
+        <th>Description</th>
+        <th style="width:110px">Manufacturer</th>
+        <th style="width:60px" class="center">UOM</th>
+        <th style="width:60px" class="center">Qty</th>
+        <th style="width:90px" class="num">Unit Price</th>
+        <th style="width:90px" class="num">Total</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <% if(items.length === 0) { %>
+        <tr><td colspan="8">No items</td></tr>
+      <% } %>
+
+      <% items.forEach((it, idx) => { %>
+        <tr>
+          <td class="center"><%= idx + 1 %></td>
+          <td><%= it?.mpnText || it?.partNumber || it?.mpn?.MPN || "-" %></td>
+          <td><%= it?.description || "-" %></td>
+          <td><%= it?.manufacturer || "-" %></td>
+          <td class="center"><%= it?.uomText || it?.uom?.code || "-" %></td>
+          <td class="center"><%= it?.qty ?? 0 %></td>
+          <td class="num">S$<%= money(it?.unitPrice) %></td>
+          <td class="num">S$<%= money(it?.extPrice ?? (Number(it?.qty||0)*Number(it?.unitPrice||0))) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <div class="totals-box">
+      <div class="totals-line"><span>Freight Cost:</span> <span>S$<%= money(totals?.freightAmount) %></span></div>
+      <div class="totals-line"><span>Discount:</span> <span>S$<%= money(totals?.discountAmount) %></span></div>
+      <div class="totals-line"><span>Sub-Total:</span> <span>S$<%= money(totals?.subTotalAmount) %></span></div>
+      <div class="totals-line"><span>9% GST Tax:</span> <span>S$<%= money(totals?.ostTax) %></span></div>
+      <div class="totals-line grand"><span>Grand Total:</span> <span>S$<%= money(totals?.finalAmount) %></span></div>
+    </div>
+  </div>
+
+  <div class="terms">
+    <h3>Terms and Conditions:</h3>
+    <pre><%= terms %></pre>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Table, Button, Space, Tag, message, Card, Input, Checkbox, Col, Radio, Row, Typography } from "antd";
-import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, ExclamationCircleFilled, SettingFilled, SearchOutlined, FileSearchOutlined } from "@ant-design/icons";
+import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, ExclamationCircleFilled, SettingFilled, SearchOutlined, FileSearchOutlined, WarningFilled, InfoCircleFilled } from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
 import GlobalTableActions from "components/GlobalTableActions";
@@ -33,6 +33,25 @@ const renderBadge = (text, type) => {
     }
     return <Tag color={color}>{text}</Tag>;
 };
+
+const urgencyMeta = {
+    critical: {
+        icon: <ExclamationCircleFilled style={{ color: "#ff4d4f", fontSize: 22, marginTop: 4 }} />,
+        tagColor: "red",
+        label: "CRITICAL",
+    },
+    urgent: {
+        icon: <WarningFilled style={{ color: "#faad14", fontSize: 22, marginTop: 4 }} />,
+        tagColor: "gold",
+        label: "URGENT",
+    },
+    normal: {
+        icon: <InfoCircleFilled style={{ color: "#1677ff", fontSize: 22, marginTop: 4 }} />,
+        tagColor: "blue",
+        label: "NORMAL",
+    },
+};
+
 
 const customerData = [];
 const projectData = [];
@@ -224,59 +243,164 @@ const InventoryListPage = () => {
     ];
 
     // Inventory Alerts Columns
+    // const inventoryAlertsColumns = [
+    //     {
+    //         title: "",
+    //         dataIndex: "MPN",
+    //         key: "MPN",
+    //         render: (_, record) => (
+    //             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+    //                 <ExclamationCircleFilled style={{
+    //                     color: '#ff4d4f',
+    //                     fontSize: '24px',
+    //                     marginTop: 5
+    //                 }} />
+    //                 <div style={{ flex: 1 }}>
+    //                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    //                         <div>
+    //                             <Title level={4} style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
+    //                                 {record?.MPN}
+    //                             </Title>
+    //                         </div>
+    //                         <div>
+    //                             <Tag color="red" style={{ fontSize: '14px', fontWeight: 'bold', padding: '2px 8px' }}>
+    //                                 {record?.Manufacturer}
+    //                             </Tag>
+    //                         </div>
+    //                     </div>
+    //                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+    //                         <div>
+    //                             <Text type="secondary" style={{ fontSize: '12px' }}>
+    //                                 Required by Work Orders: {record?.Description}
+    //                             </Text>
+    //                         </div>
+    //                         <div>
+    //                             <Text type="secondary" style={{ fontSize: '12px' }}>
+    //                                 Current: {record?.CurrentStock}
+    //                             </Text>
+    //                         </div>
+    //                     </div>
+    //                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+    //                         <div>
+    //                             <Text type="secondary" style={{ fontSize: '12px' }}>
+    //                                 Alpha + UOME: {record?.UOM}
+    //                             </Text>
+    //                         </div>
+    //                         <div>
+    //                             <Text type="secondary" style={{ fontSize: '12px' }}>
+    //                                 Required: {record?.RecommendedOrder}
+    //                             </Text>
+    //                         </div>
+    //                     </div>
+    //                 </div>
+    //             </div>
+    //         )
+    //     }
+    // ];
+
     const inventoryAlertsColumns = [
         {
-            title: "",
-            dataIndex: "MPN",
-            key: "MPN",
-            render: (_, record) => (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                    <ExclamationCircleFilled style={{
-                        color: '#ff4d4f',
-                        fontSize: '24px',
-                        marginTop: 5
-                    }} />
-                    <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <Title level={4} style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
-                                    {record?.MPN}
-                                </Title>
-                            </div>
-                            <div>
-                                <Tag color="red" style={{ fontSize: '14px', fontWeight: 'bold', padding: '2px 8px' }}>
-                                    {record?.Manufacturer}
+            title: "Low Stock Alerts",
+            dataIndex: "mpnNumber",
+            key: "mpnNumber",
+            render: (_, record) => {
+                const mpn = record?.mpnNumber || record?.MPN || "N/A";
+                const manufacturer = record?.manufacturer || record?.Manufacturer || "N/A";
+                const desc = record?.description || record?.Description || "";
+                const uom = record?.uom || record?.UOM || "PCS";
+
+                const current = Number(record?.currentStock ?? record?.CurrentStock ?? 0);
+                const required = Number(record?.totalRequired ?? record?.RecommendedOrder ?? 0);
+                const shortfall = Number(record?.shortfall ?? Math.max(required - current, 0));
+
+                const urgency = (record?.urgency || "normal").toLowerCase();
+                const meta = urgencyMeta[urgency] || urgencyMeta.normal;
+
+                return (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                        {meta.icon}
+
+                        <div style={{ flex: 1 }}>
+                            {/* Top row */}
+                            <div
+                                style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    gap: 10,
+                                }}
+                            >
+                                <div>
+                                    <Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+                                        {mpn}
+                                    </Title>
+
+                                    <div style={{ marginTop: 6 }}>
+                                        <Tag color={meta.tagColor} style={{ fontWeight: 700, fontSize: 11 }}>
+                                            {meta.label}
+                                        </Tag>
+
+                                        {record?.weeksLeft != null && (
+                                            <Tag color="default" style={{ fontSize: 11 }}>
+                                                {record.weeksLeft} week(s) left
+                                            </Tag>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <Tag color="geekblue" style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px" }}>
+                                    {manufacturer}
                                 </Tag>
                             </div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                            <div>
-                                <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Required by Work Orders: {record?.Description}
+
+                            {/* Middle row */}
+                            <div
+                                style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 10,
+                                    marginTop: 8,
+                                }}
+                            >
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {desc ? `Required by Work Orders: ${desc}` : "Required by Work Orders"}
+                                </Text>
+
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Location: {record?.storageLocation || record?.location || "Not Set"}
                                 </Text>
                             </div>
-                            <div>
-                                <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Current: {record?.CurrentStock}
+
+                            {/* Bottom row */}
+                            <div
+                                style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 10,
+                                    marginTop: 6,
+                                }}
+                            >
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    UOM: <b>{uom}</b>
                                 </Text>
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                            <div>
-                                <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Alpha + UOME: {record?.UOM}
-                                </Text>
-                            </div>
-                            <div>
-                                <Text type="secondary" style={{ fontSize: '12px' }}>
-                                    Required: {record?.RecommendedOrder}
-                                </Text>
+
+                                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Current: <b>{current}</b>
+                                    </Text>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Required: <b>{required}</b>
+                                    </Text>
+                                    <Text style={{ fontSize: 12, color: shortfall > 0 ? "#ff4d4f" : "#52c41a" }}>
+                                        Shortfall: <b>{shortfall}</b>
+                                    </Text>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )
-        }
+                );
+            },
+        },
     ];
 
     // Inventory List Columns
@@ -376,18 +500,17 @@ const InventoryListPage = () => {
             key: 'actions',
             width: 100,
             align: 'center',
-            render: (text, record) => (
-                <SettingFilled
-                    style={{
-                        color: '#1890ff',
-                        fontSize: '18px',
-                        cursor: 'pointer'
-                    }}
-                    onClick={() => handleEdit(record)}
-                />
-            ),
+            render: (_, record) =>
+                // record?.purchaseData?.length > 0 ? (
+                    <SettingFilled
+                        style={{ color: '#1890ff', fontSize: 18, cursor: 'pointer' }}
+                        onClick={() => handleEdit(record)}
+                    />
+                // ) : null
         },
     ];
+
+
 
     const filterConfig = [
         {
@@ -470,6 +593,8 @@ const InventoryListPage = () => {
 
 
     const handleEdit = async (inventoryItem) => {
+
+        console.log('-------inventoryItem', inventoryItem)
         try {
             setSelectedInventoryItem(inventoryItem);
             setIsUpdateInventoryModalOpen(true);

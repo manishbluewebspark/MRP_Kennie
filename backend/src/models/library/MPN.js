@@ -10,7 +10,8 @@ const purchaseHistorySchema = new mongoose.Schema(
     },
     LeadTime_WK: { type: Number, default: 0 },
     MOQ: { type: Number },
-    entryDate:{type:Date}
+    entryDate:{type:Date},
+    currency: { type: mongoose.Schema.Types.ObjectId, ref: "Currency" },
   },
   { _id: false } // we don’t need separate _id for subdocs
 );

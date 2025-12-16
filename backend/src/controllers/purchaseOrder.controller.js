@@ -10,6 +10,8 @@ import Suppliers from "../models/Suppliers.js";
 import XLSX from 'xlsx'
 import fs from 'fs'
 import { generatePurchaseOrderPDF } from "../middlewares/purchaseEmail.middleware.js";
+import { generatePurchaseOrderPDFBuffer } from "../utils/pdf/generatePurchaseOrderPDF.js";
+import { sendMailWithAttachment } from "../utils/mailer.js";
 const toObjectId = (id) => {
   try {
     return new mongoose.Types.ObjectId(String(id));
@@ -573,62 +575,108 @@ export const getPurchaseOrderById = async (req, res) => {
  * Send Purchase Order by Email
  */
 export const sendPurchaseOrderMail = async (req, res) => {
-  let pdfPath;
-
   try {
     const { id } = req.params;
+    // const { toEmail } = req.body; // optional override
 
-    console.log('🚀 Generating Purchase Order PDF...');
+    const purchaseOrder = await PurchaseOrders.findById(id)
+      .populate("supplier")
+      .populate({
+        path: "items.uom",
+        select: "name code",
+      })
+      .populate({
+        path: "items.mpn",
+        select: "MPN description",
+      })
+      .lean();
 
-    const purchaseOrder = await PurchaseOrders.findById(id).populate("supplier");
+
     if (!purchaseOrder) {
-      return res.status(404).json({ success: false, error: "Purchase Order not found" });
+      return res.status(404).json({ success: false, message: "Purchase Order not found" });
     }
 
-    // Generate PDF
-    pdfPath = await generatePurchaseOrderPDF(purchaseOrder);
-    console.log('✅ PDF generated at:', pdfPath);
 
-    // Update status to "Emailed"
-    await PurchaseOrders.findByIdAndUpdate(id, {
-      status: "Emailed",
-      emailedAt: new Date()
+
+    const receiverEmail = purchaseOrder?.supplier?.email;
+    if (!receiverEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Supplier email not found. Please send `toEmail` in body.",
+      });
+    }
+
+    // ✅ Generate PDF buffer (no temp file needed)
+    const pdfBuffer = await generatePurchaseOrderPDFBuffer(purchaseOrder);
+
+    // ✅ Send Email with attachment
+    await sendMailWithAttachment({
+      to: receiverEmail,
+      subject: `Purchase Order - ${purchaseOrder.poNumber}`,
+      html: `
+  <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color:#111; line-height:1.6;">
+    
+    <p style="margin:0 0 12px;">
+      Hello ${purchaseOrder?.supplier?.name || "Team"},
+    </p>
+
+    <p style="margin:0 0 12px;">
+      Please find attached <b>Purchase Order ${purchaseOrder?.poNumber || ""}</b>
+      ${purchaseOrder?.poDate ? `dated <b>${new Date(purchaseOrder.poDate).toLocaleDateString("en-GB")}</b>` : ""}.
+    </p>
+
+    <div style="margin:14px 0 14px; padding:12px; background:#f6faff; border:1px solid #d6e4ff; border-radius:8px;">
+      <div style="font-size:13px; color:#333;">
+        <div><b>PO No:</b> ${purchaseOrder?.poNumber || "-"}</div>
+        ${purchaseOrder?.referenceNo ? `<div><b>Reference No:</b> ${purchaseOrder.referenceNo}</div>` : ""}
+        ${purchaseOrder?.needDate ? `<div><b>Need Date:</b> ${new Date(purchaseOrder.needDate).toLocaleDateString("en-GB")}</div>` : ""}
+        ${purchaseOrder?.shipToAddress ? `<div style="margin-top:8px;"><b>Ship To:</b><br/>${String(purchaseOrder.shipToAddress).replace(/\n/g, "<br/>")}</div>` : ""}
+      </div>
+    </div>
+
+    <p style="margin:0 0 12px;">
+      Kindly acknowledge receipt and share the <b>committed delivery date</b>.
+      If you have any questions or need clarifications, please reply to this email.
+    </p>
+
+    <p style="margin:0;">
+      Regards,<br/>
+      <b>Exxel Technology Pte Ltd</b><br/>
+      ${purchaseOrder?.createdBy?.email ? `<span style="color:#555;">${purchaseOrder.createdBy.email}</span>` : ""}
+    </p>
+
+    <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
+
+    <p style="margin:0; font-size:12px; color:#777;">
+      This is an auto-generated email. Please do not share confidential information with unintended recipients.
+    </p>
+  </div>
+`,
+
+      attachments: [
+        {
+          filename: `PO_${purchaseOrder.poNumber}.pdf`,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
     });
 
-    // Read PDF file and send as response
-    const pdfBuffer = fs.readFileSync(pdfPath);
+    // ✅ Update PO status
+    await PurchaseOrders.findByIdAndUpdate(id, {
+      status: "Emailed",
+      emailedAt: new Date(),
+    });
 
-    // Clean up temporary PDF
-    if (pdfPath && fs.existsSync(pdfPath)) {
-      fs.unlinkSync(pdfPath);
-      console.log('✅ Temporary PDF deleted');
-    }
-
-    // Set headers for PDF download
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="PO_${purchaseOrder.poNumber}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    // Send PDF file
-    res.send(pdfBuffer);
-
-    console.log(`✅ Status updated to "Emailed" and PDF sent for download - PO: ${purchaseOrder.poNumber}`);
-
+    return res.json({
+      success: true,
+      message: `PO emailed successfully to ${receiverEmail}`
+    });
   } catch (error) {
-    console.error('❌ Error:', error);
-
-    // Clean up PDF file if exists
-    try {
-      if (pdfPath && fs.existsSync(pdfPath)) {
-        fs.unlinkSync(pdfPath);
-      }
-    } catch (cleanupError) {
-      console.error('Cleanup error:', cleanupError);
-    }
-
-    res.status(500).json({
+    console.error("❌ sendPurchaseOrderMail error:", error);
+    return res.status(500).json({
       success: false,
-      error: `PDF generation failed: ${error.message}`
+      message: error.message,
     });
   }
 };

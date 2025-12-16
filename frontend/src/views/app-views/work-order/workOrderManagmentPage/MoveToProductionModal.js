@@ -33,7 +33,7 @@ const MoveToProductionModal = ({
         
         {/* Title */}
         <Title level={4} style={{ marginBottom: '8px' }}>
-          Move Project to Production
+          Move Work order to Production
         </Title>
         
         {/* Message */}

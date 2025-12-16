@@ -7,6 +7,7 @@ import WorkOrder from "../models/WorkingOrders.js";
 import Drawing from "../models/Drwaing.js";
 import Customer from "../models/Customer.js";
 import Project from "../models/Project.js";
+import SystemSettings from "../models/SystemSettings.js";
 
 // controllers/inventoryController.js
 // export const getInventoryList = async (req, res) => {
@@ -641,6 +642,15 @@ const getShortageStatus = (currentQty, minStockLevel) => {
 };
 
 
+// import Inventory from "../models/Inventory.js";
+// import MPN from "../models/MPN.js";
+// import SystemSettings from "../models/SystemSettings.js"; // apna model name same rakho
+
+const weeksBetween = (from, to) => {
+  const diffMs = new Date(to).getTime() - new Date(from).getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24 * 7));
+};
+
 export const getLowStockAlerts = async (req, res) => {
   try {
     let {
@@ -651,163 +661,332 @@ export const getLowStockAlerts = async (req, res) => {
       sortOrder = "desc",
     } = req.query;
 
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
+    page = Number(page) || 1;
+    limit = Number(limit) || 10;
+    const skip = (page - 1) * limit;
 
-    // 1️⃣ Pehle MPNLibrary se data lo (MPN, Description, Manufacturer, min/max stock)
+    // ✅ 0) Load system thresholds (fallback values)
+    const settings = await SystemSettings.findOne({}).lean();
+    const criticalWeeksLeft = settings?.inventoryAlerts?.criticalWeeksLeft ?? 2;
+    const urgentWeeksLeft   = settings?.inventoryAlerts?.urgentWeeksLeft ?? 3;
+    const normalWeeksLeft   = settings?.inventoryAlerts?.normalWeeksLeft ?? 6;
+
+    // ✅ 1) MPN search filter
     const mpnFilter = {};
-
     if (search) {
       mpnFilter.$or = [
         { MPN: { $regex: search, $options: "i" } },
-        { Description: { $regex: search, $options: "i" } },
-        { Manufacturer: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { manufacturer: { $regex: search, $options: "i" } },
       ];
     }
 
     const mpnList = await MPN.find(mpnFilter)
-      .select("MPN Description Manufacturer UOM minStockLevel maxStockLevel")
+      .select("MPN description manufacturer uom leadTimeWeeks")
       .lean();
 
-    if (!mpnList || mpnList.length === 0) {
+    if (!mpnList?.length) {
       return res.json({
         success: true,
         data: [],
         total: 0,
-        page: pageNum,
-        limit: limitNum,
+        page,
+        limit,
         totalPages: 0,
-        criticalCount: 0,
-        highCount: 0,
+        counts: { critical: 0, urgent: 0, normal: 0 },
+        thresholds: { criticalWeeksLeft, urgentWeeksLeft, normalWeeksLeft }
       });
     }
 
     const mpnIds = mpnList.map((m) => m._id);
 
-    // 2️⃣ Ab Inventory se matching records lo
-    const inventoryList = await Inventory.find({ mpnId: { $in: mpnIds } })
-      .select("mpnId balanceQuantity incomingQuantity updatedAt")
+    // ✅ 2) Inventories + workOrders
+    const inventories = await Inventory.find({ mpnId: { $in: mpnIds } })
+      .populate("mpnId", "MPN description manufacturer uom leadTimeWeeks")
+      .select("mpnId balanceQuantity location workOrders updatedAt")
       .lean();
 
-    // Map for quick lookup
-    const inventoryMap = {};
-    inventoryList.forEach((inv) => {
-      inventoryMap[String(inv.mpnId)] = inv;
-    });
+    // ✅ 3) Build alerts
+    const now = new Date();
 
-    // 3️⃣ Ab combined data se low-stock alerts banao
-    const lowStockAlerts = mpnList
-      .map((mpn) => {
-        const inv = inventoryMap[String(mpn._id)] || {};
-        const currentQty = inv.balanceQuantity || 0;
-        const minStock = mpn.minStockLevel || 10; // default min
-        const maxStock = mpn.maxStockLevel || 50; // default max
+    const alerts = inventories
+      .map((inv) => {
+        const mpn = inv.mpnId;
 
-        if (minStock <= 0) {
-          // agar minStock define hi nahi hai / 0 hai to alert mat bana
-          return null;
-        }
+        const currentStock = Number(inv.balanceQuantity || 0);
+        const workOrders = (inv.workOrders || []).filter(w => w?.needDate);
 
-        const stockPercentage = (currentQty / minStock) * 100;
+        if (!workOrders.length) return null; // needDate wala shortage hi nahi
 
-        let urgency = "Low";
-        let alertType = "Info";
+        const totalRequired = workOrders.reduce(
+          (sum, w) => sum + Number(w.requiredQty || 0),
+          0
+        );
 
-        if (currentQty === 0) {
-          urgency = "Critical";
-          alertType = "Out of Stock";
-        } else if (currentQty < minStock * 0.2) {
-          urgency = "High";
-          alertType = "Critical Shortage";
-        } else if (currentQty < minStock * 0.5) {
-          urgency = "Medium";
-          alertType = "Low Stock";
-        } else if (currentQty < minStock) {
-          urgency = "Low";
-          alertType = "Below Minimum";
-        } else {
-          // stock theek hai → alert ki zarurat nahi
-          return null;
-        }
+        const shortfall = Math.max(totalRequired - currentStock, 0);
+        if (shortfall <= 0) return null; // stock enough, alert nahi
+
+        // earliest need date
+        const earliestNeedDate = workOrders
+          .map(w => new Date(w.needDate))
+          .sort((a,b) => a - b)[0];
+
+        const weeksLeft = weeksBetween(now, earliestNeedDate); // negative means already overdue
+
+        // ✅ urgency based on thresholds
+        let urgency = "normal";
+        if (weeksLeft <= criticalWeeksLeft) urgency = "critical";
+        else if (weeksLeft <= urgentWeeksLeft) urgency = "urgent";
+        else if (weeksLeft <= normalWeeksLeft) urgency = "normal";
+        else urgency = "normal"; // more than normalWeeksLeft, still shortage but not urgent
 
         return {
-          _id: mpn._id,
-          MPN: mpn.MPN || "N/A",
-          Description: mpn.Description || "N/A",
-          Manufacturer: mpn.Manufacturer || "N/A",
-          UOM: mpn.UOM || "PCS",
+          mpnId: mpn?._id || inv.mpnId,
+          mpnNumber: mpn?.MPN || "N/A",
+          description: mpn?.description || "",
+          manufacturer: mpn?.manufacturer || "",
+          uom: mpn?.uom || "PCS",
 
-          CurrentStock: currentQty,
-          MinStock: minStock,
-          MaxStock: maxStock,
-          StockPercentage: Math.round(stockPercentage),
+          currentStock,
+          totalRequired,
+          shortfall,
 
-          AlertType: alertType,
-          Urgency: urgency,
+          storageLocation: inv.location || "Not Set",
+          leadTimeWeeks: mpn?.leadTimeWeeks ?? 0,
 
-          RecommendedOrder: Math.max(minStock - currentQty, 0),
+          earliestNeedDate,
+          weeksLeft,
 
-          LastUpdated: inv.updatedAt || new Date(),
+          urgency, // critical | urgent | normal
+          workOrders: workOrders.map(w => ({
+            workOrderNo: w.workOrderNo,
+            drawingId: w.drawingId,
+            requiredQty: w.requiredQty,
+            needDate: w.needDate
+          })),
+
+          lastUpdated: inv.updatedAt || new Date(),
         };
       })
-      .filter((item) => item !== null);
+      .filter(Boolean);
 
-    // 4️⃣ Sorting
-    const urgencyOrder = { Critical: 3, High: 2, Medium: 1, Low: 0 };
+    // ✅ 4) Sorting
+    const urgencyOrder = { critical: 3, urgent: 2, normal: 1 };
 
-    const sortedAlerts = lowStockAlerts.sort((a, b) => {
+    const sorted = alerts.sort((a, b) => {
       if (sortBy === "urgency") {
-        const aUrg = urgencyOrder[a.Urgency] ?? 0;
-        const bUrg = urgencyOrder[b.Urgency] ?? 0;
-        return sortOrder === "desc" ? bUrg - aUrg : aUrg - bUrg;
+        const av = urgencyOrder[a.urgency] ?? 0;
+        const bv = urgencyOrder[b.urgency] ?? 0;
+        return sortOrder === "desc" ? bv - av : av - bv;
       }
 
-      const aValue = a[sortBy];
-      const bValue = b[sortBy];
+      const av = a[sortBy];
+      const bv = b[sortBy];
 
-      // Numeric sort
-      if (typeof aValue === "number" && typeof bValue === "number") {
-        return sortOrder === "desc" ? bValue - aValue : aValue - bValue;
+      if (typeof av === "number" && typeof bv === "number") {
+        return sortOrder === "desc" ? bv - av : av - bv;
       }
-
-      // String sort
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        if (sortOrder === "desc") return bValue.localeCompare(aValue);
-        return aValue.localeCompare(bValue);
+      if (av instanceof Date && bv instanceof Date) {
+        return sortOrder === "desc" ? bv - av : av - bv;
       }
-
-      return 0;
+      return String(av ?? "").localeCompare(String(bv ?? ""));
     });
 
-    // 5️⃣ Pagination
-    const total = sortedAlerts.length;
-    const paginatedAlerts = sortedAlerts.slice(
-      (pageNum - 1) * limitNum,
-      pageNum * limitNum
-    );
+    // ✅ 5) Pagination
+    const total = sorted.length;
+    const data = sorted.slice(skip, skip + limit);
 
-    // 6️⃣ Final response
+    // ✅ counts
+    const counts = {
+      critical: alerts.filter(a => a.urgency === "critical").length,
+      urgent: alerts.filter(a => a.urgency === "urgent").length,
+      normal: alerts.filter(a => a.urgency === "normal").length,
+    };
 
-
-    res.json({
+    return res.json({
       success: true,
-      data: paginatedAlerts,
-      total: lowStockAlerts.length,
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(lowStockAlerts.length / limitNum),
-      criticalCount: lowStockAlerts.filter(a => a.Urgency === "Critical").length,
-      highCount: lowStockAlerts.filter(a => a.Urgency === "High").length
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      counts,
+      thresholds: { criticalWeeksLeft, urgentWeeksLeft, normalWeeksLeft }
     });
-
   } catch (error) {
-    console.error("Get Low Stock Alerts Error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    console.error("getLowStockAlerts Error:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+// export const getLowStockAlerts = async (req, res) => {
+//   try {
+//     let {
+//       page = 1,
+//       limit = 10,
+//       search = "",
+//       sortBy = "urgency",
+//       sortOrder = "desc",
+//     } = req.query;
+
+//     const pageNum = parseInt(page, 10);
+//     const limitNum = parseInt(limit, 10);
+
+//     // 1️⃣ Pehle MPNLibrary se data lo (MPN, Description, Manufacturer, min/max stock)
+//     const mpnFilter = {};
+
+//     if (search) {
+//       mpnFilter.$or = [
+//         { MPN: { $regex: search, $options: "i" } },
+//         { Description: { $regex: search, $options: "i" } },
+//         { Manufacturer: { $regex: search, $options: "i" } },
+//       ];
+//     }
+
+//     const mpnList = await MPN.find(mpnFilter)
+//       .select("MPN Description Manufacturer UOM minStockLevel maxStockLevel")
+//       .lean();
+
+//     if (!mpnList || mpnList.length === 0) {
+//       return res.json({
+//         success: true,
+//         data: [],
+//         total: 0,
+//         page: pageNum,
+//         limit: limitNum,
+//         totalPages: 0,
+//         criticalCount: 0,
+//         highCount: 0,
+//       });
+//     }
+
+//     const mpnIds = mpnList.map((m) => m._id);
+
+//     // 2️⃣ Ab Inventory se matching records lo
+//     const inventoryList = await Inventory.find({ mpnId: { $in: mpnIds } })
+//       .select("mpnId balanceQuantity incomingQuantity updatedAt")
+//       .lean();
+
+//     // Map for quick lookup
+//     const inventoryMap = {};
+//     inventoryList.forEach((inv) => {
+//       inventoryMap[String(inv.mpnId)] = inv;
+//     });
+
+//     // 3️⃣ Ab combined data se low-stock alerts banao
+//     const lowStockAlerts = mpnList
+//       .map((mpn) => {
+//         const inv = inventoryMap[String(mpn._id)] || {};
+//         const currentQty = inv.balanceQuantity || 0;
+//         const minStock = mpn.minStockLevel || 10; // default min
+//         const maxStock = mpn.maxStockLevel || 50; // default max
+
+//         if (minStock <= 0) {
+//           // agar minStock define hi nahi hai / 0 hai to alert mat bana
+//           return null;
+//         }
+
+//         const stockPercentage = (currentQty / minStock) * 100;
+
+//         let urgency = "Low";
+//         let alertType = "Info";
+
+//         if (currentQty === 0) {
+//           urgency = "Critical";
+//           alertType = "Out of Stock";
+//         } else if (currentQty < minStock * 0.2) {
+//           urgency = "High";
+//           alertType = "Critical Shortage";
+//         } else if (currentQty < minStock * 0.5) {
+//           urgency = "Medium";
+//           alertType = "Low Stock";
+//         } else if (currentQty < minStock) {
+//           urgency = "Low";
+//           alertType = "Below Minimum";
+//         } else {
+//           // stock theek hai → alert ki zarurat nahi
+//           return null;
+//         }
+
+//         return {
+//           _id: mpn._id,
+//           MPN: mpn.MPN || "N/A",
+//           Description: mpn.Description || "N/A",
+//           Manufacturer: mpn.Manufacturer || "N/A",
+//           UOM: mpn.UOM || "PCS",
+
+//           CurrentStock: currentQty,
+//           MinStock: minStock,
+//           MaxStock: maxStock,
+//           StockPercentage: Math.round(stockPercentage),
+
+//           AlertType: alertType,
+//           Urgency: urgency,
+
+//           RecommendedOrder: Math.max(minStock - currentQty, 0),
+
+//           LastUpdated: inv.updatedAt || new Date(),
+//         };
+//       })
+//       .filter((item) => item !== null);
+
+//     // 4️⃣ Sorting
+//     const urgencyOrder = { Critical: 3, High: 2, Medium: 1, Low: 0 };
+
+//     const sortedAlerts = lowStockAlerts.sort((a, b) => {
+//       if (sortBy === "urgency") {
+//         const aUrg = urgencyOrder[a.Urgency] ?? 0;
+//         const bUrg = urgencyOrder[b.Urgency] ?? 0;
+//         return sortOrder === "desc" ? bUrg - aUrg : aUrg - bUrg;
+//       }
+
+//       const aValue = a[sortBy];
+//       const bValue = b[sortBy];
+
+//       // Numeric sort
+//       if (typeof aValue === "number" && typeof bValue === "number") {
+//         return sortOrder === "desc" ? bValue - aValue : aValue - bValue;
+//       }
+
+//       // String sort
+//       if (typeof aValue === "string" && typeof bValue === "string") {
+//         if (sortOrder === "desc") return bValue.localeCompare(aValue);
+//         return aValue.localeCompare(bValue);
+//       }
+
+//       return 0;
+//     });
+
+//     // 5️⃣ Pagination
+//     const total = sortedAlerts.length;
+//     const paginatedAlerts = sortedAlerts.slice(
+//       (pageNum - 1) * limitNum,
+//       pageNum * limitNum
+//     );
+
+//     // 6️⃣ Final response
+
+
+//     res.json({
+//       success: true,
+//       data: paginatedAlerts,
+//       total: lowStockAlerts.length,
+//       page: pageNum,
+//       limit: limitNum,
+//       totalPages: Math.ceil(lowStockAlerts.length / limitNum),
+//       criticalCount: lowStockAlerts.filter(a => a.Urgency === "Critical").length,
+//       highCount: lowStockAlerts.filter(a => a.Urgency === "High").length
+//     });
+
+//   } catch (error) {
+//     console.error("Get Low Stock Alerts Error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };
 
 
 export const exportExcel = async (req, res) => {
@@ -1289,6 +1468,8 @@ export const getCompleteDrawingsMTO = async (req, res) => {
     const woQuery = {
       drawingId: { $exists: true, $ne: null },
     };
+
+    woQuery.status = 'Completed'
 
     // Optional search on drawing no / project / customer later handle karenge UI level par
     // Ya tum yaha bhi search attach kar sakte ho (agar drawingNo, projectName ke basis par chahiye to aggregation se karein)

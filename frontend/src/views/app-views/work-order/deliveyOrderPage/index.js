@@ -76,6 +76,7 @@ const DeliveryOrderPage = () => {
         search: q,
         sortBy,
         sortOrder,
+        status:'Completed'
       });
 
       if (res?.success) {

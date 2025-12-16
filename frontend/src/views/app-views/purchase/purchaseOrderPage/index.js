@@ -64,7 +64,7 @@ const PurchaseOrderPage = () => {
         try {
             const statusFilter =
                 tab === "opening_orders"
-                    ? "Pending"
+                    ? ["Pending", "Emailed"]
                     : tab === "closed_orders"
                         ? "Closed"
                         : undefined;
@@ -305,7 +305,7 @@ const PurchaseOrderPage = () => {
                         showDelete
                         showDeleteConfirm
                         showCross
-                        showMail
+                        showMail={record?.status === "Pending"}
                         styleEdit={{
                             background: "#DBEAFE",
                             color: "#1D4ED8",

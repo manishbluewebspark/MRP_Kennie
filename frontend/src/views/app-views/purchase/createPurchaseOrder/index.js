@@ -26,6 +26,7 @@ import PurchaseOrderService from 'services/PurchaseOrderService';
 import { fetchWorkOrders } from 'store/slices/workOrderSlice';
 import { getAllPurchaseSettings } from 'store/slices/purchaseSettingSlice';
 import { getAllUOMs } from 'store/slices/uomSlice';
+import { fetchSystemSettings } from 'store/slices/systemSettingsSlice';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -99,14 +100,20 @@ const PurchaseOrderForm = () => {
   const { purchaseSettings } = useSelector((state) => state.purchaseSettings);
   const { uoms } = useSelector((state) => state.uoms);
   const [lastPOOrderNumber, setLastPOOrderNumber] = useState([]);
+  const { workOrderSettings } = useSelector(
+    (state) => state.systemSettings
+  );
 
+  console.log('---workOrderSettings', workOrderSettings)
   /** ---------- totals as numbers ---------- */
   const calcTotals = () => {
     const sub = orderItems.reduce((sum, it) => {
       return sum + itemExt(it.qty, it.unitPrice, it.discPercentage);
     }, 0);
     const freight = n(form.getFieldValue('freightAmount'));
-    const ostTax = sub * 0.09; // 9%
+    const gstPercent = Number(workOrderSettings?.gstSettings?.gstPercentage || 0);
+    const ostTax = sub * (gstPercent / 100);
+
     const finalAmount = sub + freight + ostTax;
     return {
       subTotalAmount: sub,
@@ -300,6 +307,7 @@ const PurchaseOrderForm = () => {
     dispatch(fetchWorkOrders());
     dispatch(getAllPurchaseSettings());
     dispatch(getAllUOMs());
+    dispatch(fetchSystemSettings())
   }, [dispatch]);
 
   /** ---------- prefill settings safely ---------- */
@@ -746,7 +754,7 @@ const PurchaseOrderForm = () => {
             </Row>
             <Row gutter={16} style={{ marginBottom: 8 }}>
               <Col span={12}>
-                <Text>OST Tax (9%):</Text>
+                <Text>GST Tax ({workOrderSettings?.gstSettings?.gstPercentage}%):</Text>
               </Col>
               <Col span={12} style={{ textAlign: 'right' }}>
                 ${totals.ostTax.toFixed(2)}

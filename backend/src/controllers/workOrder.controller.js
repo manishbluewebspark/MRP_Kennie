@@ -481,7 +481,7 @@ export const createWorkOrder = async (req, res) => {
         remarks: it.remarks || "",
         needDate: finalNeedDate || null,
         commitDate: finalCommitDate || null,
-        status: "no_progress",
+        status: "No Progress Yet",
         isTriggered: Boolean(
           typeof it.isTriggered === "boolean" ? it.isTriggered : isTriggered
         ),
@@ -566,7 +566,7 @@ export const createWorkOrder = async (req, res) => {
         remarks: it.remarks || "",
         needDate: finalNeedDate || null,
         commitDate: finalCommitDate || null,
-        status: "no_progress",
+        status: "No Progress Yet",
         isTriggered: Boolean(
           typeof it.isTriggered === "boolean" ? it.isTriggered : isTriggered
         ),
@@ -2290,7 +2290,7 @@ export const moveToProduction = async (req, res) => {
     // Update only the required fields
     wo.isInProduction = true;
     wo.isTriggered = true;
-    wo.status = "picking_in_progress";
+    wo.status = "Picking In Progress";
 
     wo.processHistory.push({
       process: "picking",
@@ -3096,7 +3096,7 @@ export const getTotalMPNNeeded = async (req, res) => {
     // 2️⃣ FILTER WORK ORDERS
     // -------------------------
     const workOrders = await WorkOrder.find({
-      status: "on_hold",
+      // status: "No Progress Yet",
       drawingId: { $in: filteredDrawingIds },
     }).lean();
 
@@ -3212,22 +3212,27 @@ export const getTotalMPNNeeded = async (req, res) => {
     // -------------------------
     // 6️⃣ FINAL RESULT FORMAT
     // -------------------------
-    const result = [...mpnUsageMap.values()].map((row) => {
-      const mpn = mpnMap.get(row.mpnId);
-      const uom = row.uomId ? uomMap.get(String(row.uomId)) : null;
-      const stock = invMap.get(row.mpnId) || 0;
+    const result = [...mpnUsageMap.values()]
+      .map((row) => {
+        const mpn = mpnMap.get(row.mpnId);
+        const uom = row.uomId ? uomMap.get(String(row.uomId)) : null;
+        const stock = invMap.get(row.mpnId) || 0;
 
-      return {
-        mpn: mpn?.mpn || mpn?.MPN || null,
-        description: row.description || mpn?.description || null,
-        manufacturer: row.manufacturer || mpn?.manufacturer || null,
-        uom: uom?.name || null,
-        totalNeeded: row.totalNeeded,
-        currentStock: stock,
-        shortfall: Math.max(0, row.totalNeeded - stock),
-        workOrderNo: row.workOrderNo,
-      };
-    });
+        const shortfall = Math.max(0, row.totalNeeded - stock);
+
+        return {
+          mpn: mpn?.mpn || mpn?.MPN || null,
+          description: row.description || mpn?.description || null,
+          manufacturer: row.manufacturer || mpn?.manufacturer || null,
+          uom: uom?.name || null,
+          totalNeeded: row.totalNeeded,
+          currentStock: stock,
+          shortfall,
+          workOrderNo: row.workOrderNo,
+        };
+      })
+      .filter((r) => r.shortfall > 0); // ✅ only shortage
+
 
     return res.json({
       status: true,
@@ -3465,9 +3470,22 @@ export const getDeliveryOrders = async (req, res) => {
     }
 
     // 🔽 Filter by status
+    // 🔽 Filter by status
     if (status) {
-      match.status = status;
+      const s = String(status).toLowerCase();
+
+      if (s === "completed") {
+        match.$or = [
+          { status: { $in: ["completed", "Completed"] } },
+          { delivered: true },
+          { completeDate: { $ne: null } },
+          { completedDate: { $ne: null } },
+        ];
+      } else {
+        match.status = status; // other statuses: on_hold, in_progress etc
+      }
     }
+
 
     // 📅 Filter by createdAt range
     if (dateFrom || dateTo) {
@@ -3590,12 +3608,19 @@ export const getDeliveryOrders = async (req, res) => {
         $addFields: {
           displayStatus: {
             $cond: [
-              { $ifNull: ["$displayCompletedDate", false] },
+              {
+                $or: [
+                  { $ne: ["$completeDate", null] },
+                  { $eq: ["$delivered", true] },
+                  { $in: ["$status", ["completed", "Completed"]] }
+                ]
+              },
               "Completed",
-              { $ifNull: ["$status", "Pending"] },
-            ],
-          },
-        },
+              { $ifNull: ["$status", "Pending"] }
+            ]
+          }
+        }
+
       },
 
       // 🎯 Final projection (1 row per WorkOrder)
@@ -3683,7 +3708,15 @@ export const getDeliveryOrders = async (req, res) => {
 
 export const getEachMPNUsage = async (req, res) => {
   try {
-    const { mpnId, page = 1, limit = 10 } = req.query;
+    const {
+      mpnId,
+      customer,
+      project,
+      workOrderNo,
+      workOrderId,
+      page = 1,
+      limit = 10,
+    } = req.query;
 
     if (!mpnId) {
       return res.status(400).json({
@@ -3698,7 +3731,7 @@ export const getEachMPNUsage = async (req, res) => {
     const pageNum = Number(page) || 1;
     const limitNum = Number(limit) || 10;
 
-    // 1) CostingItems filter: only material + this MPN
+    // 1) CostingItems filter (material + this MPN)
     const costingItems = await CostingItems.find({
       mpn: mpnObjectId,
       quoteType: "material",
@@ -3713,55 +3746,68 @@ export const getEachMPNUsage = async (req, res) => {
       });
     }
 
-    // Unique drawingIds jahan ye MPN use ho raha hai
-    const drawingIds = [
-      ...new Set(costingItems.map((ci) => String(ci.drawingId))),
+    // Unique drawingIds from costing
+    const drawingIdsFromCosting = [
+      ...new Set(costingItems.map((ci) => String(ci.drawingId)).filter(Boolean)),
     ];
-    const drawingObjectIds = drawingIds.map(
+
+    const drawingObjectIdsFromCosting = drawingIdsFromCosting.map(
       (id) => new mongoose.Types.ObjectId(id)
     );
 
-    // 2) Work orders using those drawingIds (flat schema: drawingId + quantity)
-    const workOrders = await WorkOrder.find({
-      status: "on_hold",
-      drawingId: { $in: drawingObjectIds },
-    }).lean();
+    // 2) Drawing Query (customer + project filters)
+    const drawingQuery = { _id: { $in: drawingObjectIdsFromCosting } };
+
+    if (customer) drawingQuery.customerId = new mongoose.Types.ObjectId(customer);
+    if (project) drawingQuery.projectId = new mongoose.Types.ObjectId(project);
+
+    const drawingDocs = await Drawing.find(drawingQuery).lean();
+
+    if (!drawingDocs.length) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No drawings match selected filters for this MPN",
+        data: [],
+      });
+    }
+
+    const filteredDrawingIds = drawingDocs.map((d) => d._id);
+    const filteredDrawingIdStrs = drawingDocs.map((d) => String(d._id));
+
+    // 3) WorkOrder Query (drawingId + workOrderNo/workOrderId filters)
+    const workOrderQuery = {
+      drawingId: { $in: filteredDrawingIds },
+    };
+
+    if (workOrderNo) workOrderQuery.workOrderNo = String(workOrderNo).trim();
+    if (workOrderId) workOrderQuery._id = new mongoose.Types.ObjectId(workOrderId);
+
+    const workOrders = await WorkOrder.find(workOrderQuery).lean();
 
     if (!workOrders.length) {
       return res.json({
         status: true,
         statusCode: 200,
-        message: "No work orders found using this MPN",
+        message: "No work orders found using this MPN for selected filters",
         data: [],
       });
     }
 
-    // 3) Drawing Details
-    const drawingDocs = await Drawing.find({
-      _id: { $in: drawingObjectIds },
-    }).lean();
-
-    // Collect unique projectIds from drawings
+    // 4) Project map (optional for UI)
     const projectIds = [
       ...new Set(
         drawingDocs
           .map((d) => d.projectId)
-          .filter((p) => p)
+          .filter(Boolean)
           .map((p) => String(p))
       ),
     ];
 
-    // Fetch project details
-    const projectDocs = await Project.find({
-      _id: { $in: projectIds },
-    }).lean();
+    const projectDocs = await Project.find({ _id: { $in: projectIds } }).lean();
+    const projectMap = new Map(projectDocs.map((p) => [String(p._id), p.name || p.projectName || null]));
 
-    const projectMap = new Map();
-    for (const p of projectDocs) {
-      projectMap.set(String(p._id), p.name || p.projectName || null);
-    }
-
-    // Final drawing map
+    // Drawing map
     const drawingMap = new Map();
     for (const d of drawingDocs) {
       drawingMap.set(String(d._id), {
@@ -3770,36 +3816,38 @@ export const getEachMPNUsage = async (req, res) => {
       });
     }
 
-    // Group costing by drawing
+    // 5) Costing map only for filtered drawings
     const costingMap = new Map();
     for (const ci of costingItems) {
-      const key = String(ci.drawingId);
-      const arr = costingMap.get(key) || [];
+      const dId = String(ci.drawingId);
+      if (!filteredDrawingIdStrs.includes(dId)) continue;
+      const arr = costingMap.get(dId) || [];
       arr.push(ci);
-      costingMap.set(key, arr);
+      costingMap.set(dId, arr);
     }
 
-    // 4) Build usage rows (per WorkOrder, per drawing)
-    const rows = [];
+    // 6) Build usage rows
+    const grouped = new Map(); // key = `${workOrderId}_${drawingId}`
 
     for (const wo of workOrders) {
       const dKey = String(wo.drawingId);
       const costArr = costingMap.get(dKey);
-      if (!costArr || !costArr.length) continue;
+      if (!costArr?.length) continue;
 
       const woQty = Number(wo.quantity || 1);
       const dInfo = drawingMap.get(dKey) || {};
 
-      const projectName = dInfo.projectId
-        ? projectMap.get(dInfo.projectId) || null
-        : null;
+      const projectName = dInfo.projectId ? projectMap.get(dInfo.projectId) || null : null;
 
-      for (const ci of costArr) {
-        // Ye costingItem specifically isi mpnId ka hi hai (upar filter tha)
-        const qtyPer = Number(ci.quantity || 0);
-        const qtyUsed = qtyPer * woQty;
+      const qtyPerTotal = costArr.reduce((sum, ci) => sum + Number(ci.quantity || 0), 0);
+      const qtyUsed = qtyPerTotal * woQty;
 
-        rows.push({
+      const key = `${String(wo._id)}_${dKey}`;
+      const prev = grouped.get(key);
+
+      if (!prev) {
+        grouped.set(key, {
+          workOrderId: String(wo._id),        // ✅ send _id to frontend
           drawingNo: dInfo.drawingNo,
           projectName,
           workOrderNo: wo.workOrderNo,
@@ -3807,14 +3855,19 @@ export const getEachMPNUsage = async (req, res) => {
           needDate: wo.needDate,
           status: wo.status,
         });
+      } else {
+        prev.quantityUsed += qtyUsed;
+        grouped.set(key, prev);
       }
     }
+
+    const rows = Array.from(grouped.values());
 
     if (!rows.length) {
       return res.json({
         status: true,
         statusCode: 200,
-        message: "No MPN usage found",
+        message: "No MPN usage found after filters",
         data: [],
       });
     }
@@ -3830,12 +3883,7 @@ export const getEachMPNUsage = async (req, res) => {
       statusCode: 200,
       message: "MPN usage records fetched",
       data: paginatedRows,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages,
-      },
+      pagination: { page: pageNum, limit: limitNum, total, totalPages },
     });
   } catch (error) {
     console.error("getEachMPNUsage error:", error);
@@ -3847,6 +3895,387 @@ export const getEachMPNUsage = async (req, res) => {
     });
   }
 };
+
+
+// export const getEachMPNUsage = async (req, res) => {
+//   try {
+//     const { mpnId, customer, page = 1, limit = 10 } = req.query;
+
+//     if (!mpnId) {
+//       return res.status(400).json({
+//         status: false,
+//         statusCode: 400,
+//         message: "mpnId is required",
+//         data: [],
+//       });
+//     }
+
+//     const mpnObjectId = new mongoose.Types.ObjectId(mpnId);
+//     const pageNum = Number(page) || 1;
+//     const limitNum = Number(limit) || 10;
+
+//     // 1) CostingItems filter: only material + this MPN
+//     const costingItems = await CostingItems.find({
+//       mpn: mpnObjectId,
+//       quoteType: "material",
+//     }).lean();
+
+//     if (!costingItems.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No costing items found for this MPN (material)",
+//         data: [],
+//       });
+//     }
+
+//     // Unique drawingIds from costing
+//     const drawingIdsFromCosting = [
+//       ...new Set(costingItems.map((ci) => String(ci.drawingId)).filter(Boolean)),
+//     ];
+
+//     if (!drawingIdsFromCosting.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No drawings found from costing items",
+//         data: [],
+//       });
+//     }
+
+//     const drawingObjectIdsFromCosting = drawingIdsFromCosting.map(
+//       (id) => new mongoose.Types.ObjectId(id)
+//     );
+
+//     // 2) Drawing Details + CUSTOMER FILTER HERE ✅
+//     const drawingQuery = { _id: { $in: drawingObjectIdsFromCosting } };
+
+//     if (customer) {
+//       drawingQuery.customerId = new mongoose.Types.ObjectId(customer);
+//     }
+
+//     const drawingDocs = await Drawing.find(drawingQuery).lean();
+
+//     if (!drawingDocs.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No drawings match selected customer for this MPN",
+//         data: [],
+//       });
+//     }
+
+//     // Now final drawingIds after customer filter
+//     const filteredDrawingIds = drawingDocs.map((d) => d._id);
+//     const filteredDrawingIdStrs = drawingDocs.map((d) => String(d._id));
+
+//     // 3) Work orders using those filtered drawingIds
+//     const workOrders = await WorkOrder.find({
+//       drawingId: { $in: filteredDrawingIds },
+//     }).lean();
+
+//     if (!workOrders.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No work orders found using this MPN for selected customer",
+//         data: [],
+//       });
+//     }
+
+//     // 4) Project mapping (from drawings)
+//     const projectIds = [
+//       ...new Set(
+//         drawingDocs
+//           .map((d) => d.projectId)
+//           .filter(Boolean)
+//           .map((p) => String(p))
+//       ),
+//     ];
+
+//     const projectDocs = await Project.find({ _id: { $in: projectIds } }).lean();
+
+//     const projectMap = new Map();
+//     for (const p of projectDocs) {
+//       projectMap.set(String(p._id), p.name || p.projectName || null);
+//     }
+
+//     // Drawing map
+//     const drawingMap = new Map();
+//     for (const d of drawingDocs) {
+//       drawingMap.set(String(d._id), {
+//         drawingNo: d.drawingNo || d.drawing || null,
+//         projectId: d.projectId ? String(d.projectId) : null,
+//       });
+//     }
+
+//     // 5) Costing map: ONLY keep costing items for filtered drawings ✅
+//     const costingMap = new Map();
+//     for (const ci of costingItems) {
+//       const dId = String(ci.drawingId);
+//       if (!filteredDrawingIdStrs.includes(dId)) continue; // 🔥 customer filtered
+//       const arr = costingMap.get(dId) || [];
+//       arr.push(ci);
+//       costingMap.set(dId, arr);
+//     }
+
+//     // 6) Build usage rows
+//     const grouped = new Map(); // key = `${workOrderId}_${drawingId}`
+
+//     for (const wo of workOrders) {
+//       const dKey = String(wo.drawingId);
+//       const costArr = costingMap.get(dKey);
+//       if (!costArr?.length) continue;
+
+//       const woQty = Number(wo.quantity || 1);
+//       const dInfo = drawingMap.get(dKey) || {};
+
+//       const projectName = dInfo.projectId
+//         ? projectMap.get(dInfo.projectId) || null
+//         : null;
+
+//       // total qtyPer for this mpn in this drawing
+//       const qtyPerTotal = costArr.reduce((sum, ci) => sum + Number(ci.quantity || 0), 0);
+//       const qtyUsed = qtyPerTotal * woQty;
+
+//       const key = `${String(wo._id)}_${dKey}`;
+//       const prev = grouped.get(key);
+
+//       if (!prev) {
+//         grouped.set(key, {
+//           drawingNo: dInfo.drawingNo,
+//           projectName,
+//           workOrderNo: wo.workOrderNo,
+//           quantityUsed: qtyUsed,
+//           needDate: wo.needDate,
+//           status: wo.status,
+//         });
+//       } else {
+//         prev.quantityUsed += qtyUsed;
+//         grouped.set(key, prev);
+//       }
+//     }
+
+//     const rows = Array.from(grouped.values());
+
+//     if (!rows.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No MPN usage found after customer filter",
+//         data: [],
+//       });
+//     }
+
+//     // Pagination
+//     const total = rows.length;
+//     const totalPages = Math.ceil(total / limitNum);
+//     const start = (pageNum - 1) * limitNum;
+//     const paginatedRows = rows.slice(start, start + limitNum);
+
+//     return res.json({
+//       status: true,
+//       statusCode: 200,
+//       message: "MPN usage records fetched",
+//       data: paginatedRows,
+//       pagination: {
+//         page: pageNum,
+//         limit: limitNum,
+//         total,
+//         totalPages,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("getEachMPNUsage error:", error);
+//     return res.status(500).json({
+//       status: false,
+//       statusCode: 500,
+//       message: error.message,
+//       data: [],
+//     });
+//   }
+// };
+
+
+// export const getEachMPNUsage = async (req, res) => {
+//   try {
+//     const { mpnId,customer, page = 1, limit = 10 } = req.query;
+
+//     if (!mpnId) {
+//       return res.status(400).json({
+//         status: false,
+//         statusCode: 400,
+//         message: "mpnId is required",
+//         data: [],
+//       });
+//     }
+
+//     const mpnObjectId = new mongoose.Types.ObjectId(mpnId);
+//     const pageNum = Number(page) || 1;
+//     const limitNum = Number(limit) || 10;
+
+//     // 1) CostingItems filter: only material + this MPN
+//     const costingItems = await CostingItems.find({
+//       mpn: mpnObjectId,
+//       quoteType: "material",
+//     }).lean();
+
+//     if (!costingItems.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No costing items found for this MPN (material)",
+//         data: [],
+//       });
+//     }
+
+//     // Unique drawingIds jahan ye MPN use ho raha hai
+//     const drawingIds = [
+//       ...new Set(costingItems.map((ci) => String(ci.drawingId))),
+//     ];
+//     const drawingObjectIds = drawingIds.map(
+//       (id) => new mongoose.Types.ObjectId(id)
+//     );
+
+//     // 2) Work orders using those drawingIds (flat schema: drawingId + quantity)
+//     const workOrders = await WorkOrder.find({
+//       // status: "No Progress Yet",
+//       drawingId: { $in: drawingObjectIds },
+//     }).lean();
+
+//     if (!workOrders.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No work orders found using this MPN",
+//         data: [],
+//       });
+//     }
+
+//     // 3) Drawing Details
+//     const drawingDocs = await Drawing.find({
+//       _id: { $in: drawingObjectIds },
+//     }).lean();
+
+//     // Collect unique projectIds from drawings
+//     const projectIds = [
+//       ...new Set(
+//         drawingDocs
+//           .map((d) => d.projectId)
+//           .filter((p) => p)
+//           .map((p) => String(p))
+//       ),
+//     ];
+
+//     // Fetch project details
+//     const projectDocs = await Project.find({
+//       _id: { $in: projectIds },
+//     }).lean();
+
+//     const projectMap = new Map();
+//     for (const p of projectDocs) {
+//       projectMap.set(String(p._id), p.name || p.projectName || null);
+//     }
+
+//     // Final drawing map
+//     const drawingMap = new Map();
+//     for (const d of drawingDocs) {
+//       drawingMap.set(String(d._id), {
+//         drawingNo: d.drawingNo || d.drawing || null,
+//         projectId: d.projectId ? String(d.projectId) : null,
+//       });
+//     }
+
+//     // Group costing by drawing
+//     const costingMap = new Map();
+//     for (const ci of costingItems) {
+//       const key = String(ci.drawingId);
+//       const arr = costingMap.get(key) || [];
+//       arr.push(ci);
+//       costingMap.set(key, arr);
+//     }
+
+
+
+//     // 4) Build usage rows (ONE row per WorkOrder + Drawing)
+//     const grouped = new Map();
+//     // key = `${workOrderId}_${drawingId}`
+
+//     for (const wo of workOrders) {
+//       const dKey = String(wo.drawingId);
+//       const costArr = costingMap.get(dKey);
+//       if (!costArr?.length) continue;
+
+//       const woQty = Number(wo.quantity || 1);
+//       const dInfo = drawingMap.get(dKey) || {};
+
+//       const projectName = dInfo.projectId
+//         ? projectMap.get(dInfo.projectId) || null
+//         : null;
+
+//       // ✅ total qtyPer for this mpn in this drawing
+//       const qtyPerTotal = costArr.reduce((sum, ci) => sum + Number(ci.quantity || 0), 0);
+//       const qtyUsed = qtyPerTotal * woQty;
+
+//       const key = `${String(wo._id)}_${dKey}`;
+//       const prev = grouped.get(key);
+
+//       if (!prev) {
+//         grouped.set(key, {
+//           drawingNo: dInfo.drawingNo,
+//           projectName,
+//           workOrderNo: wo.workOrderNo,
+//           quantityUsed: qtyUsed,
+//           needDate: wo.needDate,
+//           status: wo.status,
+//         });
+//       } else {
+//         // (rare) agar same WO+Drawing multiple times aa gaya, to sum kar do
+//         prev.quantityUsed += qtyUsed;
+//         grouped.set(key, prev);
+//       }
+//     }
+
+//     const rows = Array.from(grouped.values());
+
+
+//     if (!rows.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No MPN usage found",
+//         data: [],
+//       });
+//     }
+
+//     // Pagination
+//     const total = rows.length;
+//     const totalPages = Math.ceil(total / limitNum);
+//     const start = (pageNum - 1) * limitNum;
+//     const paginatedRows = rows.slice(start, start + limitNum);
+
+//     return res.json({
+//       status: true,
+//       statusCode: 200,
+//       message: "MPN usage records fetched",
+//       data: paginatedRows,
+//       pagination: {
+//         page: pageNum,
+//         limit: limitNum,
+//         total,
+//         totalPages,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("getEachMPNUsage error:", error);
+//     return res.status(500).json({
+//       status: false,
+//       statusCode: 500,
+//       message: error.message,
+//       data: [],
+//     });
+//   }
+// };
 
 export const exportEachMPNUsage = async (req, res) => {
   try {

@@ -36,6 +36,7 @@ export function mapRowToSchemaforMPN(row) {
         ? new Date(normalizedRow[`purchased date#${i}`])
         : null,
       supplier: normalizedRow[`supplier#${i}`] || "",
+      currency: normalizedRow[`Currency#${i}`] || "",
       leadTimeWeeks: normalizedRow[`lead time#${i}_wk`]
         ? Number(normalizedRow[`lead time#${i}_wk`])
         : null

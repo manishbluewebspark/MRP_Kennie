@@ -100,20 +100,60 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
     return statusColors[status] || 'default';
   }
 
-  const handleCommitDateChange = async (record, newDate) => {
+//   const handleCommitDateChange = async (record, newDate) => {
+//   try {
+//     console.log('--------re',record,newDate)
+//     const formatted = newDate ? newDate.toISOString() : null;
+
+//     await PurchaseOrderService.updatePurchaseOrder(record?.poID, {
+//       idNumber:record?.idNumber,
+//       mpn:record?.mpn,
+//       committedDate: formatted,
+//     });
+
+//     message.success("Committed date updated");
+
+//     // getWorkOrders(); // refresh table
+//   } catch (err) {
+//     console.error(err);
+//     message.error("Failed to update committed date");
+//   }
+// };
+
+const handleCommitDateChange = async (record, newDate) => {
   try {
-    console.log('--------re',record,newDate)
-    const formatted = newDate ? newDate.toISOString() : null;
+    // agar user ne date clear kar di
+    if (!newDate) {
+      await PurchaseOrderService.updatePurchaseOrder(record?.poID, {
+        idNumber: record?.idNumber,
+        mpn: record?.mpn,
+        committedDate: null,
+      });
+      
+      return;
+    }
+
+    // 🔹 Parse needDate (DD/MM/YYYY format)
+    const needDate = record?.needDate
+      ? dayjs(record.needDate, "DD/MM/YYYY")
+      : null;
+
+    // 🔴 Validation: committedDate > needDate NOT allowed
+    if (needDate && newDate.isAfter(needDate, "day")) {
+      message.error("Committed Date cannot be later than Need Date");
+      return;
+    }
+
+    // ✅ Valid date → ISO format
+    const formatted = newDate.toISOString();
 
     await PurchaseOrderService.updatePurchaseOrder(record?.poID, {
-      idNumber:record?.idNumber,
-      mpn:record?.mpn,
+      idNumber: record?.idNumber,
+      mpn: record?.mpn,
       committedDate: formatted,
     });
 
-    message.success("Committed date updated");
-
-    // getWorkOrders(); // refresh table
+    message.success("Committed date updated successfully");
   } catch (err) {
     console.error(err);
     message.error("Failed to update committed date");

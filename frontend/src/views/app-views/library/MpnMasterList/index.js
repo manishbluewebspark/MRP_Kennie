@@ -13,6 +13,7 @@ import { getAllCategories } from "store/slices/categorySlice";
 import { fetchSuppliers } from "store/slices/supplierSlice";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import { formatDate } from "utils/formatDate";
+import { getAllCurrencies } from "store/slices/currencySlice";
 
 // 🔹 Fix: hum hamesha max 4 purchase history columns dikhayenge
 const MAX_PURCHASE_HISTORY = 3;
@@ -105,7 +106,7 @@ const MpnMasterList = () => {
     const { uoms } = useSelector((state) => state.uoms);
     const { suppliers } = useSelector((state) => state.suppliers);
     const { categories } = useSelector((state) => state.categories);
-
+    const { currencies } = useSelector((state) => state.currency);
     // 🔹 Base columns (without dynamic purchase history)
     const columns = [
         {
@@ -293,6 +294,7 @@ const MpnMasterList = () => {
         dispatch(getAllUOMs());
         dispatch(fetchSuppliers());
         dispatch(getAllCategories());
+        dispatch(getAllCurrencies());
     }, []);
 
     const handleDelete = async (id) => {
@@ -328,7 +330,7 @@ const MpnMasterList = () => {
         try {
             const payload = {
                 MPN: data.mpn,
-                Manufacturer: data.manufacture,
+                Manufacturer: data.manufacture[0],
                 UOM: data.uom,
                 Description: data.description,
                 StorageLocation: data.storageLocation,
@@ -340,6 +342,7 @@ const MpnMasterList = () => {
                 Category: data.category,
                 note: data.note,
                 Status: data.status,
+                currency: data?.currency
             };
 
             let res;
@@ -501,6 +504,7 @@ const MpnMasterList = () => {
                 uoms={uoms}
                 suppliers={suppliers}
                 categories={categories}
+                  currencies={currencies}
             />
 
             {/* Filter Modal */}
