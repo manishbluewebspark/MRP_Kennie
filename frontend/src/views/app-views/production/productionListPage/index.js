@@ -1052,7 +1052,7 @@ const CableAssemblyCard = ({
                       ? "In Production"
                       : record?.status || "-"}
                   </Tag>
-                  <EyeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
+                  {/* <EyeOutlined style={{ fontSize: 20, color: "#1890ff" }} /> */}
                 </div>
               </div>
             </Col>
@@ -1152,7 +1152,7 @@ const CableAssemblyCard = ({
               let bg = "#f5f5f5";
               let textColor = "#555";
               let borderColor = 'white';
-
+              let boxShadow = ''
               // Completed = solid green (no blink)
               if (status === "completed") {
                 bg = "#2e7d32";       // dark green
@@ -1161,9 +1161,10 @@ const CableAssemblyCard = ({
 
               // Active stage (new / in_progress) = green + blink
               if (isActive && status !== "completed") {
-                bg = "#9ae8eaa4";       // bright green
-                textColor = "#fff";
-                borderColor = '#2e7d32'
+                bg = "#DBEAFE";       // bright green
+                textColor = "black";
+                borderColor = '#93c5fd'
+                boxShadow =  'rgba(59, 130, 246, 0.8) 0px 0px 9.97317px 0px'
               }
 
               const canClick = status === "new" || status === "in_progress";
@@ -1564,9 +1565,9 @@ const SkillLevelCostingList = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
         </Col>
-        <Button type="primary" icon={<SettingOutlined />}>
+        {/* <Button type="primary" icon={<SettingOutlined />}>
           Update Progress
-        </Button>
+        </Button> */}
       </Row>
 
       {/* Table */}

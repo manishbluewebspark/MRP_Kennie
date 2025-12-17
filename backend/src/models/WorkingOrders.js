@@ -125,11 +125,30 @@ const workOrderSchema = new mongoose.Schema(
           default: null
         },
 
-        notes: {
-          type: String,
-          trim: true,
-          default: "",
-        },
+        // notes: {
+        //   type: String,
+        //   trim: true,
+        //   default: "",
+        // },
+
+        comments: [
+          {
+            comment: {
+              type: String,
+              trim: true,
+              // required: true,
+            },
+            commentedBy: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: "User",
+            },
+            commentedAt: {
+              type: Date,
+              default: Date.now,
+            },
+          },
+        ],
+
 
         isComplete: {
           type: Boolean,

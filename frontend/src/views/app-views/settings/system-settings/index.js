@@ -193,11 +193,11 @@ const SystemSettings = () => {
                 <InputNumber min={0} max={52} style={{ width: '100%' }} addonAfter="weeks" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            {/* <Col span={12}>
               <Form.Item name="workOrderAlertTrigger" label="Work Order Alert Trigger (days)">
                 <InputNumber min={0} max={30} style={{ width: '100%' }} addonAfter="days" />
               </Form.Item>
-            </Col>
+            </Col> */}
           </Row>
           {hasPermission("settings.systemSettings:update_workorder_settings") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
             Save Work Order Settings

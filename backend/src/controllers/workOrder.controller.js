@@ -4615,48 +4615,61 @@ const calculateStagePercentages = (wo) => {
 const updateWorkOrderStatus = (wo) => {
   const p = calculateStagePercentages(wo);
 
-  // PICKING
-  if (p.picking < 100) {
-    wo.status = p.picking === 0 ? "Picking Started" : `Picking: ${p.picking}% Done`;
+  const isBoxBuild = wo.projectType === "box_build";
+
+  // which stages are required for completion?
+  const requiredStages = isBoxBuild
+    ? ["picking", "assembly", "qc"]
+    : ["picking", "assembly", "labelling", "qc"];
+
+  const isComplete = (key) => Number(p?.[key] || 0) >= 100;
+
+  // ---------------- PICKING ----------------
+  if (!isComplete("picking")) {
+    wo.status =
+      p.picking === 0 ? "Picking Started" : `Picking: ${p.picking}% Done`;
     return;
   }
-  if (p.picking === 100) wo.status = "Picking Completed";
+  wo.status = "Picking Completed";
 
-  // ASSEMBLY
-  if (p.assembly < 100) {
-    const label = wo.projectType === "box_build" ? "Assembly" : "Cable Harness";
-    wo.status = p.assembly === 0 ? `${label} Started` : `${label}: ${p.assembly}% Done`;
+  // ---------------- ASSEMBLY ----------------
+  if (!isComplete("assembly")) {
+    const label = isBoxBuild ? "Assembly" : "Cable Harness";
+    wo.status =
+      p.assembly === 0 ? `${label} Started` : `${label}: ${p.assembly}% Done`;
     return;
   }
-  if (p.assembly === 100) {
-    wo.status = wo.projectType === "box_build"
-      ? "Assembly Completed"
-      : "Cable Harness Completed";
+  wo.status = isBoxBuild ? "Assembly Completed" : "Cable Harness Completed";
+
+  // ---------------- LABELLING (only if NOT box_build) ----------------
+  if (!isBoxBuild) {
+    if (!isComplete("labelling")) {
+      wo.status =
+        p.labelling === 0
+          ? "Labelling Started"
+          : `Labelling: ${p.labelling}% Done`;
+      return;
+    }
+    wo.status = "Labelling Completed";
   }
 
-  // LABELLING
-  if (p.labelling < 100) {
-    wo.status = p.labelling === 0 ? "Labelling Started" : `Labelling: ${p.labelling}% Done`;
-    return;
-  }
-  if (p.labelling === 100) wo.status = "Labelling Completed";
-
-  // QUALITY CHECK
-  if (p.qc < 100) {
+  // ---------------- QUALITY CHECK ----------------
+  if (!isComplete("qc")) {
     wo.status = p.qc === 0 ? "QC Started" : `Quality Check: ${p.qc}% Done`;
     return;
   }
-  if (p.qc === 100) wo.status = "Quality Check Completed";
+  wo.status = "Quality Check Completed";
 
-  // FINAL COMPLETE
-  if (p.picking === 100 && p.assembly === 100 && p.labelling === 100 && p.qc === 100) {
+  // ---------------- FINAL COMPLETE ----------------
+  const allDone = requiredStages.every(isComplete);
+
+  if (allDone) {
     wo.status = "Completed";
     wo.isProductionComplete = true;
     wo.isInProduction = false;
-    wo.completeDate = new Date()
+    wo.completeDate = new Date();
   }
 };
-
 
 // ===============================================================
 //                   SAVE WORK ORDER STAGE
@@ -4709,7 +4722,11 @@ export const saveWorkOrderStage = async (req, res) => {
       entry.qty = Number(entry.qty || 0) + qty;
       entry.completedBy = userId;
       entry.completedAt = new Date();
-      entry.notes = comments || entry.notes;
+      // entry.notes = comments || entry.notes;
+      entry.comments.push({
+        comment: comments,
+        commentedBy: userId,
+      });
       entry.details = {
         ...(entry.details || {}),
         materials: materialLines,
@@ -4759,7 +4776,8 @@ export const saveWorkOrderStage = async (req, res) => {
 
     // ---------------- UPDATE STATUS ENGINE HERE 🔥 ----------------
     updateWorkOrderStatus(wo);
-
+    
+    // await maybeCreateCommitDateAlert(wo);
     await wo.save();
 
     return res.json({

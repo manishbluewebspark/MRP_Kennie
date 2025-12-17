@@ -1,5 +1,5 @@
 import express from "express";
-import { getDashboardAlertsStats, getDashboardInventoryStats, getDashboardPurchaseStats, getDashboardSummary, getDashboardWorkOrderStats, getSystemCheck } from "../controllers/dashbaord.controller.js";
+import { getDashboardAlertsStats, getDashboardCardsStats, getDashboardInventoryStats, getDashboardPurchaseStats, getDashboardSummary, getDashboardWorkOrderStats, getProductionDashboard, getPurchaseFollowUps, getSystemCheck } from "../controllers/dashbaord.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 
 
@@ -10,11 +10,11 @@ router.get("/system-check", getSystemCheck);
 
 // Dashboard Summary (Top cards)
 router.get("/summary", authenticate, getDashboardSummary);
-
+router.get("/cards/stats", authenticate, getDashboardCardsStats);
 // Optional: individual sections
-router.get("/workorders/stats", authenticate, getDashboardWorkOrderStats);
+router.get("/purchase-followups", authenticate, getPurchaseFollowUps);
 router.get("/inventory/stats", authenticate, getDashboardInventoryStats);
-router.get("/purchase/stats", authenticate, getDashboardPurchaseStats);
+router.get("/production/list", authenticate, getProductionDashboard);
 router.get("/alerts/stats", authenticate, getDashboardAlertsStats);
 
 export default router;

@@ -667,6 +667,7 @@ export const getLowStockAlerts = async (req, res) => {
 
     // ✅ 0) Load system thresholds (fallback values)
     const settings = await SystemSettings.findOne({}).lean();
+    console.log('-----settings',settings?.inventoryAlerts)
     const criticalWeeksLeft = settings?.inventoryAlerts?.criticalWeeksLeft ?? 2;
     const urgentWeeksLeft   = settings?.inventoryAlerts?.urgentWeeksLeft ?? 3;
     const normalWeeksLeft   = settings?.inventoryAlerts?.normalWeeksLeft ?? 6;

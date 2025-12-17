@@ -22,6 +22,7 @@ import {
 } from "@ant-design/icons";
 import WorkOrderService from "services/WorkOrderService";
 import InventoryService from "services/InventoryService";
+import { formatDate } from "utils/formatDate";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -41,7 +42,14 @@ const PickingDetailModal = ({
     materials = [], // agar backend se aayega to yaha pass kar dena
 }) => {
 
-    console.log('-----stage', selectWorkOrderData?.drawingId)
+ const normalize = (str = "") =>
+  str.toLowerCase().replace(/[\s_]+/g, "");
+
+    const processStageData =
+  selectWorkOrderData?.processHistory?.find(
+    (r) =>
+      normalize(r.process) === normalize(stage)
+  ) || [];
 
     const getDrawingId = (workOrder) => {
         return (
@@ -81,20 +89,20 @@ const PickingDetailModal = ({
     }, [visible]);   // RUN ONLY WHEN MODAL OPENS
 
 
-    const handleShortageToggle = async (checked, record,workOrder) => {
+    const handleShortageToggle = async (checked, record, workOrder) => {
         try {
-         
+
             // If checkbox is unchecked → do nothing for now
             if (!checked) {
                 message.info("Shortage removed (API pending)");
                 return;
             }
 
-                    const pickedQty = Number(pickedQuantities[record.key] || 0);
-        const totalQty = Number(record.quantity || 0);
+            const pickedQty = Number(pickedQuantities[record.key] || 0);
+            const totalQty = Number(record.quantity || 0);
 
-        // shortage = total - picked
-        const shortageQty = Math.max(totalQty - pickedQty, 0);
+            // shortage = total - picked
+            const shortageQty = Math.max(totalQty - pickedQty, 0);
 
 
             // When shortage is marked → call backend
@@ -103,7 +111,7 @@ const PickingDetailModal = ({
                 workOrderId: workOrder?.workOrderId,
                 drawingId: workOrder?.drawingId,
                 requiredQty: shortageQty,
-                pickedQty:pickedQty,
+                pickedQty: pickedQty,
                 needDate: workOrder?.needDate,
                 workOrderNo: workOrder?.workOrderNo
             };
@@ -261,27 +269,56 @@ const PickingDetailModal = ({
         { title: "UOM", dataIndex: "uom", key: "uom", width: 80 },
         { title: "Qty", dataIndex: "quantity", key: "quantity", width: 80 },
         { title: "Location", dataIndex: "storageLocation", key: "storageLocation", width: 110 },
+        // {
+        //     title: "Picked Qty",
+        //     dataIndex: "pickedQty",
+        //     key: "pickedQty",
+        //     width: 120,
+        //     render: (_, record) => (
+        //         <InputNumber
+        //             min={0}
+        //             // max={record.maxQty}
+        //             placeholder={`Max: ${record.maxQty}`}
+        //             style={{ width: "100%" }}
+        //             value={pickedQuantities[record.key]}
+        //             onChange={(value) =>
+        //                 setPickedQuantities((prev) => ({
+        //                     ...prev,
+        //                     [record.key]: value,
+        //                 }))
+        //             }
+        //         />
+        //     ),
+        // },
         {
-            title: "Picked Qty",
-            dataIndex: "pickedQty",
-            key: "pickedQty",
-            width: 120,
-            render: (_, record) => (
-                <InputNumber
-                    min={0}
-                    // max={record.maxQty}
-                    placeholder={`Max: ${record.maxQty}`}
-                    style={{ width: "100%" }}
-                    value={pickedQuantities[record.key]}
-                    onChange={(value) =>
-                        setPickedQuantities((prev) => ({
-                            ...prev,
-                            [record.key]: value,
-                        }))
-                    }
-                />
-            ),
-        },
+  title: "Picked Qty",
+  dataIndex: "pickedQty",
+  key: "pickedQty",
+  width: 120,
+  render: (_, record) => {
+    // ✅ Only show input in Picking stage
+    if (stage?.toLowerCase() !== "picking") {
+      return record.pickedQty ?? "-";
+    }
+
+    return (
+      <InputNumber
+        min={0}
+        max={record.maxQty}
+        placeholder={`Max: ${record.maxQty}`}
+        style={{ width: "100%" }}
+        value={pickedQuantities[record.key]}
+        onChange={(value) =>
+          setPickedQuantities((prev) => ({
+            ...prev,
+            [record.key]: value,
+          }))
+        }
+      />
+    );
+  },
+}
+,
         {
             title: "Shortage",
             dataIndex: "shortage",
@@ -479,13 +516,56 @@ const PickingDetailModal = ({
             </Card>
 
             {/* ----------- Remarks & Comments ----------- */}
-            <Card title="Remarks & Comments" size="small" style={{ marginBottom: 16 }}>
+            {/* <Card title="Remarks & Comments" size="small" style={{ marginBottom: 16 }}>
                 <Form form={form} layout="vertical">
                     <Form.Item name="comments" label="Add New Comments">
                         <TextArea placeholder="Enter comments" rows={3} />
                     </Form.Item>
                 </Form>
+            </Card> */}
+
+            <Card title="Remarks & Comments" size="small" style={{ marginBottom: 16 }}>
+
+                {/* 🔹 Previous Comments */}
+                {processStageData?.comments?.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                        <b>Previous Comments</b>
+
+                        {processStageData?.comments?.map((item, index) => (
+                            <div key={index} style={{
+                                display: 'flex',
+                                textAlign: 'center',
+                                background: "#f8f9fa",
+                                padding: "8px 10px",
+                                borderRadius: 6,
+                                // marginTop: 3,s
+                                gap: 10
+                            }} >
+                                <div style={{
+                                    fontSize: 11,
+                                    color: "#6c757d",
+                                    // marginBottom: 2,
+                                }}>
+                                    {formatDate(item.commentedAt)}
+                                </div>
+                                <div style={{
+                                    fontSize: 13,
+                                    color: "#212529",
+                                }}>{item.comment}</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* 🔹 Add New Comment (Always Visible) */}
+                <Form form={form} layout="vertical">
+                    <Form.Item name="comments" label="Add New Comment">
+                        <TextArea placeholder="Enter comments" rows={3} />
+                    </Form.Item>
+                </Form>
+
             </Card>
+
 
             {/* ----------- Materials for Picking ----------- */}
             <Card title="Materials for Picking" size="small">

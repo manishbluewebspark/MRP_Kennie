@@ -20,9 +20,9 @@ DashboardService.getSummary = function (params = {}) {
 };
 
 // ✅ Work Orders Stats
-DashboardService.getWorkOrderStats = function (params = {}) {
+DashboardService.getPurchaseFollowUps = function (params = {}) {
   return fetch({
-    url: "/dashboard/workorders/stats",
+    url: "/dashboard/purchase-followups",
     method: "get",
     params,
   });
@@ -37,10 +37,18 @@ DashboardService.getInventoryStats = function (params = {}) {
   });
 };
 
-// ✅ Purchase Order Stats
-DashboardService.getPurchaseStats = function (params = {}) {
+DashboardService.getDashboardCardsStats = function (params = {}) {
   return fetch({
-    url: "/dashboard/purchase/stats",
+    url: "/dashboard/cards/stats",
+    method: "get",
+    params,
+  });
+};
+
+// ✅ Purchase Order Stats
+DashboardService.getProductionDashboard = function (params = {}) {
+  return fetch({
+    url: "/dashboard/production/list",
     method: "get",
     params,
   });

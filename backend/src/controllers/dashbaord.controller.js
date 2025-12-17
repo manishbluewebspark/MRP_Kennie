@@ -3,6 +3,21 @@ import Inventory from "../models/Inventory.js";
 import PurchaseOrders from "../models/PurchaseOrders.js";
 import Alert from "../models/Alert.js";
 
+// helper
+const startOfDay = (d) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
+const diffDays = (futureDate, fromDate = new Date()) => {
+  if (!futureDate) return null;
+  const a = startOfDay(futureDate).getTime();
+  const b = startOfDay(fromDate).getTime();
+  return Math.ceil((a - b) / (1000 * 60 * 60 * 24));
+};
+
+
 // ✅ System Check
 export const getSystemCheck = async (req, res) => {
   try {
@@ -182,26 +197,211 @@ const buildPurchaseStats = async () => {
 // ------------------------------
 export const getDashboardAlertsStats = async (req, res) => {
   try {
-    const stats = await buildAlertsStats();
-    return res.json({ success: true, data: stats });
+    const alerts = await Alert.find({
+      isDeleted: { $ne: true },
+      // optional: user specific
+      // assignedTo: req.user._id,
+    })
+      .sort({ createdAt: -1 }) // ✅ newest first
+      .limit(5)                // ✅ only latest 5
+      .lean();
+
+    return res.json({
+      success: true,
+      data: alerts,
+    });
   } catch (err) {
     console.error("getDashboardAlertsStats error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+
+export const getDashboardCardsStats = async (req, res) => {
+  try {
+    // ✅ Active Work Orders
+    const activeWorkOrdersCount = await WorkOrder.countDocuments({
+      isInProduction: true,
+      isProductionComplete: false,
+      isDeleted: { $ne: true }, // optional but recommended
+    });
+
+    // only unread alerts (important for dashboard)
+    const baseAlertFilter = {
+      // isRead: { $ne: true },
+      // isDeleted: { $ne: true },
+    };
+
+    // Urgent = critical + warning
+    const urgentActions = await Alert.countDocuments({
+      ...baseAlertFilter,
+      priority: { $in: ["critical", "warning"] },
+    });
+
+    // Attention Required = only warning
+    const attentionRequired = await Alert.countDocuments({
+      ...baseAlertFilter,
+      priority: "warning",
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        activeWorkOrders: activeWorkOrdersCount,
+        urgentActions,
+        attentionRequired
+      },
+    });
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard statistics",
+    });
+  }
+};
+
+export const getProductionDashboard = async (req, res) => {
+  try {
+    const now = new Date();
+
+    // ✅ active WOs
+    const activeFilter = {
+      isInProduction: true,
+      isProductionComplete: false,
+      isDeleted: { $ne: true },
+    };
+
+    const [activeCount, delayedCount, completedTodayCount, activeList] =
+      await Promise.all([
+        WorkOrder.countDocuments(activeFilter),
+
+        // delayed = commitDate < today and not complete
+        WorkOrder.countDocuments({
+          ...activeFilter,
+          commitDate: { $lt: startOfDay(now) },
+        }),
+
+        // completed today
+        WorkOrder.countDocuments({
+          isProductionComplete: true,
+          isDeleted: { $ne: true },
+          completeDate: { $gte: startOfDay(now) },
+        }),
+
+        // list for table
+        WorkOrder.find(activeFilter)
+          .select(
+            "_id workOrderNo workOrderNumber woNumber status projectType commitDate quantity processHistory assignedTo createdAt"
+          )
+          .sort({ updatedAt: -1 })
+          .limit(50)
+          .lean(),
+      ]);
+
+    // ✅ Map list to include stage percentages (frontend-friendly)
+    const list = activeList.map((wo) => {
+      // basic stage qty from processHistory
+      const ph = Array.isArray(wo.processHistory) ? wo.processHistory : [];
+      const qty = Number(wo.quantity || 0);
+
+      const getStageQty = (key) =>
+        Number(ph.find((p) => p.process === key)?.qty || 0);
+
+      const pct = (done) => (qty > 0 ? Math.min(100, Math.round((done / qty) * 100)) : 0);
+
+      // box_build has no labelling (as you already handled)
+      const isBoxBuild = wo.projectType === "box_build";
+
+      const pickingQty = getStageQty("picking");
+      const assemblyKey = "assembly"; // (if you use cable_harness also keep same key)
+      const assemblyQty = getStageQty(assemblyKey);
+      const labellingQty = getStageQty("labelling");
+      const qcQty = getStageQty("qc");
+
+      const stagePercent = {
+        picking: pct(pickingQty),
+        assembly: pct(assemblyQty),
+        labelling: isBoxBuild ? null : pct(labellingQty),
+        qc: pct(qcQty),
+      };
+
+      return {
+        ...wo,
+        workOrderNoDisplay: wo.workOrderNo || wo.workOrderNumber || wo.woNumber || wo._id,
+        daysToCommit: diffDays(wo.commitDate, now), // can be negative if overdue
+        stagePercent,
+      };
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        cards: {
+          activeInProduction: activeCount,
+          delayedWorkOrders: delayedCount,
+          completedToday: completedTodayCount,
+        },
+        list,
+      },
+    });
+  } catch (err) {
+    console.error("getProductionDashboard error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-const buildAlertsStats = async () => {
-  const [total, unread, critical, resolved] = await Promise.all([
-    Alert.countDocuments({}),
-    Alert.countDocuments({ isRead: false }),
-    Alert.countDocuments({ priority: "critical", isResolved: false }),
-    Alert.countDocuments({ isResolved: true }),
-  ]);
 
-  return {
-    total,
-    unread,
-    critical,
-    resolved,
-  };
+const daysSince = (pastDate, fromDate = new Date()) => {
+  const a = startOfDay(fromDate).getTime();
+  const b = startOfDay(pastDate).getTime();
+  return Math.floor((a - b) / (1000 * 60 * 60 * 24));
+};
+
+export const getPurchaseFollowUps = async (req, res) => {
+  try {
+    // ✅ kitne din se pending hai = threshold
+    const thresholdDays = Number(req.query.days || 3); // default 3 days
+
+    const pos = await PurchaseOrders.find({
+      isDeleted: { $ne: true },
+      status: { $in: ["Pending", "Created", "Draft"] }, // adjust to your statuses
+    })
+      .select("_id poNumber status supplier poDate updatedAt needDate")
+      .sort({ createdAt: 1 }) // oldest first
+      .limit(10)
+      .lean();
+
+    const list = pos
+      .map((po) => {
+        const baseDate = po.poDate;
+        const ageDays = baseDate ? daysSince(baseDate) : 0;
+
+        return {
+          ...po,
+          ageDays,
+          actionText:
+            ageDays >= thresholdDays
+              ? `Pending for ${ageDays} days — email the supplier for an update`
+              : "Monitoring",
+          isAttention: ageDays >= thresholdDays,
+        };
+      })
+      // ✅ only show old ones first; still keep list small
+      .sort((a, b) => b.isAttention - a.isAttention || b.ageDays - a.ageDays);
+
+    return res.json({
+      success: true,
+      data: {
+        thresholdDays,
+        items: list,
+      },
+    });
+  } catch (err) {
+    console.error("getPurchaseFollowUps error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
 };
