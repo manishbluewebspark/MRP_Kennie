@@ -663,8 +663,8 @@ const CreateWorkOrderModal = ({
         const drawingId = drawing._id ? String(drawing._id) : String(index);
 
         const qty = Number(drawing.qty || 0);
-        const unitPriceNum = Number(drawing.unitPrice ?? 0);
-        const totalPriceNum = qty * unitPriceNum;
+        const unitPriceNum = Number(drawing?.totalPrice ?? 0);
+        const totalPriceNum = qty * drawing?.totalPrice;
 
         return {
           key: drawingId,

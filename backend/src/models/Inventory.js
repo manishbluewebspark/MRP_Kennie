@@ -85,7 +85,7 @@ const inventorySchema = new mongoose.Schema({
   },
   location: {
     type: String,
-    default: "Main Warehouse"
+    default: ""
   },
   lastUpdated: {
     type: Date,

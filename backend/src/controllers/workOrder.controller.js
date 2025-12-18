@@ -2410,7 +2410,7 @@ export const exportDeliveryWorkOrdersWord = async (req, res) => {
     const infoMap = buildDeliveryInfoMap(deliveryInfo);
 
     // ✅ fetch selected workorders
-       const workOrders = await WorkOrder.find({ _id: { $in: ids } })
+    const workOrders = await WorkOrder.find({ _id: { $in: ids } })
       .select("_id drawingId workOrderNo doNumber projectId posNo quantity completeDate poNumber")
       .populate("projectId", "projectName")
       .populate("drawingId", "drawingNo description")
@@ -3854,6 +3854,9 @@ export const getDeliveryOrders = async (req, res) => {
     const filterProject = parsedFilters?.project || project || null;
 
     const match = { isDeleted: { $ne: true } };
+const andConditions = [];
+
+
 
     // 🔍 basic search root
     if (search) {
@@ -3864,20 +3867,33 @@ export const getDeliveryOrders = async (req, res) => {
       ];
     }
 
+
+
     // ✅ status logic
-    if (status) {
-      const s = String(status).toLowerCase();
-      if (s === "completed") {
-        match.$or = [
-          { status: { $in: ["completed", "Completed"] } },
-          { delivered: true },
-          { completeDate: { $ne: null } },
-          { completedDate: { $ne: null } },
-        ];
-      } else {
-        match.status = status;
-      }
-    }
+   if (status) {
+  const s = String(status).trim().toLowerCase();  // ✅ trim IMPORTANT
+
+  if (s === "completed") {
+    andConditions.push({
+      $or: [
+        { status: { $in: ["completed", "Completed"] } },
+        { delivered: true },
+        { completeDate: { $ne: null } },
+        { completedDate: { $ne: null } },
+        { isProductionComplete: true }, // ✅
+        // optional safe if stored as string/number:
+        // { isProductionComplete: { $in: [true, "true", 1] } },
+      ],
+    });
+  } else {
+    andConditions.push({ status }); // other statuses
+  }
+}
+
+if (andConditions.length) {
+  match.$and = andConditions;
+}
+
 
     // 📅 filter by workorder createdAt range
     if (dateFrom || dateTo) {
@@ -3977,19 +3993,20 @@ export const getDeliveryOrders = async (req, res) => {
 
       {
         $addFields: {
-          displayStatus: {
-            $cond: [
-              {
-                $or: [
-                  { $ne: ["$completeDate", null] },
-                  { $eq: ["$delivered", true] },
-                  { $in: ["$status", ["completed", "Completed"]] },
-                ],
-              },
-              "Completed",
-              { $ifNull: ["$status", "Pending"] },
-            ],
-          },
+        displayStatus: {
+  $cond: [
+    {
+      $or: [
+        { $ne: ["$completeDate", null] },
+        { $eq: ["$delivered", true] },
+        { $in: ["$status", ["completed", "Completed"]] },
+      ]
+    },
+    "Completed",
+    { $ifNull: ["$status", "Pending"] }
+  ]
+}
+
         },
       },
 
@@ -4022,19 +4039,19 @@ export const getDeliveryOrders = async (req, res) => {
       // 🔍 extended search
       ...(search
         ? [
-            {
-              $match: {
-                $or: [
-                  { workOrderNo: { $regex: search, $options: "i" } },
-                  { poNumber: { $regex: search, $options: "i" } },
-                  { drawingName: { $regex: search, $options: "i" } },
-                  { drawingCode: { $regex: search, $options: "i" } },
-                  { projectName: { $regex: search, $options: "i" } },
-                  { customerName: { $regex: search, $options: "i" } },
-                ],
-              },
+          {
+            $match: {
+              $or: [
+                { workOrderNo: { $regex: search, $options: "i" } },
+                { poNumber: { $regex: search, $options: "i" } },
+                { drawingName: { $regex: search, $options: "i" } },
+                { drawingCode: { $regex: search, $options: "i" } },
+                { projectName: { $regex: search, $options: "i" } },
+                { customerName: { $regex: search, $options: "i" } },
+              ],
             },
-          ]
+          },
+        ]
         : []),
 
       { $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } },

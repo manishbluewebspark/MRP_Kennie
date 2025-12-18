@@ -1571,6 +1571,7 @@ import LibraryService from 'services/libraryService';
 import SkillLevelCostingService from 'services/SkillLevelCostingService';
 import dayjs from 'dayjs';
 import moment from 'moment';
+import useDebounce from 'utils/debouce';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -1593,6 +1594,7 @@ const AddCostingItemModal = ({
   const [childPartOptions, setChildPartOptions] = useState([]);
   const [childPartData, setChildPartData] = useState(null);
   const [loadingChild, setLoadingChild] = useState(false);
+const [childSearch, setChildSearch] = useState("");
 
   const [skillLevelOptions, setSkillLevelOptions] = useState([]); // [{value, label, data}]
   const [loadingSkill, setLoadingSkill] = useState(false);
@@ -1617,27 +1619,36 @@ const AddCostingItemModal = ({
     return (maxNum + 1).toString().padStart(4, '0');
   }, [costingMaterialData, selectedQuoteType]);
 
+
+const loadChildParts = async (searchText = "") => {
+  setLoadingChild(true);
+  try {
+    const res = await LibraryService.getAllChild({
+      search: searchText,
+      limit: searchText ? 50 : 10,
+    });
+
+    const opts = (res?.data || []).map((item) => ({
+      value: item._id,
+      label: item.ChildPartNo,
+      data: item,
+    }));
+
+    setChildPartOptions(opts);
+  } catch (err) {
+    console.error(err);
+    setChildPartOptions([]);
+  } finally {
+    setLoadingChild(false);
+  }
+};
+
+
+
   // ---------- load child parts (for material) ----------
   useEffect(() => {
-    const loadAllChildParts = async () => {
-      setLoadingChild(true);
-      try {
-        const response = await LibraryService.getAllChild();
-        const opts = (response?.data || []).map((item) => ({
-          value: item._id,
-          label: item.ChildPartNo,
-          data: item
-        }));
-        setChildPartOptions(opts);
-      } catch (err) {
-        console.error('Error loading child parts:', err);
-        setChildPartOptions([]);
-      } finally {
-        setLoadingChild(false);
-      }
-    };
     if (visible && selectedQuoteType === 'material') {
-      loadAllChildParts();
+      loadChildParts();
     }
   }, [visible, selectedQuoteType]);
 
@@ -1766,18 +1777,18 @@ const AddCostingItemModal = ({
 
   // inside your component
 
-const handleMpnChange = (mpnId) => {
-  const selected = mpnList.find((m) => m._id === mpnId);
-  console.log('----selected',selected)
-  if (!selected) return;
+  const handleMpnChange = (mpnId) => {
+    const selected = mpnList.find((m) => m._id === mpnId);
+    console.log('----selected', selected)
+    if (!selected) return;
 
-   const uomId = selected?.UOM?._id || form.getFieldValue('uom');
-  form.setFieldsValue({
-    description: selected.Description || "",   // or selected.description
-    uom: uomId,                      // will auto-select UOM in dropdown
-    // optional: unitPrice: selected.RFQUnitPrice
-  });
-};
+    const uomId = selected?.UOM?._id || form.getFieldValue('uom');
+    form.setFieldsValue({
+      description: selected.Description || "",   // or selected.description
+      uom: uomId,                      // will auto-select UOM in dropdown
+      // optional: unitPrice: selected.RFQUnitPrice
+    });
+  };
 
 
   // ---------- EFFECT: initialize form values on open / edit ----------
@@ -1852,6 +1863,9 @@ const handleMpnChange = (mpnId) => {
       handleSkillLevelChange(sl.value, sl);
     }
   }, [visible, selectedQuoteType, editData, skillLevelOptions, form]);
+
+  const debouncedSearch = useDebounce(loadChildParts, 300);
+
 
   // ---------- EFFECT: if UOM list arrives later, try to map by code for edit (packing/material) ----------
   useEffect(() => {
@@ -1961,11 +1975,15 @@ const handleMpnChange = (mpnId) => {
             <Select
               showSearch
               placeholder="Select child part"
-              filterOption={(input, option) => (option?.label || '').toLowerCase().includes(input.toLowerCase())}
-              onChange={handleChildPartChange}
               loading={loadingChild}
               options={childPartOptions}
+              onChange={handleChildPartChange}
+              onSearch={(value) => debouncedSearch(value)}
+              filterOption={false}
+              allowClear
+              notFoundContent="No matching child part"
             />
+
           </Form.Item>
         </Col>
       </Row>
@@ -2156,7 +2174,7 @@ const handleMpnChange = (mpnId) => {
         <Col span={12}>
           <Form.Item label={<Text strong>Quantity</Text>} name="quantity" rules={[{ required: true }]}>
             <InputNumber
-          
+
               min={0}
               style={{ width: '100%' }}
               placeholder="Enter quantity"

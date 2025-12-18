@@ -259,7 +259,7 @@ const ChildPartLibrary = () => {
                 ChildPartNo: data.childPartNo,
                 mpn: data.linkedMpn,
                 LinkedMPNCategory: data.LinkedMPNCategory,
-                status: data.status,
+                status: data.status || "Active",
             };
 
             let res;

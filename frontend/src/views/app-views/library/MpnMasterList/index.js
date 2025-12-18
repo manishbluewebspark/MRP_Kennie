@@ -341,7 +341,7 @@ const MpnMasterList = () => {
                 LeadTime_WK: data.leadTime,
                 Category: data.category,
                 note: data.note,
-                Status: data.status,
+                Status: data.status || "Active",
                 currency: data?.currency
             };
 

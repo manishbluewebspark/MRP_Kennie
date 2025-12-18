@@ -107,7 +107,6 @@ const handleOk = () => {
         <Form.Item
           label="Status"
           name="status"
-          rules={[{ required: true, message: "Please select status" }]}
         >
           <Select placeholder="Select status">
             <Option value="Active">Active</Option>

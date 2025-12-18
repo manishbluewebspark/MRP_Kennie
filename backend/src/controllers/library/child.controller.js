@@ -6,47 +6,111 @@ import XLSX from "xlsx";
 /**
  * Add new Child
  */
+// export const addChild = async (req, res) => {
+//   try {
+//     const { mpn: mpnId, childPartNo } = req.body;
+
+//     // 1️⃣ Check parent MPN exists
+//     const mpn = await MPN.findById(mpnId);
+//     if (!mpn) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Parent MPN not found" });
+//     }
+
+//     // 2️⃣ Check if this childPartNo is already linked to some other MPN
+//     //    Rule: one child part no cannot be linked to 2 or more MPNs
+//     const existingChild = await Child.findOne({ childPartNo });
+
+//     if (existingChild && existingChild.mpn.toString() !== mpnId.toString()) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "This child part number is already linked to another MPN.",
+//       });
+//     }
+
+//     // 3️⃣ Create + save child
+//     const child = new Child({
+//       ...req.body,
+//       mpn: mpnId, // make sure mpn is set correctly
+//     });
+
+//     await child.save();
+
+//     return res
+//       .status(201)
+//       .json({ success: true, message: "Child created", data: child });
+//   } catch (err) {
+//     return res
+//       .status(400)
+//       .json({ success: false, message: err.message || "Something went wrong" });
+//   }
+// };
+
 export const addChild = async (req, res) => {
   try {
-    const { mpn: mpnId, childPartNo } = req.body;
+    // ✅ accept both keys (frontend mismatch safe)
+    const mpnId = req.body?.mpn || req.body?.mpnId;
+    const childPartNo =
+      req.body?.childPartNo ||
+      req.body?.ChildPartNo ||   // ✅ your payload
+      req.body?.childPartNO;
 
-    // 1️⃣ Check parent MPN exists
-    const mpn = await MPN.findById(mpnId);
-    if (!mpn) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Parent MPN not found" });
+    if (!mpnId || !childPartNo) {
+      return res.status(400).json({
+        success: false,
+        message: "mpn and childPartNo are required",
+      });
     }
 
-    // 2️⃣ Check if this childPartNo is already linked to some other MPN
-    //    Rule: one child part no cannot be linked to 2 or more MPNs
-    const existingChild = await Child.findOne({ childPartNo });
+    // 1️⃣ Check parent MPN exists
+    const mpn = await MPN.findById(mpnId).lean();
+    if (!mpn) {
+      return res.status(404).json({
+        success: false,
+        message: "Parent MPN not found",
+      });
+    }
 
-    if (existingChild && existingChild.mpn.toString() !== mpnId.toString()) {
+    // 2️⃣ Prevent duplicates
+    const existingChild = await Child.findOne({ ChildPartNo: childPartNo }).lean();
+
+    // ✅ linked to another MPN
+    if (existingChild && String(existingChild.mpn) !== String(mpnId)) {
       return res.status(400).json({
         success: false,
         message: "This child part number is already linked to another MPN.",
       });
     }
 
-    // 3️⃣ Create + save child
-    const child = new Child({
+    // ✅ linked to same MPN (duplicate add)
+    if (existingChild && String(existingChild.mpn) === String(mpnId)) {
+      return res.status(400).json({
+        success: false,
+        message: "This child part number is already linked to this MPN.",
+      });
+    }
+
+    // 3️⃣ Create
+    const child = await Child.create({
       ...req.body,
-      mpn: mpnId, // make sure mpn is set correctly
+      mpn: mpnId,
+      ChildPartNo: childPartNo, // ✅ keep schema key consistent
     });
 
-    await child.save();
-
-    return res
-      .status(201)
-      .json({ success: true, message: "Child created", data: child });
+    return res.status(201).json({
+      success: true,
+      message: "Child created",
+      data: child,
+    });
   } catch (err) {
-    return res
-      .status(400)
-      .json({ success: false, message: err.message || "Something went wrong" });
+    console.error("addChild error:", err);
+    return res.status(400).json({
+      success: false,
+      message: err.message || "Something went wrong",
+    });
   }
 };
-
 
 /**
  * Update Child

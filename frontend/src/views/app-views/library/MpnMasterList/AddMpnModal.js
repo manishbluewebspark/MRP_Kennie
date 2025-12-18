@@ -1,14 +1,15 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Form, Row, Col } from "antd";
 import GlobalModal from "components/GlobalModal";
 import { RoundedInput, RoundedTextArea, RoundedSelect, RoundedInputNumber, RoundedDatePicker } from "components/FormFields";
 import moment from "moment";
+import dayjs from 'dayjs';
 import { Select } from "antd";
 const { Option } = Select;
 
 const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], suppliers = [], categories = [], currencies = [] }) => {
     const [form] = Form.useForm();
-
+    const [selectRFQUnitPriceCurrency, setSelectRFQUnitPriceCurrency] = useState()
     // Prefill form for Edit
     useEffect(() => {
         if (formData) {
@@ -20,7 +21,7 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                 storageLocation: formData.StorageLocation,
                 rfq: formData.RFQUnitPrice,
                 moq: formData.MOQ,
-                rfqDate: formData.RFQDate ? moment(formData.RFQDate) : null,
+                rfqDate: formData.RFQDate ? dayjs(formData.RFQDate) : null,
                 supplier: formData.Supplier,
                 leadTime: formData.LeadTime_WK,
                 category: formData.Category,
@@ -128,7 +129,7 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    {/* <Col span={8}>
                         <Form.Item
                             label="Currency (RFQ Unit Price)"
                             name="currency"
@@ -142,14 +143,39 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                                 ))}
                             </Select>
                         </Form.Item>
+                    </Col> */}
+
+                    <Col span={8}>
+                        <Form.Item
+                            label="Currency (RFQ Unit Price)"
+                            name="currency"
+                            rules={[{ required: true, message: "Select currency type" }]}
+                        >
+                            <Select
+                                placeholder="Select currency"
+                                onChange={(value) => {
+                                    const selected = currencies.find(c => c._id === value);
+                                    setSelectRFQUnitPriceCurrency(
+                                        selected ? `${selected.symbol}` : null
+                                    );
+                                }}
+                            >
+                                {currencies.map((c) => (
+                                    <Select.Option key={c._id} value={c._id}>
+                                        {c.symbol} {c.code} - {c.name}
+                                    </Select.Option>
+                                ))}
+                            </Select>
+                        </Form.Item>
                     </Col>
+
 
 
                     <Col span={8}>
                         <Form.Item label="RFQ Unit Price" name="rfq" rules={[{ required: true, message: "Enter RFQ" }]}>
                             <RoundedInput
                                 placeholder="Enter RFQ Unit Price"
-                                addonAfter="$"
+                                addonAfter={selectRFQUnitPriceCurrency}
                             />
                         </Form.Item>
                     </Col>
@@ -184,7 +210,7 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                     </Col>
 
                     <Col span={12}>
-                        <Form.Item label="Status" name="status" rules={[{ required: true, message: "Select status" }]}>
+                        <Form.Item label="Status" name="status">
                             <RoundedSelect placeholder="Select status">
                                 <Option value="Active">Active</Option>
                                 <Option value="Inactive">Inactive</Option>

@@ -871,10 +871,10 @@ const InventoryListPage = () => {
                         current: page,
                         pageSize: limit,
                         total: getCurrentData().length,
-                        showSizeChanger: true,
-                        showQuickJumper: true,
-                        showTotal: (total, range) =>
-                            `${range[0]}-${range[1]} of ${total} items`
+                        // showSizeChanger: true,
+                        // showQuickJumper: true,
+                        // showTotal: (total, range) =>
+                        //     `${range[0]}-${range[1]} of ${total} items`
                     } : false}
                     scroll={activeTab === 'inventory_list' ? { x: 1300 } : undefined}
                 />

@@ -464,6 +464,7 @@ const handleExportWork = async () => {
       width: 110,
       render: (_, record) => (
         <Checkbox
+        disabled={record?.status !== "Completed"}
           checked={!!deliveredMap[record._id]}
           onChange={(e) => handleDeliveredToggle(record, e.target.checked)}
         />

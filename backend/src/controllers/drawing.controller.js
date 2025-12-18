@@ -3315,19 +3315,24 @@ export const importDrawings = async (req, res) => {
     }
 
     // 🔟 Helper: errors ko single string me convert karo
-    const formatErrorsToSingleMessage = (errors = []) => {
-      if (!errors.length) return "";
-      return errors
-        .map((e) => {
-          const parts = [];
-          if (e.drawingNo) parts.push(`Drawing ${e.drawingNo}`);
-          if (e.row != null) parts.push(`Row ${e.row}`);
-          if (e.field) parts.push(`${e.field}: ${e.value ?? "-"}`);
-          if (e.message) parts.push(e.message);
-          return parts.join(" ");
-        })
-        .join(", ");
-    };
+  const formatErrorsToSingleMessage = (errors = []) => {
+  if (!Array.isArray(errors) || errors.length === 0) return "";
+
+  return errors
+    .map((e) => {
+      const drawing = e.drawingNo ? `Drawing ${e.drawingNo}` : "Drawing";
+      const row = e.row != null ? ` (Row ${e.row})` : "";
+      const field =
+        e.field && e.value != null
+          ? ` | ${e.field}: ${e.value}`
+          : "";
+      const message = e.message ? ` → ${e.message}` : "";
+
+      return `${drawing}${row}${message}${field}`;
+    })
+    .join("\n"); // 🔥 newline instead of comma
+};
+
 
     const errorMessage = formatErrorsToSingleMessage(results.errors);
 
