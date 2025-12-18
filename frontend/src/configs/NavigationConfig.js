@@ -196,6 +196,7 @@ const dashBoardNavTree = [{
   title: 'sidenav.dashboard',
   icon: DashboardOutlined,
   breadcrumb: false,
+  permissions:["dashboard:view"],
   isGroupTitle: false
 }]
 
@@ -1007,6 +1008,7 @@ const workingOrderNavTree = [{
       title: 'work-order.work-order-managment',
       icon: PlusCircleOutlined,
       breadcrumb: false,
+      permissions: ["work_order.work_order_managment:view"],
       submenu: []
     },
     {
@@ -1015,6 +1017,7 @@ const workingOrderNavTree = [{
       title: 'work-order.delivery-order',
       icon: CarOutlined,
       breadcrumb: false,
+      permissions: ["work_order.delivery_order:view"],
       submenu: []
     }
   ]
@@ -1138,6 +1141,7 @@ const inventoryNavTree = [{
       title: 'inventory.inventory-list',
       icon: PlusOutlined,
       breadcrumb: false,
+      permissions: ["inventory.inventory:view"],
       submenu: []
     },
     {
@@ -1145,6 +1149,7 @@ const inventoryNavTree = [{
       path: `${APP_PREFIX_PATH}/inventory/mto-inventory`,
       title: 'inventory.mto-inventory',
       icon: UsergroupAddOutlined,
+      permissions: ["inventory.mto_inventory:view"],
       breadcrumb: false,
       submenu: []
     },
@@ -1153,6 +1158,7 @@ const inventoryNavTree = [{
       path: `${APP_PREFIX_PATH}/inventory/recieve-material`,
       title: 'inventory.recieve-material',
       icon: UsergroupAddOutlined,
+      permissions: ["inventory.recieve_material:view"],
       breadcrumb: false,
       submenu: []
     }
@@ -1173,6 +1179,7 @@ const purchaseNavTree = [{
       title: 'purchase.purchase-order',
       icon: PlusOutlined,
       breadcrumb: false,
+      permissions: ["purchase.purchase_order:view"],
       submenu: []
     },
     {
@@ -1180,6 +1187,7 @@ const purchaseNavTree = [{
       path: `${APP_PREFIX_PATH}/purchase/purchase-history`,
       title: 'purchase.purchase-history',
       icon: UsergroupAddOutlined,
+      permissions: ["purchase.purchase_history:view"],
       breadcrumb: false,
       submenu: []
     },
@@ -1188,6 +1196,7 @@ const purchaseNavTree = [{
       path: `${APP_PREFIX_PATH}/purchase/purchase-managment`,
       title: 'purchase.purchase-managment',
       icon: UsergroupAddOutlined,
+      permissions: ["purchase.supplier_managment:view"],
       breadcrumb: false,
       submenu: []
     },
@@ -1196,6 +1205,7 @@ const purchaseNavTree = [{
       path: `${APP_PREFIX_PATH}/purchase/purchase-settings`,
       title: 'purchase.purchase-settings',
       icon: UsergroupAddOutlined,
+      permissions: ["purchase.purchase_settings:view"],
       breadcrumb: false,
       submenu: []
     }
@@ -1216,6 +1226,7 @@ const productionNavTree = [{
       title: 'production.production',
       icon: BuildOutlined,
       breadcrumb: false,
+      permissions: ["production.cable_harness_assembly:view","production.box_build:vie"],
       submenu: []
     },
   ]

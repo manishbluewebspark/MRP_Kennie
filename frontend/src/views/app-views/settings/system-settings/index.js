@@ -168,7 +168,7 @@ const SystemSettings = () => {
               </Form.Item>
             </Col>
           </Row>
-          {hasPermission("settings.systemSettings:update_alert_settings") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
+          {hasPermission("settings.systemSettings:create_edit_delete") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
             Save Alert Settings
           </Button>)}
 
@@ -179,7 +179,7 @@ const SystemSettings = () => {
           <Form.Item name="gstPercentage" label="GST %">
             <InputNumber min={0} max={100} style={{ width: '100%' }} addonAfter="%" />
           </Form.Item>
-          {hasPermission("settings.systemSettings:update_gst_settings") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
+          {hasPermission("settings.systemSettings:create_edit_delete") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
             Save GST Settings
           </Button>)}
 
@@ -199,7 +199,7 @@ const SystemSettings = () => {
               </Form.Item>
             </Col> */}
           </Row>
-          {hasPermission("settings.systemSettings:update_workorder_settings") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
+          {hasPermission("settings.systemSettings:create_edit_delete") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
             Save Work Order Settings
           </Button>)}
 
@@ -356,7 +356,7 @@ const SystemSettings = () => {
     </Col>
   </Row>
 
-  {hasPermission("settings.systemSettings:update_currency_settings") && (
+  {hasPermission("settings.systemSettings:create_edit_delete") && (
     <Button
       type="primary"
       htmlType="submit"
@@ -376,7 +376,7 @@ const SystemSettings = () => {
             <Col span={8}><Form.Item name="urgentWeeks" label="Weeks Left"><InputNumber min={0} max={52} style={{ width: '100%' }} /></Form.Item><Tag color="orange" style={{ width: '100%', textAlign: 'center' }}>Urgent Alert - AMBER</Tag></Col>
             <Col span={8}><Form.Item name="normalWeeks" label="Weeks or More"><InputNumber min={0} max={52} style={{ width: '100%' }} /></Form.Item><Tag color="green" style={{ width: '100%', textAlign: 'center' }}>Normal Alert - GREEN</Tag></Col>
           </Row>
-          {hasPermission("settings.systemSettings:update_inventory_settings") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
+          {hasPermission("settings.systemSettings:create_edit_delete") && (<Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
             Save Inventory Alerts
           </Button>)}
 

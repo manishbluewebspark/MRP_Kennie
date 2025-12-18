@@ -418,16 +418,23 @@ const DrawingDetails = () => {
                         optionType="button"
                         buttonStyle="solid"
                     >
-                        {hasPermission('sales.mto:view_material_tab') && (<Radio.Button value="materials">Materials</Radio.Button>)}
-                        {hasPermission('sales.mto:view_manhour_tab') && (<Radio.Button value="manhour">Manhour</Radio.Button>)}
-                        {hasPermission('sales.mto:view_packing_tab') && (<Radio.Button value="packing">Packing</Radio.Button>)}
+                        <Radio.Button value="materials">Materials</Radio.Button>
+                        <Radio.Button value="manhour">Manhour</Radio.Button>
+                        <Radio.Button value="packing">Packing</Radio.Button>
                     </Radio.Group>
 
-                    {drawing?.quoteType === "box_build" && activeTab === "materials" && (
-                        <Button icon={<FileExcelOutlined />} onClick={triggerFileInput} style={{ marginLeft: 'auto' }}>
-                            Import {activeTab}
-                        </Button>
-                    )}
+                    {drawing?.quoteType === "box_build" &&
+                        activeTab === "materials" &&
+                        hasPermission("sales.mto:add_material") && (
+                            <Button
+                                icon={<FileExcelOutlined />}
+                                onClick={triggerFileInput}
+                                style={{ marginLeft: "auto" }}
+                            >
+                                Import {activeTab}
+                            </Button>
+                        )}
+
 
                     <input
                         type="file"

@@ -81,35 +81,43 @@ WorkOrderService.getDeliveryOrders = (params) => {
 };
 
 // Export work orders
-WorkOrderService.exportWorkOrders = () => {
+WorkOrderService.exportWorkOrders = (payload) => {
   return fetch({
     url: "/work-orders/workOrder/export",
     method: "get",
-    responseType: 'arraybuffer'
+    responseType: 'arraybuffer',
+    data: payload,
   });
 };
 
-WorkOrderService.exportDeliveryWorkOrders = () => {
+WorkOrderService.exportDeliveryWorkOrders = (payload) => {
   return fetch({
     url: "/work-orders/workOrder/export/delivery/excel",
-    method: "get",
-    responseType: 'arraybuffer'
+    method: "post",
+    responseType: 'arraybuffer',
+    data:payload
   });
 };
 
-WorkOrderService.exportWorkOrdersPDF = () => {
+WorkOrderService.exportWorkOrdersPDF = (payload) => {
   return fetch({
     url: "/work-orders/workOrder/export/delivery/pdf",
-    method: "get",
-    responseType: 'arraybuffer'
+    method: "post",
+    responseType: "arraybuffer", // ✅ MUST for PDF
+    data:payload,
+    headers: {
+      Accept: "application/pdf",
+    },
   });
 };
 
-WorkOrderService.exportWorkOrdersWord = () => {
+
+WorkOrderService.exportWorkOrdersWord = (payload) => {
   return fetch({
     url: "/work-orders/workOrder/export/delivery/word",
-    method: "get",
-    responseType: 'arraybuffer'
+    method: "post",
+    responseType: 'arraybuffer',
+    data:payload
   });
 };
 

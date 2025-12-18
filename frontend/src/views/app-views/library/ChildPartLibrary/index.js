@@ -79,8 +79,8 @@ const ChildPartLibrary = () => {
                     onEdit={() => handleEdit(record?._id)}
                     onDelete={() => handleDelete(record?._id)}
                     // showInfo={true}
-                    showEdit={hasPermission('library.child:edit')}
-                    showDelete={hasPermission('library.child:delete')}
+                    showEdit={hasPermission('library.child:create_edit_delete')}
+                    showDelete={hasPermission('library.child:create_edit_delete')}
                     showDeleteConfirm={true}
                 />
 
@@ -293,7 +293,7 @@ const ChildPartLibrary = () => {
                     <h2 style={{ margin: 0 }}>Child Part Library</h2>
                     <p style={{ margin: 0, fontSize: 14, color: '#888' }}>Child Parts Linkedto MPNs with Auto Costing Data</p>
                 </div>
-                {hasPermission('library.child:create') && (
+                {hasPermission('library.child:create_edit_delete') && (
                     <Button onClick={() => setShowAddChildPart(true)} type="primary" icon={<PlusOutlined />}>
                         Add Child Part
                     </Button>

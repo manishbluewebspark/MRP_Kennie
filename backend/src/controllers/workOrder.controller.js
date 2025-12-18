@@ -26,7 +26,9 @@ import UOM from "../models/UOM.js";
 import Project from "../models/Project.js";
 import Customer from "../models/Customer.js";
 import Child from "../models/library/Child.js";
-
+import path from "path";
+import ejs from 'ejs'
+import puppeteer from 'puppeteer'
 
 function generateWorkOrderNumber(lastWorkOrderNo) {
   const now = new Date();
@@ -2113,23 +2115,95 @@ async function fetchDeliveryOrdersForExport(query) {
 // Excel export delivery
 export const exportDeliveryWorkOrdersXlsx = async (req, res) => {
   try {
-    const rows = await fetchDeliveryOrdersForExport(req.query);
+    const { ids = [] } = req.body || {};
 
-    // Create workbook and sheet
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select at least one Work Order",
+      });
+    }
+
+    // ✅ fetch selected workorders
+    const workOrders = await WorkOrder.find({ _id: { $in: ids } })
+      .select("_id drawingId workOrderNo doNumber projectId posNo quantity targetDeliveryDate completeDate poNumber")
+      .populate("projectId", "projectName")
+      .populate("drawingId", "drawingNo description")
+      .lean();
+
+    if (!workOrders.length) {
+      return res.status(404).json({ success: false, message: "No work orders found" });
+    }
+
+    // ✅ deliverTo (first workorder -> drawing -> customer) (optional info)
+    let deliverTo = {};
+    const firstWO = workOrders[0];
+
+    if (firstWO?.drawingId) {
+      const drawing = await Drawing.findById(firstWO.drawingId)
+        .select("customerId customer customerRef")
+        .lean();
+
+      const customerId = drawing?.customerId || drawing?.customer || drawing?.customerRef;
+
+      if (customerId) {
+        const customer = await Customer.findById(customerId)
+          .select("companyName name contactPerson paymentTerms address")
+          .lean();
+
+        const addrObj = customer?.address || {};
+        const companyName = customer?.companyName || customer?.name || "";
+        const attn = customer?.contactPerson || "";
+
+        const line1 =
+          addrObj?.line1 || addrObj?.addressLine1 || addrObj?.street || "";
+        const line2 =
+          addrObj?.line2 || addrObj?.addressLine2 || "";
+        const city = addrObj?.city || "";
+        const state = addrObj?.state || "";
+        const country = addrObj?.country || "";
+        const postal = addrObj?.postalCode || addrObj?.pincode || "";
+
+        deliverTo = {
+          customer: companyName,
+          attn,
+          address1: addrObj,
+          terms: customer?.paymentTerms || "",
+        };
+      }
+    }
+
+    // ✅ clean export rows (same as your UI columns)
+    const rows = workOrders.map((r) => ({
+      "Work Order No": r.workOrderNo || "",
+      "Drawing No": r?.drawingId?.drawingNo || r.drawingName || "",
+      Project: r?.projectId?.projectName || "",
+      Customer: r.customerName || deliverTo.customer || "",
+      Qty: r.quantity ?? r.qty ?? 0,
+      "PO Number": r.poNumber || "",
+      Completed: r.completeDate ? new Date(r.completeDate).toLocaleDateString("en-GB") : "",
+      "Target Delivery": r.targetDeliveryDate ? new Date(r.targetDeliveryDate).toLocaleDateString("en-GB") : "",
+      Status: r.status || "",
+      "DO No.": r.doNumber || "",
+      Delivered: r.delivered ? "Yes" : "No",
+    }));
+
+    // ✅ workbook + sheet
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
 
-    // Add sheet to workbook
+    // Sheet 1: Delivery Orders
+    const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Delivery Orders");
 
-    // Write buffer
+    // Sheet 2: Deliver To (optional but useful)
+    const ws2 = XLSX.utils.json_to_sheet([deliverTo || {}]);
+    XLSX.utils.book_append_sheet(wb, ws2, "Deliver To");
+
+    // ✅ buffer output
     const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
     const fileName = `delivery_orders_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=${fileName}`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -2141,16 +2215,358 @@ export const exportDeliveryWorkOrdersXlsx = async (req, res) => {
   }
 };
 
-// ✅ PDF Export delivery
 export const exportDeliveryWorkOrdersPDF = async (req, res) => {
   try {
-    const rows = await fetchDeliveryOrdersForExport(req.query);
+    const { ids = [] } = req.body || {};
 
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    doc.setFontSize(14);
-    doc.text("Delivery Orders Report", 40, 40);
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select at least one Work Order",
+      });
+    }
 
-    const head = [[
+    // ✅ fetch selected workorders (only fields needed)
+    const workOrders = await WorkOrder.find({ _id: { $in: ids } })
+      .select("_id drawingId workOrderNo doNumber projectId posNo quantity completeDate poNumber")
+      .populate("projectId", "projectName")
+      .populate("drawingId", "drawingNo description")
+      .lean();
+
+    if (!workOrders.length) {
+      return res.status(404).json({ success: false, message: "No work orders found" });
+    }
+
+    // ✅ use first workorder to determine DeliverTo
+    const firstWO = workOrders[0];
+
+    let deliverTo = {
+      name: "",
+      line1: "",
+      line2: "",
+      line3: "",
+      attn: "",
+    };
+
+    if (firstWO?.drawingId) {
+      const drawing = await Drawing.findById(firstWO.drawingId)
+        .select("customerId customer customerRef") // keep customerId field here
+        .lean();
+
+      const customerId =
+        drawing?.customerId ||
+        drawing?.customer || // if your schema uses `customer`
+        drawing?.customerRef; // if your schema uses `customerRef`
+
+      if (customerId) {
+        const customer = await Customer.findById(customerId)
+          .select(
+            "companyName contactPerson email phone paymentTerms incoterms address"
+          )
+          .lean();
+
+        // ✅ map customer -> deliverTo (adjust field names as per your DB)
+        const companyName = customer?.companyName || customer?.name || "";
+
+        // If address stored as object: customer.address.{...}
+        const addrObj = customer?.address || {};
+
+        const line1 =
+          addrObj?.line1 ||
+          addrObj?.addressLine1 ||
+          addrObj?.street ||
+          "";
+
+        const line2 =
+          addrObj?.line2 ||
+          addrObj?.addressLine2 ||
+          "";
+
+        const city = addrObj?.city || "";
+        const state = addrObj?.state || "";
+        const country = addrObj?.country || "";
+        const postal =
+          addrObj?.postalCode || addrObj?.pincode || "";
+
+        const line3 = [city, state, country, postal].filter(Boolean).join(" ");
+
+        deliverTo = {
+          name: companyName,
+          address: customer?.address,
+          attn: customer?.contactPerson,
+          paymentTerms: customer?.paymentTerms || "",
+          salesperson: customer?.contactPerson
+        };
+
+      }
+    }
+
+    // ✅ Static Header data (company stays static)
+    const meta = {
+      company: {
+        address: "1 Kaki Bukit Ave 3 KB-1 #03-07 Singapore 416087",
+        tel: "(65) 6743 4533",
+        fax: "(65) 6743 6929",
+        email: "sales@exceltech.com",
+        website: "www.exceltech.com",
+        gstRegNo: "199407327W",
+        stampName: "EXXEL TECHNOLOGY PTE LTD"
+      },
+      deliverToTitle: "DELIVERY ORDER",
+      deliverTo, // ✅ dynamic now
+      docInfo: {
+        page: "1 of 1",
+        doNo: firstWO?.doNumber,
+        date: firstWO?.completeDate,
+        poNo: firstWO?.poNumber,
+        terms: deliverTo?.paymentTerms,
+        salesperson: deliverTo?.salesperson,
+      },
+
+    };
+
+    // ✅ STATIC rows for now (as you said) – count matches ids length
+    const tableRows = workOrders.map((item, idx) => ({
+      no: idx + 1,
+      pos: item?.posNo,
+      barcode: `*${item?.poNumber}/${item?.posNo}*`,
+      qty: item?.quantity,
+      projectNr: item?.projectId?.projectName,
+      item: item?.drawingId?.drawingNo,
+      description: item?.drawingId?.description,
+    }));
+
+    const templatePath = path.join(process.cwd(), "templates", "do.ejs");
+    const html = await ejs.renderFile(templatePath, { meta, rows: tableRows });
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+
+    const fileName = `delivery_orders_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "20px", right: "40px", bottom: "20px", left: "40px" },
+      displayHeaderFooter: false,
+      headerTemplate: `
+        <div style="width:100%; font-size:10px; padding:0 40px; color:#111;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+            <div></div>
+            <div style="font-weight:700;">${meta.deliverToTitle}</div>
+          </div>
+        </div>
+      `,
+      footerTemplate: `
+        <div style="width:100%; font-size:10px; padding:0 40px; color:#111;">
+          <div style="display:flex; justify-content:flex-end;">
+            <div>Page: <span class="pageNumber"></span> of <span class="totalPages"></span></div>
+          </div>
+        </div>
+      `,
+    });
+
+    await browser.close();
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("exportDeliveryWorkOrdersPDF error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+// helper: map deliveryInfo by id
+const buildDeliveryInfoMap = (deliveryInfo = []) => {
+  const map = {};
+  for (const x of deliveryInfo) {
+    if (!x?.id) continue;
+    map[String(x.id)] = {
+      doNumber: (x.doNumber || "").trim(),
+      delivered: !!x.delivered,
+    };
+  }
+  return map;
+};
+
+export const exportDeliveryWorkOrdersWord = async (req, res) => {
+  try {
+    const { ids = [], deliveryInfo = [] } = req.body || {};
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select at least one Work Order",
+      });
+    }
+
+    const infoMap = buildDeliveryInfoMap(deliveryInfo);
+
+    // ✅ fetch selected workorders
+       const workOrders = await WorkOrder.find({ _id: { $in: ids } })
+      .select("_id drawingId workOrderNo doNumber projectId posNo quantity completeDate poNumber")
+      .populate("projectId", "projectName")
+      .populate("drawingId", "drawingNo description")
+      .lean();
+
+    if (!workOrders.length) {
+      return res.status(404).json({ success: false, message: "No work orders found" });
+    }
+
+    // ✅ merge doNumber/delivered from frontend (so export matches UI)
+    const rows = workOrders.map((r) => {
+      const x = infoMap[String(r._id)] || {};
+      return {
+        ...r,
+        doNumber: (x.doNumber ?? r.doNumber ?? "").trim(),
+        delivered: typeof x.delivered === "boolean" ? x.delivered : !!r.delivered,
+        qtyFinal: r.quantity ?? r.qty ?? 0,
+        drawingFinal: r.drawingId.drawingNo || r.drawingId.drawingName || "",
+        projectFinal: r.projectId.projectName || "",
+        customerFinal: r.customerName || "",
+      };
+    });
+
+    // ✅ DeliverTo meta (first WO -> drawing -> customer)
+    let deliverTo = {
+      name: "",
+      line1: "",
+      line2: "",
+      line3: "",
+      attn: "",
+      terms: "",
+    };
+
+    const firstWO = rows[0];
+
+    if (firstWO?.drawingId) {
+      const drawing = await Drawing.findById(firstWO.drawingId)
+        .select("customerId customer customerRef")
+        .lean();
+
+      const customerId = drawing?.customerId || drawing?.customer || drawing?.customerRef;
+
+      if (customerId) {
+        const customer = await Customer.findById(customerId)
+          .select("companyName name contactPerson paymentTerms address")
+          .lean();
+
+        const addrObj = customer?.address || {};
+        const companyName = customer?.companyName || customer?.name || "";
+        const attn = customer?.contactPerson || "";
+        const terms = customer?.paymentTerms || "";
+
+        const line1 =
+          addrObj?.line1 || addrObj?.addressLine1 || addrObj?.street || "";
+        const line2 =
+          addrObj?.line2 || addrObj?.addressLine2 || "";
+        const city = addrObj?.city || "";
+        const state = addrObj?.state || "";
+        const country = addrObj?.country || "";
+        const postal = addrObj?.postalCode || addrObj?.pincode || "";
+
+        deliverTo = {
+          name: companyName,
+          line1,
+          line2,
+          line3: [city, state, country, postal].filter(Boolean).join(" "),
+          attn,
+          terms,
+        };
+      }
+    }
+
+    // ✅ Meta (you can keep static company)
+    const meta = {
+      company: {
+        name: "EXXEL TECHNOLOGY PTE LTD",
+        addr1: "1 Kaki Bukit Ave 3 KB-1 #03-07 Singapore 416087",
+        tel: "(65) 6743 4553",
+        fax: "(65) 6743 6929",
+        email: "sales@exxeltech.com",
+        website: "www.exxeltech.com",
+        gst: "199407327W",
+      },
+      deliverToTitle: "DELIVERY ORDER",
+      doNo: firstWO?.doNumber || "",
+      date: firstWO?.completedDate ? new Date(firstWO.completedDate).toLocaleDateString("en-GB") : "",
+      poNo: firstWO?.poNumber || "",
+      terms: deliverTo?.terms || "",
+      salesperson: "Alan Ong",
+    };
+
+    // ✅ Word "header" block
+    const headerBlock = [
+      new Paragraph({ text: meta.company.addr1 }),
+      new Paragraph({ text: `Tel: ${meta.company.tel}  Fax: ${meta.company.fax}` }),
+      new Paragraph({ text: `Email: ${meta.company.email}  Website: ${meta.company.website}` }),
+      new Paragraph({ text: `Company/GST Reg no: ${meta.company.gst}` }),
+      new Paragraph({ text: "" }),
+
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Deliver To: ", bold: true }),
+          new TextRun({ text: meta.deliverToTitle, bold: true }),
+        ],
+      }),
+
+      new Paragraph({
+        children: [
+          new TextRun({ text: "DO No: ", bold: true }),
+          new TextRun({ text: meta.doNo || "" }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Date: ", bold: true }),
+          new TextRun({ text: meta.date || "" }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: "PO No: ", bold: true }),
+          new TextRun({ text: meta.poNo || "" }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Terms: ", bold: true }),
+          new TextRun({ text: meta.terms || "" }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Attn: ", bold: true }),
+          new TextRun({ text: deliverTo.attn || "" }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Salesperson: ", bold: true }),
+          new TextRun({ text: meta.salesperson || "" }),
+        ],
+      }),
+
+      new Paragraph({ text: "" }),
+      new Paragraph({
+        text: deliverTo.name || "",
+        bold: true,
+      }),
+      new Paragraph({ text: deliverTo.line1 || "" }),
+      new Paragraph({ text: deliverTo.line2 || "" }),
+      new Paragraph({ text: deliverTo.line3 || "" }),
+      new Paragraph({ text: "" }),
+    ];
+
+    // ✅ Table headers
+    const headerCells = [
       "Work Order No",
       "Drawing No",
       "Project",
@@ -2162,76 +2578,34 @@ export const exportDeliveryWorkOrdersPDF = async (req, res) => {
       "Status",
       "DO No.",
       "Delivered",
-    ]];
-
-    const body = rows.map((r) => [
-      r.workOrderNo,
-      r.drawingNo,
-      r.project,
-      r.customer,
-      String(r.qty ?? 0),
-      r.poNumber,
-      r.completedDate,
-      r.targetDeliveryDate,
-      r.status,
-      r.doNumber,
-      r.delivered,
-    ]);
-
-    autoTable(doc, {
-      head,
-      body,
-      startY: 60,
-      styles: { fontSize: 9, cellPadding: 4 },
-      headStyles: { fillColor: [29, 78, 216], textColor: 255 }, // blue header
-      margin: { left: 40, right: 40 },
-      tableWidth: "auto",
-      theme: "grid",
-    });
-
-    const fileName = `delivery_orders_${new Date().toISOString().slice(0, 10)}.pdf`;
-    const buf = doc.output("arraybuffer");
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
-    res.send(Buffer.from(buf));
-  } catch (error) {
-    console.error("exportDeliveryWorkOrdersPDF error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ✅ Word Export delivery
-export const exportDeliveryWorkOrdersWord = async (req, res) => {
-  try {
-    const rows = await fetchDeliveryOrdersForExport(req.query);
-
-    const headerCells = [
-      "Work Order No", "Drawing No", "Project", "Customer", "Qty",
-      "PO Number", "Completed", "Target Delivery", "Status", "DO No.", "Delivered"
-    ].map(txt =>
+    ].map((txt) =>
       new TableCell({
-        children: [new Paragraph({ children: [new TextRun({ text: txt, bold: true })] })],
+        children: [
+          new Paragraph({
+            children: [new TextRun({ text: txt, bold: true })],
+            alignment: AlignmentType.CENTER,
+          }),
+        ],
       })
     );
 
     const tableRows = [
       new TableRow({ children: headerCells }),
-      ...rows.map(r =>
+      ...rows.map((r) =>
         new TableRow({
           children: [
             r.workOrderNo,
-            r.drawingNo,
-            r.project,
-            r.customer,
-            String(r.qty ?? 0),
-            r.poNumber,
-            r.completedDate,
-            r.targetDeliveryDate,
-            r.status,
-            r.doNumber,
-            r.delivered,
-          ].map(val =>
+            r.drawingFinal,
+            r.projectFinal,
+            r.customerFinal || deliverTo.name,
+            String(r.qtyFinal ?? 0),
+            r.poNumber || "",
+            r.completedDate ? new Date(r.completedDate).toLocaleDateString("en-GB") : "",
+            r.targetDeliveryDate ? new Date(r.targetDeliveryDate).toLocaleDateString("en-GB") : "",
+            r.status || "",
+            r.doNumber || "",
+            r.delivered ? "Yes" : "No",
+          ].map((val) =>
             new TableCell({
               children: [new Paragraph(String(val ?? ""))],
             })
@@ -2250,11 +2624,17 @@ export const exportDeliveryWorkOrdersWord = async (req, res) => {
               heading: HeadingLevel.HEADING_1,
               alignment: AlignmentType.CENTER,
             }),
-            new Paragraph({ text: " " }),
+            new Paragraph({ text: "" }),
+            ...headerBlock,
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
               rows: tableRows,
             }),
+            new Paragraph({ text: "" }),
+            new Paragraph({ text: `Goods received by: ${meta.company.name}` }),
+            new Paragraph({ text: "" }),
+            new Paragraph({ text: "Recipient's Signature & Company Stamp: ______________________" }),
+            new Paragraph({ text: "Authorised Signatory: ______________________" }),
           ],
         },
       ],
@@ -3446,34 +3826,47 @@ export const getDeliveryOrders = async (req, res) => {
       page = 1,
       limit = 10,
       search = "",
-      status,          // e.g. on_hold, completed, in_progress
-      customer,        // customer _id
-      project,         // project _id
-      dateFrom,        // ISO or yyyy-mm-dd
+      status,
+      customer,
+      project,
+      dateFrom,
       dateTo,
       sortBy = "createdAt",
       sortOrder = "desc",
+      filters, // can be JSON string or object
     } = req.query;
 
     page = Math.max(parseInt(page) || 1, 1);
     limit = Math.max(parseInt(limit) || 10, 1);
 
-    const match = { isDeleted: { $ne: true } }; // if you don't have isDeleted, you can remove this
+    // ✅ parse filters safely
+    let parsedFilters = {};
+    if (filters) {
+      try {
+        parsedFilters = typeof filters === "string" ? JSON.parse(filters) : filters;
+      } catch (e) {
+        parsedFilters = {};
+      }
+    }
 
-    // 🔍 Basic search on root fields
+    const drawingDate = parsedFilters?.drawingDate || null;
+    const filterCustomer = parsedFilters?.customer || customer || null;
+    const filterProject = parsedFilters?.project || project || null;
+
+    const match = { isDeleted: { $ne: true } };
+
+    // 🔍 basic search root
     if (search) {
       match.$or = [
         { workOrderNo: { $regex: search, $options: "i" } },
         { poNumber: { $regex: search, $options: "i" } },
-        { posNo: { $regex: search, $options: "i" } }, // schema has posNo
+        { posNo: { $regex: search, $options: "i" } },
       ];
     }
 
-    // 🔽 Filter by status
-    // 🔽 Filter by status
+    // ✅ status logic
     if (status) {
       const s = String(status).toLowerCase();
-
       if (s === "completed") {
         match.$or = [
           { status: { $in: ["completed", "Completed"] } },
@@ -3482,16 +3875,36 @@ export const getDeliveryOrders = async (req, res) => {
           { completedDate: { $ne: null } },
         ];
       } else {
-        match.status = status; // other statuses: on_hold, in_progress etc
+        match.status = status;
       }
     }
 
-
-    // 📅 Filter by createdAt range
+    // 📅 filter by workorder createdAt range
     if (dateFrom || dateTo) {
       match.createdAt = {};
       if (dateFrom) match.createdAt.$gte = new Date(dateFrom);
       if (dateTo) match.createdAt.$lte = new Date(dateTo);
+    }
+
+    // ✅ build drawing match (from drawingDoc fields)
+    const drawingMatch = {};
+    if (drawingDate) {
+      const d = new Date(drawingDate);
+      const start = new Date(d);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(d);
+      end.setHours(23, 59, 59, 999);
+
+      drawingMatch["drawingDoc.createdAt"] = { $gte: start, $lte: end };
+    }
+
+    if (filterProject) {
+      drawingMatch["drawingDoc.projectId"] = new mongoose.Types.ObjectId(filterProject);
+    }
+
+    if (filterCustomer) {
+      // ✅ since you said drawingDoc has customerId
+      drawingMatch["drawingDoc.customerId"] = new mongoose.Types.ObjectId(filterCustomer);
     }
 
     const pipeline = [
@@ -3508,7 +3921,10 @@ export const getDeliveryOrders = async (req, res) => {
       },
       { $unwind: { path: "$drawingDoc", preserveNullAndEmptyArrays: true } },
 
-      // 🔗 Join Project (from drawing.projectId OR workOrder.projectId)
+      // ✅ APPLY DRAWING FILTERS HERE (projectId/customerId/createdAt)
+      ...(Object.keys(drawingMatch).length ? [{ $match: drawingMatch }] : []),
+
+      // 🔗 Join Project (keep your old)
       {
         $lookup: {
           from: "projects",
@@ -3533,7 +3949,7 @@ export const getDeliveryOrders = async (req, res) => {
       },
       { $unwind: { path: "$projectDoc", preserveNullAndEmptyArrays: true } },
 
-      // 🔗 Join Customer (from project.customerId)
+      // 🔗 Join Customer (from project.customerId) - keep if you want display name
       {
         $lookup: {
           from: "customers",
@@ -3544,66 +3960,21 @@ export const getDeliveryOrders = async (req, res) => {
       },
       { $unwind: { path: "$customerDoc", preserveNullAndEmptyArrays: true } },
 
-      // Filter by project / customer after lookups
-      ...(project
-        ? [
-          {
-            $match: {
-              "projectDoc._id": new mongoose.Types.ObjectId(project),
-            },
-          },
-        ]
-        : []),
-      ...(customer
-        ? [
-          {
-            $match: {
-              "customerDoc._id": new mongoose.Types.ObjectId(customer),
-            },
-          },
-        ]
-        : []),
-
       // 🧮 Compute friendly fields
       {
         $addFields: {
-          displayPONumber: {
-            $ifNull: ["$poNumber", "$posNumber"], // posNumber if you ever add it
-          },
-
-          // Completed date: prefer completeDate (root)
-          displayCompletedDate: {
-            $ifNull: ["$completeDate", null],
-          },
-
-          // Target delivery: prefer targetDeliveryDate → commitDate
-          displayTargetDelivery: {
-            $ifNull: ["$targetDeliveryDate", "$commitDate"],
-          },
-
-          // Drawing name fallback across common field names
+          displayPONumber: { $ifNull: ["$poNumber", "$posNumber"] },
+          displayCompletedDate: { $ifNull: ["$completeDate", null] },
+          displayTargetDelivery: { $ifNull: ["$targetDeliveryDate", "$commitDate"] },
           drawingName: {
             $ifNull: [
               "$drawingDoc.drawingName",
-              {
-                $ifNull: [
-                  "$drawingDoc.drawingNo",
-                  {
-                    $ifNull: [
-                      "$drawingDoc.drawingNumber",
-                      {
-                        $ifNull: ["$drawingDoc.name", "$drawingDoc.title"],
-                      },
-                    ],
-                  },
-                ],
-              },
+              { $ifNull: ["$drawingDoc.drawingNo", { $ifNull: ["$drawingDoc.drawingNumber", { $ifNull: ["$drawingDoc.name", "$drawingDoc.title"] }] }] },
             ],
           },
         },
       },
 
-      // 📌 Derive display status
       {
         $addFields: {
           displayStatus: {
@@ -3612,18 +3983,16 @@ export const getDeliveryOrders = async (req, res) => {
                 $or: [
                   { $ne: ["$completeDate", null] },
                   { $eq: ["$delivered", true] },
-                  { $in: ["$status", ["completed", "Completed"]] }
-                ]
+                  { $in: ["$status", ["completed", "Completed"]] },
+                ],
               },
               "Completed",
-              { $ifNull: ["$status", "Pending"] }
-            ]
-          }
-        }
-
+              { $ifNull: ["$status", "Pending"] },
+            ],
+          },
+        },
       },
 
-      // 🎯 Final projection (1 row per WorkOrder)
       {
         $project: {
           _id: 1,
@@ -3631,12 +4000,8 @@ export const getDeliveryOrders = async (req, res) => {
           doNumber: 1,
           delivered: 1,
           createdAt: 1,
-
           poNumber: "$displayPONumber",
-
-          qty: {
-            $ifNull: ["$quantity", 0],
-          },
+          qty: { $ifNull: ["$quantity", 0] },
 
           drawingId: "$drawingId",
           drawingName: 1,
@@ -3654,32 +4019,26 @@ export const getDeliveryOrders = async (req, res) => {
         },
       },
 
-      // 🔍 Extended search on drawing & project also
+      // 🔍 extended search
       ...(search
         ? [
-          {
-            $match: {
-              $or: [
-                { workOrderNo: { $regex: search, $options: "i" } },
-                { poNumber: { $regex: search, $options: "i" } },
-                { drawingName: { $regex: search, $options: "i" } },
-                { drawingCode: { $regex: search, $options: "i" } },
-                { projectName: { $regex: search, $options: "i" } },
-                { customerName: { $regex: search, $options: "i" } },
-              ],
+            {
+              $match: {
+                $or: [
+                  { workOrderNo: { $regex: search, $options: "i" } },
+                  { poNumber: { $regex: search, $options: "i" } },
+                  { drawingName: { $regex: search, $options: "i" } },
+                  { drawingCode: { $regex: search, $options: "i" } },
+                  { projectName: { $regex: search, $options: "i" } },
+                  { customerName: { $regex: search, $options: "i" } },
+                ],
+              },
             },
-          },
-        ]
+          ]
         : []),
 
-      // 🔽 Sort
-      {
-        $sort: {
-          [sortBy]: sortOrder === "asc" ? 1 : -1,
-        },
-      },
+      { $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } },
 
-      // 📄 Pagination with meta
       {
         $facet: {
           meta: [{ $count: "total" }],
@@ -3698,13 +4057,330 @@ export const getDeliveryOrders = async (req, res) => {
       totalCount: total,
       page,
       limit,
-      filtersApplied: { search, status, customer, project, dateFrom, dateTo },
+      filtersApplied: {
+        search,
+        status,
+        dateFrom,
+        dateTo,
+        filters: parsedFilters,
+      },
     });
   } catch (err) {
     console.error("getDeliveryOrders error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+
+// export const getDeliveryOrders = async (req, res) => {
+//   try {
+//     let {
+//       page = 1,
+//       limit = 10,
+//       search = "",
+//       status,          // e.g. on_hold, completed, in_progress
+//       customer,        // customer _id
+//       project,         // project _id
+//       dateFrom,        // ISO or yyyy-mm-dd
+//       dateTo,
+//       sortBy = "createdAt",
+//       sortOrder = "desc",
+//       filters
+//     } = req.query;
+
+
+
+//     page = Math.max(parseInt(page) || 1, 1);
+//     limit = Math.max(parseInt(limit) || 10, 1);
+
+
+//         // ✅ parse filters safely
+//     let parsedFilters = {};
+//     if (filters) {
+//       try {
+//         parsedFilters = typeof filters === "string" ? JSON.parse(filters) : filters;
+//       } catch (e) {
+//         parsedFilters = {};
+//       }
+//     }
+
+//     const drawingDate = parsedFilters?.drawingDate || null;
+//     const filterCustomer = parsedFilters?.customer || customer || null;
+//     const filterProject = parsedFilters?.project || project || null;
+
+
+
+//     const match = { isDeleted: { $ne: true } }; // if you don't have isDeleted, you can remove this
+
+//     // 🔍 Basic search on root fields
+//     if (search) {
+//       match.$or = [
+//         { workOrderNo: { $regex: search, $options: "i" } },
+//         { poNumber: { $regex: search, $options: "i" } },
+//         { posNo: { $regex: search, $options: "i" } }, // schema has posNo
+//       ];
+//     }
+
+//     // 🔽 Filter by status
+//     // 🔽 Filter by status
+//     if (status) {
+//       const s = String(status).toLowerCase();
+
+//       if (s === "completed") {
+//         match.$or = [
+//           { status: { $in: ["completed", "Completed"] } },
+//           { delivered: true },
+//           { completeDate: { $ne: null } },
+//           { completedDate: { $ne: null } },
+//         ];
+//       } else {
+//         match.status = status; // other statuses: on_hold, in_progress etc
+//       }
+//     }
+
+
+//     // 📅 Filter by createdAt range
+//     if (dateFrom || dateTo) {
+//       match.createdAt = {};
+//       if (dateFrom) match.createdAt.$gte = new Date(dateFrom);
+//       if (dateTo) match.createdAt.$lte = new Date(dateTo);
+//     }
+
+
+//         const drawingMatch = {};
+//     if (drawingDate) {
+//       const d = new Date(drawingDate);
+//       const start = new Date(d);
+//       start.setHours(0, 0, 0, 0);
+//       const end = new Date(d);
+//       end.setHours(23, 59, 59, 999);
+
+//       drawingMatch["drawingDoc.createdAt"] = { $gte: start, $lte: end };
+//     }
+
+//     if (filterProject) {
+//       drawingMatch["drawingDoc.projectId"] = new mongoose.Types.ObjectId(filterProject);
+//     }
+
+//     if (filterCustomer) {
+//       // ✅ since you said drawingDoc has customerId
+//       drawingMatch["drawingDoc.customerId"] = new mongoose.Types.ObjectId(filterCustomer);
+//     }
+
+
+//     const pipeline = [
+//       { $match: match },
+
+//       // 🔗 Join Drawing
+//       {
+//         $lookup: {
+//           from: "drawings",
+//           localField: "drawingId",
+//           foreignField: "_id",
+//           as: "drawingDoc",
+//         },
+//       },
+//       { $unwind: { path: "$drawingDoc", preserveNullAndEmptyArrays: true } },
+
+//       ...(Object.keys(drawingMatch).length ? [{ $match: drawingMatch }] : []),
+
+//       // 🔗 Join Project (from drawing.projectId OR workOrder.projectId)
+//       {
+//         $lookup: {
+//           from: "projects",
+//           let: {
+//             drawingProjectId: "$drawingDoc.projectId",
+//             woProjectId: "$projectId",
+//           },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $or: [
+//                     { $eq: ["$_id", "$$drawingProjectId"] },
+//                     { $eq: ["$_id", "$$woProjectId"] },
+//                   ],
+//                 },
+//               },
+//             },
+//           ],
+//           as: "projectDoc",
+//         },
+//       },
+//       { $unwind: { path: "$projectDoc", preserveNullAndEmptyArrays: true } },
+
+//       // 🔗 Join Customer (from project.customerId)
+//       {
+//         $lookup: {
+//           from: "customers",
+//           localField: "projectDoc.customerId",
+//           foreignField: "_id",
+//           as: "customerDoc",
+//         },
+//       },
+//       { $unwind: { path: "$customerDoc", preserveNullAndEmptyArrays: true } },
+
+//       // Filter by project / customer after lookups
+//       ...(project
+//         ? [
+//           {
+//             $match: {
+//               "projectDoc._id": new mongoose.Types.ObjectId(project),
+//             },
+//           },
+//         ]
+//         : []),
+//       ...(customer
+//         ? [
+//           {
+//             $match: {
+//               "customerDoc._id": new mongoose.Types.ObjectId(customer),
+//             },
+//           },
+//         ]
+//         : []),
+
+//       // 🧮 Compute friendly fields
+//       {
+//         $addFields: {
+//           displayPONumber: {
+//             $ifNull: ["$poNumber", "$posNumber"], // posNumber if you ever add it
+//           },
+
+//           // Completed date: prefer completeDate (root)
+//           displayCompletedDate: {
+//             $ifNull: ["$completeDate", null],
+//           },
+
+//           // Target delivery: prefer targetDeliveryDate → commitDate
+//           displayTargetDelivery: {
+//             $ifNull: ["$targetDeliveryDate", "$commitDate"],
+//           },
+
+//           // Drawing name fallback across common field names
+//           drawingName: {
+//             $ifNull: [
+//               "$drawingDoc.drawingName",
+//               {
+//                 $ifNull: [
+//                   "$drawingDoc.drawingNo",
+//                   {
+//                     $ifNull: [
+//                       "$drawingDoc.drawingNumber",
+//                       {
+//                         $ifNull: ["$drawingDoc.name", "$drawingDoc.title"],
+//                       },
+//                     ],
+//                   },
+//                 ],
+//               },
+//             ],
+//           },
+//         },
+//       },
+
+//       // 📌 Derive display status
+//       {
+//         $addFields: {
+//           displayStatus: {
+//             $cond: [
+//               {
+//                 $or: [
+//                   { $ne: ["$completeDate", null] },
+//                   { $eq: ["$delivered", true] },
+//                   { $in: ["$status", ["completed", "Completed"]] }
+//                 ]
+//               },
+//               "Completed",
+//               { $ifNull: ["$status", "Pending"] }
+//             ]
+//           }
+//         }
+
+//       },
+
+//       // 🎯 Final projection (1 row per WorkOrder)
+//       {
+//         $project: {
+//           _id: 1,
+//           workOrderNo: 1,
+//           doNumber: 1,
+//           delivered: 1,
+//           createdAt: 1,
+
+//           poNumber: "$displayPONumber",
+
+//           qty: {
+//             $ifNull: ["$quantity", 0],
+//           },
+
+//           drawingId: "$drawingId",
+//           drawingName: 1,
+//           drawingCode: "$drawingDoc.drawingNumber",
+
+//           projectId: "$projectDoc._id",
+//           projectName: "$projectDoc.projectName",
+
+//           customerId: "$customerDoc._id",
+//           customerName: "$customerDoc.companyName",
+
+//           completedDate: "$displayCompletedDate",
+//           targetDeliveryDate: "$displayTargetDelivery",
+//           status: "$displayStatus",
+//         },
+//       },
+
+//       // 🔍 Extended search on drawing & project also
+//       ...(search
+//         ? [
+//           {
+//             $match: {
+//               $or: [
+//                 { workOrderNo: { $regex: search, $options: "i" } },
+//                 { poNumber: { $regex: search, $options: "i" } },
+//                 { drawingName: { $regex: search, $options: "i" } },
+//                 { drawingCode: { $regex: search, $options: "i" } },
+//                 { projectName: { $regex: search, $options: "i" } },
+//                 { customerName: { $regex: search, $options: "i" } },
+//               ],
+//             },
+//           },
+//         ]
+//         : []),
+
+//       // 🔽 Sort
+//       {
+//         $sort: {
+//           [sortBy]: sortOrder === "asc" ? 1 : -1,
+//         },
+//       },
+
+//       // 📄 Pagination with meta
+//       {
+//         $facet: {
+//           meta: [{ $count: "total" }],
+//           data: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+//         },
+//       },
+//     ];
+
+//     const result = await WorkOrder.aggregate(pipeline);
+//     const total = result?.[0]?.meta?.[0]?.total || 0;
+//     const rows = result?.[0]?.data || [];
+
+//     return res.json({
+//       success: true,
+//       data: rows,
+//       totalCount: total,
+//       page,
+//       limit,
+//       filtersApplied: { search, status, customer, project, dateFrom, dateTo },
+//     });
+//   } catch (err) {
+//     console.error("getDeliveryOrders error:", err);
+//     res.status(500).json({ success: false, error: err.message });
+//   }
+// };
 
 export const getEachMPNUsage = async (req, res) => {
   try {
@@ -4776,7 +5452,7 @@ export const saveWorkOrderStage = async (req, res) => {
 
     // ---------------- UPDATE STATUS ENGINE HERE 🔥 ----------------
     updateWorkOrderStatus(wo);
-    
+
     // await maybeCreateCommitDateAlert(wo);
     await wo.save();
 

@@ -124,8 +124,8 @@ const CurrencyList = () => {
             setShowAddModal(true);
           }}
           onDelete={() => handleDelete(record._id)}
-          showEdit={hasPermission('settings.currencyManagment:edit')}
-          showDelete={hasPermission('settings.currencyManagment:delete')}
+          showEdit={hasPermission('settings.currencyManagment:create_edit_delete')}
+          showDelete={hasPermission('settings.currencyManagment:create_edit_delete')}
           showDeleteConfirm
         />
       ),
@@ -136,7 +136,7 @@ const CurrencyList = () => {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <h2>Currency Management</h2>
-        {hasPermission('settings.currencyManagment:add') && (<Button
+        {hasPermission('settings.currencyManagment:create_edit_delete') && (<Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => setShowAddModal(true)}

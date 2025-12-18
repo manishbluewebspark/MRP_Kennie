@@ -63,7 +63,7 @@ async function commitDateApproachingAlert(wo, alertSettings) {
   await createAlertOnce({
     title: `Work Order ${woNo} - Approaching Commit Date`,
     message: `Work Order ${woNo} is ${daysLeft} day(s) from commit date and production is not complete. Current status: ${wo.status || "N/A"}.`,
-    priority: daysLeft <= 1 ? "critical" : "medium",
+    priority: daysLeft <= 1 ? "critical" : "warning",
     module: "work_order",
     relatedId: wo._id,
     assignedTo: wo.assignedTo || null,
@@ -166,7 +166,7 @@ async function receivingWindowAlert(po, alertSettings) {
   await createAlertOnce({
     title: `Purchase Order ${poNo} - Receiving Window`,
     message: `Receiving for PO ${poNo} is due in ${daysLeft} day(s).`,
-    priority: "medium",
+    priority: "warning",
     module: "receiving",
     relatedId: po._id,
     assignedTo: po.assignedTo || null,

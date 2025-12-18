@@ -353,8 +353,8 @@ const CreateQuote = () => {
             >
               {/* Action Buttons on Right */}
               <ActionButtons
-                showEdit={hasPermission('sales.quote:edit')}
-                showDelete={hasPermission('sales.quote:delete')}
+                showEdit={hasPermission('sales.quote:create_edit_delete')}
+                showDelete={hasPermission('sales.quote:create_edit_delete')}
                 showDeleteConfirm
                 onEdit={() => handleEdit(record)}
                 onDelete={async () => {
@@ -614,7 +614,7 @@ const CreateQuote = () => {
         </Col>
         <Col>
           <Space>
-            {hasPermission('sales.quote:create') &&
+            {hasPermission('sales.quote:create_edit_delete') &&
               <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowAddModal(true)}>Create Quote</Button>
             }
             <Button

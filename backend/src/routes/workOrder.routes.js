@@ -9,9 +9,9 @@ const router = express.Router();
 router.post("/workOrder/import", authenticate,upload.single("file"), importWorkOrders);
 router.get("/workOrder/export", authenticate, exportWorkOrders);
 
-router.get("/workOrder/export/delivery/excel", authenticate, exportDeliveryWorkOrdersXlsx);
-router.get("/workOrder/export/delivery/pdf", authenticate, exportDeliveryWorkOrdersPDF);
-router.get("/workOrder/export/delivery/word", authenticate, exportDeliveryWorkOrdersWord);
+router.post("/workOrder/export/delivery/excel", authenticate, exportDeliveryWorkOrdersXlsx);
+router.post("/workOrder/export/delivery/pdf", authenticate, exportDeliveryWorkOrdersPDF);
+router.post("/workOrder/export/delivery/word", authenticate, exportDeliveryWorkOrdersWord);
 
 router.patch("/:id/delivery", authenticate, updateDeliveryInfo);
 

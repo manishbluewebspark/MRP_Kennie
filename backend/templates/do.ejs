@@ -1,144 +1,291 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
+
 <head>
-  <meta charset="utf-8" />
-  <title>Delivery Order - <%= doNo %></title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delivery Order</title>
   <style>
-    * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
-    body { margin: 0; color: #111; font-size: 12px; }
-    .page { padding: 10mm; }
+    @page {
+      size: A4;
+      margin: 20mm;
+    }
 
-    /* Header + Footer fixed for print */
-    @page { size: A4; margin: 15mm 10mm 18mm 10mm; }
-    header { position: fixed; top: -12mm; left: 0; right: 0; }
-    footer { position: fixed; bottom: -15mm; left: 0; right: 0; font-size: 11px; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.4;
+      color: #000;
+      margin: 0;
+      padding: 0;
+    }
 
-    .brand-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-    .brand-block { width: 60%; }
-    .brand-title { font-size: 18px; font-weight: 700; letter-spacing: .2px; }
-    .brand-meta { margin-top: 4px; line-height: 1.4; }
+    .header {
+      margin-bottom: 20px;
+    }
 
-    .doc-meta { width: 40%; border: 1px solid #e5e5e5; padding: 8px; }
-    .doc-meta table { width: 100%; border-collapse: collapse; }
-    .doc-meta td { padding: 4px 6px; border-bottom: 1px dashed #ddd; }
-    .doc-meta td:first-child { width: 35%; color: #666; }
+    .company-address {
+      float: left;
+      width: 50%;
+    }
 
-    .two-col { display: flex; gap: 14px; margin-top: 10px; }
-    .card { border: 1px solid #e5e5e5; padding: 8px; flex: 1; }
-    .card .t { color: #666; margin-bottom: 6px; font-weight: 600; }
-    .card .v { white-space: pre-line; }
+    .deliver-to {
+      float: right;
+      width: 50%;
+      text-align: right;
+    }
 
-    .title { margin: 10px 0 6px; font-size: 14px; font-weight: 700; text-transform: uppercase; }
+    .clear {
+      clear: both;
+    }
 
-    table.items { width: 100%; border-collapse: collapse; }
-    table.items th, table.items td { border: 1px solid #ddd; padding: 6px; }
-    table.items th { background: #f4f6f8; text-align: left; }
-    table.items td.center, table.items th.center { text-align: center; }
-    table.items td.right,  table.items th.right  { text-align: right; }
+    .document-title {
+      text-align: center;
+      font-size: 16pt;
+      font-weight: bold;
+      margin: 25px 0;
+      text-decoration: underline;
+    }
 
-    /* Sticky header row across pages */
-    thead { display: table-header-group; }
-    tfoot { display: table-footer-group; }
+    .document-info {
+      margin-bottom: 20px;
+    }
 
-    .sign-row { display: flex; justify-content: space-between; margin-top: 14mm; }
-    .sign-box { width: 48%; text-align: center; }
-    .line { margin-top: 18mm; border-top: 1px solid #333; padding-top: 4px; }
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
 
-    footer .footline { border-top: 1px solid #ddd; padding-top: 6px; color: #666; display:flex; justify-content:space-between; }
+    .info-table td {
+      padding: 4px 8px;
+      vertical-align: top;
+    }
+
+    .info-table .label {
+      font-weight: bold;
+      width: 120px;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+    }
+
+    .items-table th,
+    .items-table td {
+      border: 1px solid #000;
+      padding: 6px 8px;
+      text-align: left;
+      font-size: 9pt;
+    }
+
+    .items-table th {
+      background-color: #f0f0f0;
+      font-weight: bold;
+    }
+
+    .items-table .no-col {
+      width: 5%;
+    }
+
+    .items-table .pos-col {
+      width: 10%;
+    }
+
+    .items-table .barcode-col {
+      width: 20%;
+    }
+
+    .items-table .qty-col {
+      width: 5%;
+    }
+
+    .items-table .project-col {
+      width: 20%;
+    }
+
+    .items-table .item-col {
+      width: 20%;
+    }
+
+    .items-table .desc-col {
+      width: 42%;
+    }
+
+    .footer {
+      margin-top: 50px;
+    }
+
+    .signature-section {
+      margin-top: 40px;
+    }
+
+    .signature-box {
+      width: 60%;
+      margin-top: 60px;
+      border-top: 1px solid #000;
+      padding-top: 10px;
+    }
+
+    .page-number {
+      text-align: right;
+      font-size: 9pt;
+      margin-top: 10px;
+    }
+
+    .company-stamp {
+      font-weight: bold;
+      margin-top: 30px;
+      font-size: 11pt;
+    }
+
+    .barcode-container {
+      text-align: center;
+    }
+
+    .barcode-image {
+      max-width: 120px;
+      max-height: 40px;
+    }
+
+    .barcode-text {
+      font-size: 8pt;
+      margin-top: 2px;
+      font-family: monospace;
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
-<body>
-<header>
-  <div class="page">
-    <div class="brand-row">
-      <div class="brand-block">
-        <div class="brand-title">EXXEL TECHNOLOGY PTE LTD</div>
-        <div class="brand-meta">
-          1 Kaki Bukit Ave 3 KB-1 #03-07 Singapore 416087<br/>
-          Tel: (65) 6743 4553 &nbsp; Fax: (65) 6743 6929<br/>
-          Email: sales@exxeltech.com &nbsp; Website: www.exxeltech.com<br/>
-          Company/GST Reg no: 199407327W
-        </div>
-      </div>
-      <div class="doc-meta">
-        <table>
-          <tr><td>Page</td><td>1 of <%= pages || 1 %></td></tr>
-          <tr><td>DO No</td><td><%= doNo %></td></tr>
-          <tr><td>Date</td><td><%= date %></td></tr>
-          <tr><td>PO No</td><td><%= poNo %></td></tr>
-          <tr><td>Terms</td><td><%= terms %></td></tr>
-          <tr><td>Salesperson</td><td><%= salesperson %></td></tr>
-        </table>
-      </div>
-    </div>
 
-    <div class="two-col">
-      <div class="card">
-        <div class="t">Deliver To</div>
-        <div class="v"><%= deliverTo.name %>\n<%= deliverTo.address %></div>
-      </div>
-      <div class="card">
-        <div class="t">Attn</div>
-        <div class="v"><%= attn %></div>
-      </div>
-    </div>
+<body onload="generateBarcodes()">
 
-    <div class="title">Delivery Order</div>
+  <div class="header">
+    <div class="company-address">
+      <%= meta.company.address %><br>
+        Tel: <%= meta.company.tel %> Fax: <%= meta.company.fax %><br>
+            Email: <%= meta.company.email %> Website: <%= meta.company.website %><br>
+                Company/GST Reg no: <%= meta.company.gstRegNo %>
+    </div>
+    <div class="deliver-to">
+      <strong>Deliver To:</strong><br>
+      <%= meta.deliverTo.name %><br>
+        <%= meta.deliverTo.address %><br>
+          <br>
+          Attn: <%= meta.deliverTo.attn %>
+    </div>
+    <div class="clear"></div>
   </div>
-</header>
 
-<footer>
-  <div class="page">
-    <div class="footline">
-      <div>Goods received by: <strong><%= companyName %></strong></div>
-      <div>DO No: <%= doNo %></div>
-    </div>
+  <div class="document-title">DELIVERY ORDER</div>
+
+  <div class="document-info">
+    <table class="info-table">
+      <tr>
+        <!-- <td class="label">Page:</td>
+                <td><%= meta.docInfo.page %></td> -->
+        <td class="label">DO No:</td>
+        <td>
+          <%= meta.docInfo.doNo %>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Date:</td>
+        <td>
+          <%= meta.docInfo.date %>
+        </td>
+        <td class="label">PO No:</td>
+        <td>
+          <%= meta.docInfo.poNo %>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Terms:</td>
+        <td>
+          <%= meta.docInfo.terms %>
+        </td>
+        <td class="label">Salesperson:</td>
+        <td>
+          <%= meta.docInfo.salesperson %>
+        </td>
+      </tr>
+    </table>
   </div>
-</footer>
 
-<main class="page">
-  <table class="items">
+  <table class="items-table">
     <thead>
       <tr>
-        <th class="center">No.</th>
-        <th class="center">Pos</th>
-        <th>Barcode</th>
-        <th class="right">Qty</th>
-        <th>Project Nr</th>
-        <th>Item</th>
-        <th>Description</th>
+        <th class="no-col">No.</th>
+        <th class="pos-col">Pos</th>
+        <th class="barcode-col">Barcode</th>
+        <th class="qty-col">Qty</th>
+        <th class="project-col">Project Nr</th>
+        <th class="item-col">Item</th>
+        <th class="desc-col">Description</th>
       </tr>
     </thead>
     <tbody>
-      <% items.forEach((it) => { %>
+      <% rows.forEach(function(item, index) { %>
         <tr>
-          <td class="center"><%= it.pos %></td>
-          <td class="center"><%= it.posCode || it.pos %></td>
           <td>
-            <% if (it.barcodeDataUri) { %>
-              <img src="<%= it.barcodeDataUri %>" style="height:32px;"/><br/>
-            <% } %>
-            <%= it.barcode || "" %>
+            <%= index + 1 %>
           </td>
-          <td class="right"><%= it.qty %></td>
-          <td><%= it.projectNr %></td>
-          <td><%= it.itemCode %></td>
-          <td><%= it.description %></td>
+          <td>
+            <%= item.pos %>
+          </td>
+          <td>
+            <div class="barcode-container">
+              <svg id="barcode-<%= index %>" class="barcode-image"></svg>
+            </div>
+          </td>
+          <td>
+            <%= item.qty %>
+          </td>
+          <td>
+            <%= item.projectNr %>
+          </td>
+          <td>
+            <%= item.item %>
+          </td>
+          <td>
+            <%= item.description %>
+          </td>
         </tr>
-      <% }) %>
+        <% }); %>
     </tbody>
   </table>
 
-  <div class="sign-row">
-    <div class="sign-box">
-      <div class="line">Recipient's Signature & Company Stamp</div>
-      <div><%= deliverTo.name %></div>
+  <div class="footer">
+    <div class="signature-section">
+      <div>Goods received by:</div>
+      <div class="signature-box">
+        <div class="company-stamp">
+          <%= meta.company.stampName %>
+        </div>
+        <div style="margin-top: 40px;">Recipient’s Signature & Company Stamp</div>
+        <div style="margin-top: 30px;">Authorised Signatory</div>
+      </div>
     </div>
-    <div class="sign-box">
-      <div class="line">Authorised Signatory</div>
-      <div><%= companyName %></div>
+    <div class="page-number">Page: <%= meta.docInfo.page %>
     </div>
   </div>
-</main>
+
+  <script>
+    function generateBarcodes() {
+            <% rows.forEach(function (item, index) { %>
+      // SVG बारकोड जेनरेट करें
+      JsBarcode("#barcode-<%= index %>", "<%= item.barcode %>", {
+        format: "CODE128",
+        width: 2,
+        height: 40,
+        displayValue: false,
+        margin: 0
+      });
+            <% }); %>
+        }
+  </script>
+
 </body>
+
 </html>

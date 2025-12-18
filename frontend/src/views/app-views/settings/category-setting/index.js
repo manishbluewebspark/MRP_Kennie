@@ -109,8 +109,8 @@ const CategoryList = () => {
       render: (status, record) => (
         <Tag 
           color={status === "active" ? "green" : "red"}
-          style={{ cursor: hasPermission("update:category") ? 'pointer' : 'default' }}
-          onClick={() => hasPermission("update:category") && handleStatusToggle(record._id, status)}
+          style={{ cursor: hasPermission("settings.categoryManagment:create_edit_delete") ? 'pointer' : 'default' }}
+          onClick={() => hasPermission("settings.categoryManagment:create_edit_delete") && handleStatusToggle(record._id, status)}
         >
           {status === "active" ? "Active" : "Inactive"}
         </Tag>
@@ -134,8 +134,8 @@ const CategoryList = () => {
             setShowAddModal(true);
           }}
           onDelete={() => handleDelete(record._id)}
-          showEdit={hasPermission("settings.categoryManagment:edit")}
-          showDelete={hasPermission("settings.categoryManagment:delete")}
+          showEdit={hasPermission("settings.categoryManagment:create_edit_delete")}
+          showDelete={hasPermission("settings.categoryManagment:create_edit_delete")}
           showDeleteConfirm
         />
       ),
@@ -146,7 +146,7 @@ const CategoryList = () => {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <h2>Category Management</h2>
-        {hasPermission("settings.categoryManagment:add") && (
+        {hasPermission("settings.categoryManagment:create_edit_delete") && (
           <Button 
             type="primary" 
             icon={<PlusOutlined />} 

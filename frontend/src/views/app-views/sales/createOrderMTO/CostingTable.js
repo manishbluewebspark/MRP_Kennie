@@ -45,12 +45,12 @@ const CostingTable = ({
     fixed: 'right',
     render: (_, record) => (
       <ActionButtons
-        showEdit={hasPermission('sales.mto:deep_edit')}
-        showDelete={hasPermission('sales.mto:deep_delete')}
+        showEdit={hasPermission('sales.mto:create_edit_delete_costingmaterial')}
+        showDelete={hasPermission('sales.mto:create_edit_delete_costingmaterial')}
         showDeleteConfirm
         onEdit={() => onEdit && onEdit(record)}
         onDelete={() => onDelete && onDelete(record)}
-        showUpdate={hasPermission('sales.mto:deep_update')}
+        showUpdate={hasPermission('sales.mto:create_edit_delete_costingmaterial')}
         onUpdate={() => {handleUpdateLatestPrice(record?._id)}}
       />
     ),

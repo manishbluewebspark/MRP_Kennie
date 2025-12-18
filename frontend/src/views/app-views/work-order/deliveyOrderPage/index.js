@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { Table, Button, Space, Tag, message, Card, Input, Checkbox, DatePicker } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { Table, Tag, message, Card, Input, Checkbox, DatePicker } from "antd";
 import GlobalTableActions from "components/GlobalTableActions";
-import useDebounce from "utils/debouce";
 import GlobalFilterModal from "components/GlobalFilterModal";
-import WorkOrderService from "services/WorkOrderService"; // ← make sure this exists
+import WorkOrderService from "services/WorkOrderService";
+import useDebounce from "utils/debouce";
 import dayjs from "dayjs";
 import { formatDate } from "utils/formatDate";
+import ProjectService from "services/ProjectService";
+import CustomerService from "services/CustomerService";
+import { hasPermission } from "utils/auth";
+
 const renderBadge = (text, type) => {
   let color = "default";
   if (type === "status") {
@@ -19,7 +22,8 @@ const DeliveryOrderPage = () => {
   const [data, setData] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
-
+ const [projectData, setProjectData] = useState([])
+  const [customerData, setCustomerData] = useState([])
   // table state
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -27,8 +31,12 @@ const DeliveryOrderPage = () => {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
   // local edit state for DO No. and Delivered
-  const [doMap, setDoMap] = useState({});         // { [workOrderId]: "DO-123" }
+  const [doMap, setDoMap] = useState({}); // { [workOrderId]: "DO-123" }
   const [deliveredMap, setDeliveredMap] = useState({}); // { [workOrderId]: true/false }
+
+  // ✅ selection
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]); // array of _id
+  const selectedRows = data.filter((d) => selectedRowKeys.includes(d._id));
 
   const handleSearch = useDebounce((value) => {
     setPage(1);
@@ -36,23 +44,17 @@ const DeliveryOrderPage = () => {
   }, 500);
 
   const normalizeRow = (wo) => {
-    // show first item’s drawing/pos qty if present (safe fallback)
-    const firstItem = Array.isArray(wo.items) && wo.items.length ? wo.items[0] : {};
     return {
       key: wo._id,
       _id: wo._id,
       workOrderNo: wo.workOrderNo,
-      drawingNo: wo?.drawingName || wo?.drawingName || "-",
+      drawingNo: wo?.drawingName || wo?.drawingNo || "-",
       project: wo.projectName || "-",
       customer: wo.customerName || wo.customer?.companyName || "-",
       qty: wo?.quantity ?? wo.qty ?? "-",
       poNumber: wo.poNumber || "-",
-      completedDate: wo.completedDate
-        ? new Date(wo.completedDate).toLocaleDateString("en-GB")
-        : "-",
-      targetDeliveryDate: wo.targetDeliveryDate
-        ? new Date(wo.targetDeliveryDate).toLocaleDateString("en-GB")
-        : "-",
+      completedDate: wo.completedDate || null,
+      targetDeliveryDate: wo.targetDeliveryDate || null,
       status: wo.status || "-",
       doNumber: wo.doNumber || "",
       delivered: !!wo.delivered,
@@ -68,6 +70,7 @@ const DeliveryOrderPage = () => {
         search: q = search,
         sortBy = "createdAt",
         sortOrder = "desc",
+        filters
       } = params;
 
       const res = await WorkOrderService.getDeliveryOrders({
@@ -76,7 +79,8 @@ const DeliveryOrderPage = () => {
         search: q,
         sortBy,
         sortOrder,
-        status:'Completed'
+        status: "Completed",
+        filters
       });
 
       if (res?.success) {
@@ -84,7 +88,7 @@ const DeliveryOrderPage = () => {
         setData(rows);
         setTotalCount(res.totalCount ?? rows.length);
 
-        // hydrate local edit maps so inputs/checkboxes reflect API
+        // hydrate local edit maps
         const nextDo = {};
         const nextDelivered = {};
         rows.forEach((r) => {
@@ -93,6 +97,9 @@ const DeliveryOrderPage = () => {
         });
         setDoMap(nextDo);
         setDeliveredMap(nextDelivered);
+
+        // reset selection if rows changed
+        setSelectedRowKeys([]);
       } else {
         message.error(res?.message || "Failed to fetch work orders");
       }
@@ -104,72 +111,102 @@ const DeliveryOrderPage = () => {
     }
   };
 
-  // ✔ Check if all delivered
-const isAllDeliveredChecked =
-  data.length > 0 &&
-  data.every((item) => deliveredMap[item._id] === true);
+    const normalizeProjectsResponse = (res) => {
+    if (!res) return [];
+    // axios response usually in res.data
+    const body = res.data ?? res;
+    // if API returns { success:true, data: [...] }
+    if (body?.success !== undefined) return body.data ?? [];
+    // if API returns { data: [...], pagination: {...} }
+    if (Array.isArray(body?.data)) return body.data;
+    // if API returns array directly
+    if (Array.isArray(body)) return body;
+    // fallback
+    return [];
+  };
 
-// ✔ Check if some delivered
-const isSomeDeliveredChecked =
-  data.some((item) => deliveredMap[item._id] === true) &&
-  !isAllDeliveredChecked;
-
-// ✔ Select All handler
-const handleSelectAllDelivered = (checked) => {
-  const newState = {};
-  data.forEach((item) => {
-    newState[item._id] = checked;
-  });
-  setDeliveredMap(newState);
-
-  // Optional: Save to DB for each row
-  if (checked) {
-    data.forEach((item) => handleDeliveredToggle(item, true));
-  } else {
-    data.forEach((item) => handleDeliveredToggle(item, false));
-  }
-};
-
+   const fetchProjects = async (params = {}) => {
+      try {
+        const res = await ProjectService.getAllProjects(params);
+        const projects = normalizeProjectsResponse(res);
+        setProjectData(projects);
+      } catch (err) {
+        console.error("Error fetching projects:", err);
+        message.error("Failed to fetch projects");
+      } finally {
+      }
+    };
+  
+    const fetchCustomers = async () => {
+      try {
+        const res = await CustomerService.getAllCustomers();
+        if (res.success) setCustomerData(res.data);
+      } catch (err) {
+        console.error("Error fetching customers:", err);
+        message.error("Failed to fetch customers");
+      } finally {
+      }
+    };
+  
 
   useEffect(() => {
     fetchWorkOrders({ page: 1, limit, search });
+    fetchProjects()
+    fetchCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ✅ Delivered header checkbox state (based on visible data)
+  const isAllDeliveredChecked =
+    data.length > 0 && data.every((item) => deliveredMap[item._id] === true);
+
+  const isSomeDeliveredChecked =
+    data.some((item) => deliveredMap[item._id] === true) && !isAllDeliveredChecked;
+
+  // ✅ Select All Delivered (selected rows first, otherwise whole page)
+  const handleSelectAllDelivered = (checked) => {
+    const targetIds = selectedRowKeys.length ? selectedRowKeys : data.map((d) => d._id);
+
+    const newState = { ...deliveredMap };
+    targetIds.forEach((id) => (newState[id] = checked));
+    setDeliveredMap(newState);
+
+    // persist in DB
+    targetIds.forEach((id) => {
+      const rec = data.find((x) => x._id === id);
+      if (rec) handleDeliveredToggle(rec, checked);
+    });
+  };
 
   // optimistic update for DO No.
   const handleDoChange = (id, value) => {
     setDoMap((m) => ({ ...m, [id]: value }));
   };
+
   const handleDoBlur = async (record) => {
     const id = record._id;
-    const value = doMap[id] ?? "";
+    const value = (doMap[id] ?? "").trim();
     try {
-      // optimistic UI already done in handleDoChange
       await WorkOrderService.updateDeliveryInfo(id, { doNumber: value });
       message.success("DO No. saved");
     } catch (e) {
       message.error("Failed to save DO No.");
-      // revert to server state by refetching that row quickly
       fetchWorkOrders({ page, limit, search });
     }
   };
 
   // Update Target Delivery Date
-const handleTargetDeliveryChange = async (record, date) => {
-  try {
-    const isoDate = date ? date.toISOString() : null;
-
-    await WorkOrderService.updateWorkOrder(record._id, {             // ensure backend knows which item
-      targetDeliveryDate: isoDate,         // ISO date string
-    });
-   fetchWorkOrders()
-    message.success("Target Delivery Date updated");
-  } catch (e) {
-    console.error(e);
-    message.error("Failed to update Target Delivery Date");
-  }
-};
-
+  const handleTargetDeliveryChange = async (record, date) => {
+    try {
+      const isoDate = date ? date.toISOString() : null;
+      await WorkOrderService.updateWorkOrder(record._id, { targetDeliveryDate: isoDate });
+      fetchWorkOrders({ page, limit, search });
+      message.success("Target Delivery Date updated");
+    } catch (e) {
+      console.error(e);
+      message.error("Failed to update Target Delivery Date");
+    }
+  };
 
   // optimistic toggle for delivered
   const handleDeliveredToggle = async (record, checked) => {
@@ -178,22 +215,156 @@ const handleTargetDeliveryChange = async (record, date) => {
     try {
       await WorkOrderService.updateDeliveryInfo(id, {
         delivered: checked,
-        // if you also want to send doNumber together:
-        doNumber: doMap[id] ?? "",
+        doNumber: (doMap[id] ?? "").trim(),
       });
       message.success("Delivery status updated");
     } catch (e) {
       message.error("Failed to update status");
-      setDeliveredMap((m) => ({ ...m, [id]: !checked })); // rollback
+      setDeliveredMap((m) => ({ ...m, [id]: !checked }));
     }
   };
+
+  // ✅ Export validation (DO No. required + optional Delivered required)
+  const validateBeforeExport = ({ requireDelivered = false } = {}) => {
+    if (!selectedRowKeys.length) {
+      message.error("Please select at least one work order");
+      return false;
+    }
+
+    // DO No required
+    const missingDo = selectedRows.filter((r) => !(doMap[r._id] || "").trim());
+    if (missingDo.length) {
+      message.error(`DO No. required for ${missingDo.length} selected item(s)`);
+      return false;
+    }
+
+    // Delivered required (optional)
+    if (requireDelivered) {
+      const notDelivered = selectedRows.filter((r) => deliveredMap[r._id] !== true);
+      if (notDelivered.length) {
+        message.error(`Please mark Delivered for ${notDelivered.length} selected item(s)`);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // ✅ Export PDF (selected only)
+  const handleExportPDF = async () => {
+    try {
+      if (!validateBeforeExport({ requireDelivered: false })) return;
+
+      const payload = {
+        ids: selectedRowKeys,
+        deliveryInfo: selectedRowKeys.map((id) => ({
+          id,
+          doNumber: (doMap[id] || "").trim(),
+          delivered: !!deliveredMap[id],
+        })),
+      };
+
+      console.log('----payload',payload)
+
+      const res = await WorkOrderService.exportWorkOrdersPDF(payload);
+
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "delivery_orders.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      message.success("PDF exported successfully");
+    } catch (err) {
+      console.error("PDF export error:", err);
+      message.error("Failed to export PDF");
+    }
+  };
+
+  // ✅ Export Excel (selected only)
+  const handleExportExcel = async () => {
+    try {
+      if (!validateBeforeExport({ requireDelivered: false })) return;
+
+      const payload = {
+        ids: selectedRowKeys,
+        deliveryInfo: selectedRowKeys.map((id) => ({
+          id,
+          doNumber: (doMap[id] || "").trim(),
+          delivered: !!deliveredMap[id],
+        })),
+      };
+
+      const res = await WorkOrderService.exportDeliveryWorkOrders(payload);
+
+      const blob = new Blob([res.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "delivery_orders.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      message.success("Excel exported successfully");
+    } catch (err) {
+      console.error(err);
+      message.error("Failed to export Excel");
+    }
+  };
+
+const handleExportWork = async () => {
+  try {
+    if (!validateBeforeExport({ requireDelivered: false })) return;
+
+    const payload = {
+      ids: selectedRowKeys,
+      deliveryInfo: selectedRowKeys.map((id) => ({
+        id,
+        doNumber: (doMap[id] || "").trim(),
+        delivered: !!deliveredMap[id],
+      })),
+    };
+
+    const res = await WorkOrderService.exportWorkOrdersWord(payload);
+
+    // ✅ axios-style => res.data, wrapper-style => res
+    const fileData = res?.data ? res.data : res;
+
+    const blob = new Blob([fileData], {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `delivery_orders_${new Date().toISOString().slice(0, 10)}.docx`;
+    document.body.appendChild(a);
+    a.click();
+
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+    message.success("Word exported successfully");
+  } catch (err) {
+    console.error("Word export error:", err);
+    message.error(err?.response?.data?.message || "Failed to export Word");
+  }
+};
+
 
   const columns = [
     {
       title: "Work Order No",
       dataIndex: "workOrderNo",
       key: "workOrderNo",
-      sorter: (a, b) => String(a.workOrderNo).localeCompare(String(b.workOrderNo)),
       render: (text) => <strong style={{ fontSize: 14 }}>{text}</strong>,
     },
     {
@@ -230,37 +401,31 @@ const handleTargetDeliveryChange = async (record, date) => {
       title: "Completed Date",
       dataIndex: "completedDate",
       key: "completedDate",
-      render: (_,record) => (
+      render: (_, record) => (
         <Tag style={{ borderRadius: 12, background: "#16A34A", color: "#fff", border: "none", padding: "2px 10px" }}>
           {formatDate(record?.completedDate)}
         </Tag>
       ),
     },
     {
-  title: "Target Delivery Date",
-  dataIndex: "targetDeliveryDate",
-  key: "targetDeliveryDate",
-  render: (_, record) => {
-    const raw = record?.targetDeliveryDate;
+      title: "Target Delivery Date",
+      dataIndex: "targetDeliveryDate",
+      key: "targetDeliveryDate",
+      render: (_, record) => {
+        const raw = record?.targetDeliveryDate;
+        const dateValue = raw && dayjs(raw).isValid() ? dayjs(raw) : null;
 
-    // --- SAFE DATE PARSING ---
-    const dateValue =
-      raw && dayjs(raw).isValid()
-        ? dayjs(raw)
-        : null;
-
-    return (
-      <DatePicker
-        value={dateValue}
-        onChange={(date) => handleTargetDeliveryChange(record, date)}
-        format="DD/MM/YYYY"
-        style={{ width: 130 }}
-        disabled={loading}
-      />
-    );
-  },
-}
-,
+        return (
+          <DatePicker
+            value={dateValue}
+            onChange={(date) => handleTargetDeliveryChange(record, date)}
+            format="DD/MM/YYYY"
+            style={{ width: 130 }}
+            disabled={loading}
+          />
+        );
+      },
+    },
     {
       title: "Status",
       dataIndex: "status",
@@ -284,126 +449,86 @@ const handleTargetDeliveryChange = async (record, date) => {
       ),
     },
     {
-  title: (
-    <Checkbox
-      checked={isAllDeliveredChecked}
-      indeterminate={isSomeDeliveredChecked}
-      onChange={(e) => handleSelectAllDelivered(e.target.checked)}
-    >
-      Delivered
-    </Checkbox>
-  ),
-  dataIndex: "delivered",
-  key: "delivered",
-  align: "center",
-  width: 110,
-  render: (_, record) => (
-    <Checkbox
-      checked={!!deliveredMap[record._id]}
-      onChange={(e) => handleDeliveredToggle(record, e.target.checked)}
-    />
-  ),
-}
-
+      title: (
+        <Checkbox
+          checked={isAllDeliveredChecked}
+          indeterminate={isSomeDeliveredChecked}
+          onChange={(e) => handleSelectAllDelivered(e.target.checked)}
+        >
+          Delivered
+        </Checkbox>
+      ),
+      dataIndex: "delivered",
+      key: "delivered",
+      align: "center",
+      width: 110,
+      render: (_, record) => (
+        <Checkbox
+          checked={!!deliveredMap[record._id]}
+          onChange={(e) => handleDeliveredToggle(record, e.target.checked)}
+        />
+      ),
+    },
   ];
+
 
   const filterConfig = [
     { type: "date", name: "drawingDate", label: "Drawing Date", placeholder: "Select Drawing Date" },
-    // add your real options here
+    {
+            type: 'select',
+            name: 'customer',
+            label: 'Customer',
+            placeholder: 'Select Customer',
+            options: customerData.map(customer => ({
+                label: customer.companyName,
+                value: customer._id
+            }))
+        },
+     {
+            type: 'select',
+            name: 'project',
+            label: 'Project',
+            placeholder: 'Select Project',
+            options: projectData.map(project => ({
+                label: project.projectName,
+                value: project._id
+            }))
+        },
   ];
 
-  const handleExport = async () => {
-    try {
-      const res = await WorkOrderService.exportDeliveryWorkOrders();
-      const blob = new Blob([res], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "work_orders_export.xlsx";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      message.success("Work orders exported successfully");
-    } catch (err) {
-      console.error(err);
-      message.error("Failed to export work orders");
-    }
+  const handleFilterSubmit = async (data) => {
+     const nextFilters = {
+    drawingDate: data?.drawingDate ? dayjs(data.drawingDate).toISOString() : null,
+    customer: data?.customer || null,
+    project: data?.project || null,
   };
-
-  const handleExportPDF = async () => {
-  try {
-    const res = await WorkOrderService.exportWorkOrdersPDF();
-    const blob = new Blob([res], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "work_orders_export.pdf";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    message.success("Work orders PDF exported successfully");
-  } catch (err) {
-    console.error(err);
-    message.error("Failed to export PDF");
-  }
-};
-
-const handleExportWord = async () => {
-  try {
-    const res = await WorkOrderService.exportWorkOrdersWord();
-    const blob = new Blob([res], {
-      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "work_orders_export.docx";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    message.success("Work orders Word exported successfully");
-  } catch (err) {
-    console.error(err);
-    message.error("Failed to export Word file");
-  }
-};
-
-
-  const handleFilterSubmit = async (vals) => {
-    // plug into your API when ready
     setIsFilterModalOpen(false);
-    fetchWorkOrders({ page: 1, limit, search }); // refresh
+    fetchWorkOrders({ page: 1, limit, search,filters: nextFilters });
   };
 
   return (
     <div>
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
           <h2 style={{ margin: 0 }}>Delivery Order</h2>
-          <p style={{ margin: 0, fontSize: 14, color: "#888" }}>View all work orders and export delivery documentation</p>
+          <p style={{ margin: 0, fontSize: 14, color: "#888" }}>
+            View completed work orders and export delivery documentation
+          </p>
         </div>
-        {/* <Button type="primary" icon={<PlusOutlined />}>New</Button> */}
       </div>
 
-      {/* Global table actions */}
       <GlobalTableActions
         showSearch
         onSearch={(val) => {
           setSearch(val);
           handleSearch(val);
         }}
-        showExport
-        onExport={handleExport}
+        showExport={hasPermission("work_order.delivery_order:export")}
+        showExportWord={hasPermission("work_order.delivery_order:export")}
+        onExportWord={handleExportWork}
+        onExport={handleExportExcel}
         onExportPDF={handleExportPDF}
-        onExportWord={handleExportWord}
-        showExportPDF={true}
-        showExportWord={true}
+        showExportPDF={hasPermission("work_order.delivery_order:export")}
         showFilter
         onFilter={() => setIsFilterModalOpen(true)}
       />
@@ -411,6 +536,10 @@ const handleExportWord = async () => {
       <Card>
         <Table
           rowKey="_id"
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (keys) => setSelectedRowKeys(keys),
+          }}
           columns={columns}
           dataSource={data}
           loading={loading}
@@ -418,16 +547,16 @@ const handleExportWord = async () => {
             current: page,
             pageSize: limit,
             total: totalCount,
-            showSizeChanger: true,
-            showQuickJumper: true,
+            // showSizeChanger: true,
+            // showQuickJumper: true,
             onChange: (p, ps) => {
               setPage(p);
               setLimit(ps);
               fetchWorkOrders({ page: p, limit: ps, search });
             },
-            showTotal: (total) => `${total} items`,
+           
           }}
-          scroll={{ x: 1100 }}
+          // scroll={{ x: 1100 }}
         />
       </Card>
 

@@ -253,8 +253,8 @@ const CustomerList = () => {
         <ActionButtons
           onEdit={() => handleEdit(record)}
           onDelete={() => handleDelete(record._id)}
-          showEdit={hasPermission('sales.customer:edit')}
-          showDelete={hasPermission('sales.customer:delete')}
+          showEdit={hasPermission('sales.customer:create_edit_delete')}
+          showDelete={hasPermission('sales.customer:create_edit_delete')}
           showDeleteConfirm={true}
         />
       ),
@@ -276,7 +276,7 @@ const CustomerList = () => {
             />
           </Col>
           <Col>
-            {hasPermission('sales.customer:create') && (<Button type="primary" onClick={() => setShowModal(true)}>
+            {hasPermission('sales.customer:create_edit_delete') && (<Button type="primary" onClick={() => setShowModal(true)}>
               Add Customer
             </Button>)}
 

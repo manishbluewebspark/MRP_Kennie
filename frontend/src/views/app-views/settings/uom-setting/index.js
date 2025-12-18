@@ -117,8 +117,8 @@ const UOMList = () => {
       render: (status, record) => (
         <Tag 
           color={status === "active" ? "green" : "red"}
-          style={{ cursor: hasPermission("update:uom") ? 'pointer' : 'default' }}
-          onClick={() => hasPermission("update:uom") && handleStatusToggle(record._id, status)}
+          style={{ cursor: hasPermission("settings.uomManagment:create_edit_delete") ? 'pointer' : 'default' }}
+          onClick={() => hasPermission("settings.uomManagment:create_edit_delete") && handleStatusToggle(record._id, status)}
         >
           {status === "active" ? "Active" : "Inactive"}
         </Tag>
@@ -142,8 +142,8 @@ const UOMList = () => {
             setShowAddModal(true);
           }}
           onDelete={() => handleDelete(record._id)}
-          showEdit={hasPermission("settings.uomManagment:edit")}
-          showDelete={hasPermission("settings.uomManagment:delete")}
+          showEdit={hasPermission("settings.uomManagment:create_edit_delete")}
+          showDelete={hasPermission("settings.uomManagment:create_edit_delete")}
           showDeleteConfirm
         />
       ),
@@ -154,7 +154,7 @@ const UOMList = () => {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <h2>UOM Management</h2>
-        {hasPermission("settings.uomManagment:add") && (
+        {hasPermission("settings.uomManagment:create_edit_delete") && (
           <Button 
             type="primary" 
             icon={<PlusOutlined />} 

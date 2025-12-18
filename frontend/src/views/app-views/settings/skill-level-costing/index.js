@@ -115,8 +115,8 @@ const SkillLevelCostingList = () => {
         <ActionButtons
           onEdit={() => handleEdit(record)}
           onDelete={() => handleDelete(record._id)}
-          showEdit={hasPermission("settings.skillLevel:edit")}
-          showDelete={hasPermission("settings.skillLevel:delete")}
+          showEdit={hasPermission("settings.skillLevel:create_edit_delete")}
+          showDelete={hasPermission("settings.skillLevel:create_edit_delete")}
         />
       ),
     },
@@ -130,7 +130,7 @@ const SkillLevelCostingList = () => {
           <p style={{ color: "#888" }}>Manage skill levels and their rates</p>
         </Col>
         <Col>
-          {hasPermission("settings.skillLevel:add") && (<Button
+          {hasPermission("settings.skillLevel:create_edit_delete") && (<Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => {

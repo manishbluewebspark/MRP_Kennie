@@ -1,94 +1,11 @@
-// const modules = [
-//   {
-//     key: "library",
-//     label: "Library",
-//     children: [
-//       {
-//         key: "mpn",
-//         label: "MPN",
-//         actions: ["view", "create", "edit", "delete", "purchase_history", "import", "export", "update_purchase_history"],
-//       },
-//       {
-//         key: "child",
-//         label: "Child",
-//         actions: ["view", "create", "edit", "delete", "import", "export"],
-//       }
-//     ],
-//   },
-//   {
-//     key: "sales",
-//     label: "Sales",
-//     children: [
-//       {
-//         key: "quote",
-//         label: "Quote Management",
-//         actions: ["view", "create", "edit", "delete", "export"],
-//       },
-//       {
-//         key: "customer",
-//         label: "Customer Management",
-//         actions: ["view", "create", "edit", "delete"],
-//       },
-//       {
-//         key: "project",
-//         label: "Project Management",
-//         actions: ["view", "create", "edit", "delete"],
-//       },
-//       {
-//         key: "mto",
-//         label: "Make Order MTO",
-//         actions: ["view", "create", "edit", "delete", "add_material", "import", "deep_edit", "deep_delete","deep_update","view_material_tab","view_manhour_tab","view_packing_tab", "dublicate", "change_project"],
-//       },
-//     ],
-//   },
-//   {
-//     key: "settings",
-//     label: "Settings",
-//     children: [
-//       {
-//         key: "userManagement",
-//         label: "User Management",
-//          actions: ["view","add", "edit", "delete"],
-//       },
-//       {
-//         key: "skillLevel",
-//         label: "Skill Level",
-//         actions: ["view","add", "edit", "delete"],
-//       },
-//       {
-//         key: "systemSettings",
-//         label: "System Settings",
-//         actions: ["view","update_gst_settings", "update_alert_settings", "update_workorder_settings","update_currency_settings","update_inventory_settings"],
-//       },
-//       {
-//         key: "markupParameter",
-//         label: "Markup Parameter",
-//         actions: ["view", "update_material_settings", "update_manhour_settings", "update_packing_settings"],
-//       },
-//       {
-//         key: "currencyManagment",
-//         label: "Currency Managment",
-//         actions: ["view","add", "edit", "delete"],
-//       },
-//       {
-//         key: "categoryManagment",
-//         label: "Category Managment",
-//         actions: ["view","add", "edit", "delete"],
-//       },
-//       {
-//         key: "uomManagment",
-//         label: "Uom Managment",
-//         actions: ["view","add", "edit", "delete"],
-//       },
-//     ],
-//   },
-// ];
-
-// export default modules
-
-
-
 const modules = [
+  {
+    key: "dashboard",
+    label: "Dashboard",
+    actions: [
+      { key: "view", label: "View Only" }
+    ]
+  },
   // ---------------------------------------------------------
   // LIBRARY MODULE
   // ---------------------------------------------------------
@@ -101,13 +18,9 @@ const modules = [
         label: "MPN",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "create", label: "Create" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
-          { key: "purchase_history", label: "Purchase History" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
           { key: "import", label: "Import" },
           { key: "export", label: "Export" },
-          { key: "update_purchase_history", label: "Update Purchase History" },
         ],
       },
       {
@@ -115,9 +28,7 @@ const modules = [
         label: "Child",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "create", label: "Create" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
           { key: "import", label: "Import" },
           { key: "export", label: "Export" },
         ],
@@ -137,10 +48,7 @@ const modules = [
         label: "Quote Management",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "create", label: "Create" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
-          { key: "export", label: "Export" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
       {
@@ -148,9 +56,7 @@ const modules = [
         label: "Customer Management",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "create", label: "Create" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
       {
@@ -158,9 +64,7 @@ const modules = [
         label: "Project Management",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "create", label: "Create" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
       {
@@ -168,22 +72,39 @@ const modules = [
         label: "Make Order MTO",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "create", label: "Create" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
           { key: "add_material", label: "Add Material" },
           { key: "import", label: "Import" },
-          { key: "deep_edit", label: "Costing Edit" },
-          { key: "deep_delete", label: "Costing Delete" },
-          { key: "deep_update", label: "Costing Update" },
-          { key: "view_material_tab", label: "View Material Tab" },
-          { key: "view_manhour_tab", label: "View Manhour Tab" },
-          { key: "view_packing_tab", label: "View Packing Tab" },
-          { key: "dublicate", label: "Duplicate" },
-          { key: "change_project", label: "Change Project" },
+          { key: "create_edit_delete_costingmaterial", label: "Material Costing Create / Edit / Delete" },
         ],
       },
     ],
+  },
+  {
+    key: "work_order",
+    label: "Work Order",
+    children: [
+      {
+        key: "work_order_managment",
+        label: "Work Order Management",
+        actions: [
+          { key: "view", label: "View Only" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
+          { key: "export", label: "Export" },
+          { key: "import", label: "Import" },
+          { key: "setting", label: "Setting" },
+          { key: "mpn_tracker", label: "MPN Tracker" },
+        ],
+      },
+      {
+        key: "delivery_order",
+        label: "Delivery Order",
+        actions: [
+          { key: "view", label: "View Only" },
+          { key: "export", label: "Export" }
+        ],
+      },
+    ]
   },
 
   // ---------------------------------------------------------
@@ -196,47 +117,13 @@ const modules = [
       {
         key: "cable_harness_assembly",
         label: "Cable Harness / Assembly",
-        children: [
-          {
-            key: "picking",
-            label: "Picking Process",
-            actions: [
-              { key: "view", label: "View Only" },
-              { key: "process", label: "Process" },
-            ],
-          },
-          {
-            key: "cable_harness",
-            label: "Cable Harness",
-            actions: [
-              { key: "view", label: "View Only" },
-              { key: "process", label: "Process" },
-            ],
-          },
-          {
-            key: "labelling",
-            label: "Labelling",
-            actions: [
-              { key: "view", label: "View Only" },
-              { key: "process", label: "Process" },
-            ],
-          },
-          {
-            key: "quality_check",
-            label: "Quality Check",
-            actions: [
-              { key: "view", label: "View Only" },
-              { key: "process", label: "Process" },
-            ],
-          },
-          {
-            key: "packing",
-            label: "Packing",
-            actions: [
-              { key: "view", label: "View Only" },
-              { key: "process", label: "Process" },
-            ],
-          },
+        actions: [
+          { key: "view", label: "View Only" },
+          { key: "picking_process", label: "Picking Process" },
+          { key: "cable_harness", label: "Cable Harness" },
+          { key: "labelling", label: "Labelling" },
+          { key: "qc", label: "Quality Check" },
+          { key: "view", label: "Packing" },
         ],
       },
 
@@ -244,31 +131,11 @@ const modules = [
       {
         key: "box_build",
         label: "Box Build Assembly",
-        children: [
-          {
-            key: "picking_box",
-            label: "Picking Process",
-            actions: [
-              { key: "view", label: "View Only" },
-              { key: "process", label: "Process" },
-            ],
-          },
-          {
-            key: "assembly_box",
-            label: "Assembly",
-            actions: [
-              { key: "view", label: "View Only" },
-              { key: "process", label: "Process" },
-            ],
-          },
-          {
-            key: "qc_box",
-            label: "Quality Check",
-            actions: [
-              { key: "view", label: "View Only" },
-              { key: "process", label: "Process" },
-            ],
-          },
+        actions: [
+          { key: "view", label: "View Only" },
+          { key: "picking_process", label: "Picking Process" },
+          { key: "assembly", label: "Assembly" },
+          { key: "qc", label: "Quality Check" }
         ],
       },
     ],
@@ -280,10 +147,41 @@ const modules = [
   {
     key: "purchase",
     label: "Purchase Module",
-    actions: [
-      { key: "edit_delete", label: "Add / Edit / Delete" },
-      { key: "view", label: "View Only" },
-    ],
+    children: [
+      {
+        key: "purchase_order",
+        label: "Purchase Order",
+        actions: [
+          { key: "create", label: "Create PO" },
+          { key: "view", label: "View Only" },
+          { key: "edit_delete", label: "Edit / Delete" },
+          { key: "send_mail", label: "Send Mail" }
+        ],
+      },
+      {
+        key: "purchase_history",
+        label: "Purchase History",
+        actions: [
+          { key: "view", label: "View Only" },
+        ],
+      },
+      {
+        key: "supplier_managment",
+        label: "Supplier Managment",
+        actions: [
+          { key: "view", label: "View Only" },
+          { key: "edit_delete_add", label: "Create / Edit / Delete" },
+        ],
+      },
+      {
+        key: "purchase_settings",
+        label: "Purchase Setting",
+        actions: [
+          { key: "view", label: "View Only" },
+          { key: "create", label: "Create / Edit" }
+        ],
+      }
+    ]
   },
 
   // ---------------------------------------------------------
@@ -294,18 +192,25 @@ const modules = [
     label: "Inventory Module",
     children: [
       {
-        key: "receive_materials",
-        label: "Receive Materials",
+        key: "inventory",
+        label: "Inventory",
         actions: [
-          { key: "edit_delete", label: "Edit / Delete" },
+          { key: "setting", label: "Change Settings" },
+          { key: "view", label: "View Only" }
+        ],
+      },
+      {
+        key: "mto_inventory",
+        label: "MTO Inventory",
+        actions: [
           { key: "view", label: "View Only" },
         ],
       },
       {
-        key: "detailed_inventory",
-        label: "Detailed Inventory List",
+        key: "recieve_material",
+        label: "Receive Material",
         actions: [
-          { key: "edit_delete", label: "Edit / Delete" },
+          { key: "edit", label: "Receive Action" },
           { key: "view", label: "View Only" },
         ],
       },
@@ -324,9 +229,7 @@ const modules = [
         label: "User Management",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "add", label: "Add" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
 
@@ -335,9 +238,7 @@ const modules = [
         label: "Skill Level",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "add", label: "Add" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
 
@@ -346,11 +247,7 @@ const modules = [
         label: "System Settings",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "update_gst_settings", label: "Update GST Settings" },
-          { key: "update_alert_settings", label: "Update Alert Settings" },
-          { key: "update_workorder_settings", label: "Update Work Order Settings" },
-          { key: "update_currency_settings", label: "Update Currency Settings" },
-          { key: "update_inventory_settings", label: "Update Inventory Settings" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
 
@@ -359,31 +256,15 @@ const modules = [
         label: "Markup Parameter",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "update_material_settings", label: "Update Material Settings" },
-          { key: "update_manhour_settings", label: "Update Manhour Settings" },
-          { key: "update_packing_settings", label: "Update Packing Settings" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
-
-      // {
-      //   key: "currencyManagment",
-      //   label: "Currency Management",
-      //   actions: [
-      //     { key: "view", label: "View Only" },
-      //     { key: "add", label: "Add" },
-      //     { key: "edit", label: "Edit" },
-      //     { key: "delete", label: "Delete" },
-      //   ],
-      // },
-
       {
         key: "categoryManagment",
         label: "Category Management",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "add", label: "Add" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
 
@@ -392,9 +273,7 @@ const modules = [
         label: "UOM Management",
         actions: [
           { key: "view", label: "View Only" },
-          { key: "add", label: "Add" },
-          { key: "edit", label: "Edit" },
-          { key: "delete", label: "Delete" },
+          { key: "create_edit_delete", label: "Create / Edit / Delete" },
         ],
       },
     ],

@@ -240,8 +240,8 @@ const MTOList = () => {
           onEdit={() => handleEdit(record)}
           onDelete={() => handleDelete(record._id)}
           showInfo
-          showEdit={hasPermission('sales.mto:edit')}
-          showDelete={hasPermission('sales.mto:delete')}
+          showEdit={hasPermission('sales.mto:create_edit_delete')}
+          showDelete={hasPermission('sales.mto:create_edit_delete')}
           showDeleteConfirm
         />
       ),
@@ -476,7 +476,7 @@ const MTOList = () => {
               <Button icon={<FilterOutlined />} onClick={() => setFilterVisible(true)}>Filter</Button>
             </Col>
             <Col>
-              {hasPermission('sales.mto:create') && (<Button type="primary" icon={<PlusOutlined />} onClick={() => setQuoteModalVisible(true)}>
+              {hasPermission('sales.mto:create_edit_delete') && (<Button type="primary" icon={<PlusOutlined />} onClick={() => setQuoteModalVisible(true)}>
                 Create Drawing
               </Button>)}
 

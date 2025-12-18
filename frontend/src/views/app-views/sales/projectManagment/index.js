@@ -247,8 +247,8 @@ const ProjectList = () => {
           onEdit={() => handleEdit(record)}
           onDelete={() => handleDelete(record._id)}
           showInfo={false}
-          showEdit={hasPermission('sales.project:edit')}
-          showDelete={hasPermission('sales.project:delete')}
+          showEdit={hasPermission('sales.project:create_edit_delete')}
+          showDelete={hasPermission('sales.project:create_edit_delete')}
           showDeleteConfirm={true}
         />
       ),
@@ -270,7 +270,7 @@ const ProjectList = () => {
             />
           </Col>
           <Col>
-          {hasPermission('sales.project:create') && (<Button type="primary" onClick={() => setShowModal(true)}>
+          {hasPermission('sales.project:create_edit_delete') && (<Button type="primary" onClick={() => setShowModal(true)}>
               Add Project
             </Button>)}
             

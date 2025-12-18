@@ -244,8 +244,8 @@ const UserList = () => {
             setShowAddModal(true);
           }}
           onDelete={() => handleDelete(record._id)}
-          showEdit={hasPermission("settings.userManagement:edit")}
-          showDelete={hasPermission("settings.userManagement:delete")}
+          showEdit={hasPermission("settings.userManagement:create_edit_delete")}
+          showDelete={hasPermission("settings.userManagement:create_edit_delete")}
           showDeleteConfirm
         />
       ),
@@ -256,7 +256,7 @@ const UserList = () => {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <h2>User Management</h2>
-        {hasPermission("settings.userManagement:add") && (
+        {hasPermission("settings.userManagement:create_edit_delete") && (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowAddModal(true)}>
             Add User
           </Button>

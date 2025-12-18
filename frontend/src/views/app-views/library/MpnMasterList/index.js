@@ -207,8 +207,8 @@ const MpnMasterList = () => {
                     onEdit={() => handleEdit(record?._id)}
                     onDelete={() => handleDelete(record?._id)}
                     showInfo={hasPermission("library.mpn:view")}
-                    showEdit={hasPermission("library.mpn:edit")}
-                    showDelete={hasPermission("library.mpn:delete")}
+                    showEdit={hasPermission("library.mpn:create_edit_delete")}
+                    showDelete={hasPermission("library.mpn:create_edit_delete")}
                     showDeleteConfirm={true}
                 />
             ),
@@ -437,7 +437,7 @@ const MpnMasterList = () => {
                         Complete Database of part and supplier
                     </p>
                 </div>
-                {hasPermission("library.mpn:create") && (
+                {hasPermission("library.mpn:create_edit_delete") && (
                     <Button
                         onClick={() => setShowAddModal(true)}
                         type="primary"
@@ -466,7 +466,7 @@ const MpnMasterList = () => {
                 }
                 showFilter={true}
                 onFilter={() => setFilterVisible(true)}
-                showPurchase={hasPermission("library.mpn:update_purchase_history")}
+                showPurchase={true}
                 showPurchaseText={
                     isExpanded ? "Hide Purchase History" : "Show Purchase History"
                 }

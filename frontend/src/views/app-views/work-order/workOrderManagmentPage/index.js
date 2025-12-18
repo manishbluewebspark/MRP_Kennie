@@ -24,102 +24,102 @@ const safe = (v) => (v === 0 ? 0 : v || "-");
 
 
 export const STATUS_META = {
-  "Picking Started": {
-    color: "blue",
-    icon: <PlayCircleOutlined />,
-  },
-  "Picking Completed": {
-    color: "green",
-    icon: <CheckCircleOutlined />,
-  },
-  "Assembly Started": {
-    color: "purple",
-    icon: <ToolOutlined />,
-  },
-  "Assembly Completed": {
-    color: "green",
-    icon: <CheckCircleOutlined />,
-  },
-  "Cable Harness Started": {
-    color: "purple",
-    icon: <ToolOutlined />,
-  },
-  "Cable Harness Completed": {
-    color: "green",
-    icon: <CheckCircleOutlined />,
-  },
-  "Labelling Started": {
-    color: "orange",
-    icon: <TagsOutlined />,
-  },
-  "Labelling Completed": {
-    color: "green",
-    icon: <CheckCircleOutlined />,
-  },
-  "QC Started": {
-    color: "cyan",
-    icon: <BarcodeOutlined />,
-  },
-  "Quality Check Completed": {
-    color: "green",
-    icon: <CheckCircleOutlined />,
-  },
-  Completed: {
-    color: "green",
-    icon: <CheckCircleOutlined />,
-  },
-  "No Progress Yet": {
-    color: "default",
-    icon: <PlayCircleOutlined />,
-  },
-  "Picking In Progress":{
-    color: "blue",
-    icon: <PlayCircleOutlined />,
-  }
+    "Picking Started": {
+        color: "blue",
+        icon: <PlayCircleOutlined />,
+    },
+    "Picking Completed": {
+        color: "green",
+        icon: <CheckCircleOutlined />,
+    },
+    "Assembly Started": {
+        color: "purple",
+        icon: <ToolOutlined />,
+    },
+    "Assembly Completed": {
+        color: "green",
+        icon: <CheckCircleOutlined />,
+    },
+    "Cable Harness Started": {
+        color: "purple",
+        icon: <ToolOutlined />,
+    },
+    "Cable Harness Completed": {
+        color: "green",
+        icon: <CheckCircleOutlined />,
+    },
+    "Labelling Started": {
+        color: "orange",
+        icon: <TagsOutlined />,
+    },
+    "Labelling Completed": {
+        color: "green",
+        icon: <CheckCircleOutlined />,
+    },
+    "QC Started": {
+        color: "cyan",
+        icon: <BarcodeOutlined />,
+    },
+    "Quality Check Completed": {
+        color: "green",
+        icon: <CheckCircleOutlined />,
+    },
+    Completed: {
+        color: "green",
+        icon: <CheckCircleOutlined />,
+    },
+    "No Progress Yet": {
+        color: "default",
+        icon: <PlayCircleOutlined />,
+    },
+    "Picking In Progress": {
+        color: "blue",
+        icon: <PlayCircleOutlined />,
+    }
 };
 
 // Badge render helper
 export const renderBadge = (status) => {
-  // safety
-  if (!status) return <Tag>No Status</Tag>;
+    // safety
+    if (!status) return <Tag>No Status</Tag>;
 
-  // If status contains "%" → (e.g. “Picking: 50% Done”)
-  if (status.includes("%")) {
-    let color = "blue";
+    // If status contains "%" → (e.g. “Picking: 50% Done”)
+    if (status.includes("%")) {
+        let color = "blue";
 
-    if (status.toLowerCase().includes("picking")) color = "blue";
-    if (status.toLowerCase().includes("assembly") || status.toLowerCase().includes("harness"))
-      color = "purple";
-    if (status.toLowerCase().includes("labelling")) color = "orange";
-    if (status.toLowerCase().includes("quality") || status.toLowerCase().includes("qc"))
-      color = "cyan";
+        if (status.toLowerCase().includes("picking")) color = "blue";
+        if (status.toLowerCase().includes("assembly") || status.toLowerCase().includes("harness"))
+            color = "purple";
+        if (status.toLowerCase().includes("labelling")) color = "orange";
+        if (status.toLowerCase().includes("quality") || status.toLowerCase().includes("qc"))
+            color = "cyan";
+
+        return (
+            <Tag
+                color={color}
+                style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
+            >
+                <LoadingOutlined />
+                {status}
+            </Tag>
+        );
+    }
+
+    // Static statuses from META
+    const meta = STATUS_META[status] || {
+        color: "default",
+        icon: <LoadingOutlined />,
+    };
 
     return (
-      <Tag
-        color={color}
-        style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
-      >
-        <LoadingOutlined />
-        {status}
-      </Tag>
+        <Tag
+            color={meta.color}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
+        >
+            {meta.icon}
+            {status}
+        </Tag>
     );
-  }
-
-  // Static statuses from META
-  const meta = STATUS_META[status] || {
-    color: "default",
-    icon: <LoadingOutlined />,
-  };
-
-  return (
-    <Tag
-      color={meta.color}
-      style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
-    >
-      {meta.icon}
-      {status}
-    </Tag>
-  );
 };
 
 
@@ -258,8 +258,8 @@ const DeliveryOrderPage = () => {
                 <ActionButtons
                     onEdit={() => handleEdit(record)}
                     onDelete={() => handleDelete(record._id)}
-                    showInfo={true}
-                    showEdit={true}
+                    showInfo={hasPermission("work_order.work_order_managment:view")}
+                    showEdit={hasPermission("work_order.work_order_managment:create_edit_delete")}
                     showDelete={record?.status === "completed"}
                     showDeleteConfirm={true}
                     onInfo={() => handleInfo(record)}
@@ -572,14 +572,16 @@ const DeliveryOrderPage = () => {
                         All Work Order List
                     </p>
                 </div>
+                {hasPermission("work_order.work_order_managment:create_edit_delete") && (
+                    <Button
+                        onClick={() => setIsModalVisible(true)}
+                        type="primary"
+                        icon={<PlusOutlined />}
+                    >
+                        Create Work Order
+                    </Button>
+                )}
 
-                <Button
-                    onClick={() => setIsModalVisible(true)}
-                    type="primary"
-                    icon={<PlusOutlined />}
-                >
-                    Create Work Order
-                </Button>
             </div>
 
             {/* Global Table Actions */}
@@ -593,18 +595,18 @@ const DeliveryOrderPage = () => {
                 // importText="Import work order"
                 exportText="Export"
                 // onImport={(file) => handleImport(file)}
-                showExport={true}
+                showExport={hasPermission("work_order.work_order_managment:export")}
                 // onExport={() => { setExportModalOpen(true) }}
                 onExport={() => handleExport()}
                 showFilter={false}
                 onFilter={() => console.log("Filter clicked")}
-                showProductSetting={true}
+                showProductSetting={hasPermission("work_order.work_order_managment:setting")}
                 onProductSetting={() => { setIsProductSettingmodalVisible(true) }}
-                showMPNTracker={true}
+                showMPNTracker={hasPermission("work_order.work_order_managment:mpn_tracker")}
                 onMPNTracker={() => {
                     navigate('/app/work-order/mpn-tracker')
                 }}
-                showImportWorkOrder={true}
+                showImportWorkOrder={hasPermission("work_order.work_order_managment:import")}
                 onImportWorkOrder={() => { setImportWorkOrderModalVisible(true) }}
             />
 

@@ -75,7 +75,7 @@ const MarkupParameterPage = () => {
               onChange={(val) => setMaterialsMarkup(val)}
             />
             <span>Markup applied to material costs</span>
-            {hasPermission('settings.markupParameter:update_material_settings') && (<Button
+            {hasPermission('settings.markupParameter:create_edit_delete') && (<Button
               style={{ marginTop: "8px" }}
               type="primary"
               block
@@ -100,7 +100,7 @@ const MarkupParameterPage = () => {
               onChange={(val) => setManhourMarkup(val)}
             />
             <span>Markup applied to labor costs</span>
-            {hasPermission('settings.markupParameter:update_manhour_settings') && (<Button
+            {hasPermission('settings.markupParameter:create_edit_delete') && (<Button
               style={{ marginTop: "8px" }}
               type="primary"
               block
@@ -125,7 +125,7 @@ const MarkupParameterPage = () => {
               onChange={(val) => setPackingMarkup(val)}
             />
             <span>Markup applied to packing/other costs</span>
-            {hasPermission('settings.markupParameter:update_packing_settings') && (<Button
+            {hasPermission('settings.markupParameter:create_edit_delete') && (<Button
               style={{ marginTop: "8px" }}
               type="primary"
               block
