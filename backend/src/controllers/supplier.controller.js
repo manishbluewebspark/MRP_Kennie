@@ -3,6 +3,52 @@ import Suppliers from "../models/Suppliers.js";
 // ➕ Add Supplier
 export const addSupplier = async (req, res) => {
   try {
+
+    const { companyName, email, phone } = req.body;
+
+    // 🔴 Basic validation
+    if (!companyName || !email || !phone) {
+      return res.status(400).json({
+        success: false,
+        message: "companyName, email and phone are required",
+      });
+    }
+
+    const existingSupplier = await Suppliers.findOne({
+      $or: [
+        { companyName: { $regex: `^${companyName}$`, $options: "i" } }, // case-insensitive
+        { email: email.toLowerCase() },
+        { phone },
+      ],
+    });
+
+
+    if (existingSupplier) {
+      if (
+        existingSupplier.companyName.toLowerCase() === companyName.toLowerCase()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Company name already exists",
+        });
+      }
+
+      if (existingSupplier.email === email.toLowerCase()) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already exists",
+        });
+      }
+
+      if (existingSupplier.phone === phone) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number already exists",
+        });
+      }
+    }
+
+
     const supplier = await Suppliers.create(req.body);
     res.status(201).json({ success: true, data: supplier });
   } catch (error) {

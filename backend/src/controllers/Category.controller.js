@@ -4,6 +4,20 @@ import Category from "../models/Category.js";
 // Add Category
 export const addCategory = async (req, res) => {
   try {
+
+    
+    const existing = await Category.findOne({
+      name: { $regex: `^${req.body?.name}$`, $options: "i" },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "Category name already exists",
+      });
+    }
+
+
     const category = new Category(req.body);
     await category.save();
     res.status(201).json({ success: true, data: category });
@@ -52,6 +66,18 @@ export const getCategoryById = async (req, res) => {
 // Update Category
 export const updateCategory = async (req, res) => {
   try {
+
+     const existing = await Category.findOne({
+      name: { $regex: `^${req.body?.name}$`, $options: "i" },
+    });
+
+      if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "Category name already exists",
+      });
+    }
+
     const category = await Category.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!category) return res.status(404).json({ success: false, error: "Category not found" });
     res.json({ success: true, data: category });

@@ -220,6 +220,10 @@ export const getAllMpn = async (req, res) => {
         path: "purchaseHistory.Supplier", // Populate Supplier in purchaseHistory array
         select: "companyName"
       })
+       .populate({
+        path: "purchaseHistory.currency", // Populate Supplier in purchaseHistory array
+        select: "symbol"
+      })
 
       .sort({ createdAt: -1 })
       .lean();
@@ -530,7 +534,7 @@ export const importMpn = async (req, res) => {
     const workbook = XLSX.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
-
+    console.log('-----row', rows)
     let results = { inserted: 0, updated: 0, errors: [] };
 
     for (const [index, row] of rows.entries()) {
@@ -565,8 +569,14 @@ export const importMpn = async (req, res) => {
 
         if (mappedRow.currency) {
           const currencyDoc = await Currency.findOne({
-            companyName: mappedRow.currency
+            $or: [
+              { code: { $regex: new RegExp(`^${mappedRow.currency}$`, "i") } },
+              { symbol: { $regex: new RegExp(`^${mappedRow.currency}$`, "i") } },
+              { name: { $regex: new RegExp(`^${mappedRow.currency}$`, "i") } },
+              { companyName: { $regex: new RegExp(`^${mappedRow.currency}$`, "i") } },
+            ],
           });
+
           mappedRow.currency = currencyDoc ? currencyDoc._id : null;
         } else {
           mappedRow.currency = null;
@@ -579,78 +589,82 @@ export const importMpn = async (req, res) => {
           mappedRow.Category = null;
         }
 
-        // --- Process purchase history from #1, #2, etc. columns ---
+        console.log('-------purchaseHistory-mappedRow', mappedRow.purchaseHistory);
+
         const purchaseHistory = [];
 
-        // Process purchase history entries (up to 5 entries as example)
-        for (let i = 1; i <= 3; i++) {
-          const purchasedPrice = row[`Purchased Price#${i}`];
-          const moq = row[`MOQ#${i}`];
-          const purchasedDate = row[`Purchased Date#${i}`];
-          const supplier = row[`Supplier#${i}`];
-          const leadTime = row[`Lead Time#${i}_Wk`];
-          const currency = row[`Currency#${i}`];
+        for (let i = 0; i < (mappedRow.purchaseHistory?.length || 0); i++) {
+          const poData = mappedRow.purchaseHistory[i];
 
-          // Only add if at least one field has value
-          if (purchasedPrice || moq || purchasedDate || supplier || leadTime) {
-            let supplierId = null;
-            if (supplier) {
-              const supplierDoc = await Suppliers.findOne({
-                companyName: supplier
-              });
-              supplierId = supplierDoc ? supplierDoc._id : null;
-            }
+          console.log('-----poData', poData);
 
-            purchaseHistory.push({
-              purchasedPrice: purchasedPrice || null,
-              MOQ: moq || null,
-              purchasedDate: purchasedDate ? new Date(purchasedDate) : null,
-              Supplier: supplierId,
-              leadTime_Wk: leadTime || null,
-              entryDate: new Date(),
-              currency
+          let supplierId = null;
+          let currencyId = null;
+
+          // 🔹 Supplier resolve
+          if (poData.supplier) {
+            const supplierDoc = await Suppliers.findOne({
+              companyName: { $regex: new RegExp(`^${poData.supplier}$`, "i") },
             });
+            supplierId = supplierDoc ? supplierDoc._id : null;
           }
+
+          // 🔹 Currency resolve
+          if (poData.currency) {
+            const currencyDoc = await Currency.findOne({
+              $or: [
+                { code: { $regex: new RegExp(`^${poData.currency}$`, "i") } },
+                { symbol: { $regex: new RegExp(`^${poData.currency}$`, "i") } },
+                { name: { $regex: new RegExp(`^${poData.currency}$`, "i") } },
+              ],
+            });
+            currencyId = currencyDoc ? currencyDoc._id : null;
+          }
+
+          purchaseHistory.push({
+            purchasedPrice: poData.purchasedPrice ?? null,
+            MOQ: poData.moq ?? null,
+            purchasedDate: poData.purchasedDate ?? null,
+            Supplier: supplierId,
+            LeadTime_WK: poData.leadTimeWeeks ?? null,
+            currency: currencyId,
+            entryDate: new Date(),
+          });
         }
 
-        // Add purchase history to mappedRow if any entries found
-        if (purchaseHistory.length > 0) {
-          mappedRow.purchaseHistory = purchaseHistory;
-        }
+        // ✅ override mappedRow.purchaseHistory with DB-ready data
+        mappedRow.purchaseHistory = purchaseHistory;
 
-        // --- Insert or update ---
+        console.log('-------FINAL purchaseHistory', purchaseHistory);
+
+
         const existing = await MPN.findOne({ MPN: mappedRow.MPN });
 
         if (existing) {
-          // Update existing document - preserve existing purchaseHistory if not provided in import
           const updateData = { ...mappedRow };
 
-          // If new purchase history is provided, merge with existing (avoid duplicates)
-          if (mappedRow.purchaseHistory && mappedRow.purchaseHistory.length > 0) {
-            const existingHistory = existing.purchaseHistory || [];
-
-            // Simple merge - you might want more sophisticated duplicate detection
+          // ✅ merge purchase history safely
+          if (mappedRow.purchaseHistory?.length) {
             updateData.purchaseHistory = [
               ...mappedRow.purchaseHistory,
-              ...existingHistory
-            ].slice(0, 10); // Limit to last 10 entries
+              ...(existing.purchaseHistory || []),
+            ].slice(0, 10);
           } else {
-            // If no new purchase history in import, keep existing
-            updateData.purchaseHistory = existing.purchaseHistory;
+            updateData.purchaseHistory = existing.purchaseHistory || [];
           }
 
-          await MPN.updateOne({ MPN: mappedRow.MPN }, { $set: updateData });
+          await MPN.updateOne({ _id: existing._id }, { $set: updateData });
           results.updated++;
         } else {
-          // Create new document
           const createdMpn = await MPN.create(mappedRow);
+
           await Inventory.create({
             mpnId: createdMpn._id,
           });
+
           results.inserted++;
-
-
         }
+
       } catch (err) {
         results.errors.push({ row: index + 2, error: err.message });
       }
@@ -1137,8 +1151,8 @@ export const exportMpn = async (req, res) => {
             purchase?.purchasedDate
               ? new Date(purchase.purchasedDate)
               : purchase?.entryDate
-              ? new Date(purchase.entryDate)
-              : "";
+                ? new Date(purchase.entryDate)
+                : "";
 
           row[`purchaseHistory_${i}_moq`] = purchase?.MOQ ?? purchase?.moq ?? "";
 

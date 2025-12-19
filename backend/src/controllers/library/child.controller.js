@@ -414,7 +414,7 @@ export const getAllChild = async (req, res) => {
 
 //     for (const row of data) {
 //       if (!row["Child Part No."] || !row["Linked MPN"]) continue;
-       
+
 //       // Find MPN by its part number
 //       const parentMpn = await MPN.findOne({ MPN: row["Linked MPN"] });
 //       if (!parentMpn) {
@@ -471,80 +471,229 @@ export const getAllChild = async (req, res) => {
 //   }
 // };
 
+// export const importChild = async (req, res) => {
+//   try {
+//     if (!req.file)
+//       return res.status(400).json({ success: false, message: "No file uploaded" });
+
+//     const workbook = XLSX.readFile(req.file.path);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+//     // Convert sheet to JSON WITHOUT relying on messy headers
+//     const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+//     const headers = rawData[0];
+
+//     // Normalize headers → trim, lowercase, remove extra spaces/dots
+//     const normalizedHeaders = headers.map(h =>
+//       String(h)
+//         .trim()
+//         .toLowerCase()
+//         .replace(/\./g, "")         // remove dots
+//         .replace(/\s+/g, "_")       // replace spaces with underscore
+//     );
+
+//     // Create array of objects with normalized keys
+//     const data = rawData.slice(1).map(row => {
+//       const obj = {};
+//       normalizedHeaders.forEach((key, i) => {
+//         obj[key] = row[i];
+//       });
+//       return obj;
+//     });
+
+//     const mappedData = [];
+
+//     for (const row of data) {
+//       const childPart = row["child_part_no"]; // normalized
+//       const linkedMPN = row["linked_mpn"];    // normalized
+
+//       if (!childPart || !linkedMPN) continue;
+
+//       const parentMpn = await MPN.findOne({ MPN: String(linkedMPN).trim() });
+//       if (!parentMpn) {
+//         console.warn(`MPN not found for child ${childPart}`);
+//         continue;
+//       }
+
+//       mappedData.push({
+//         ChildPartNo: String(childPart).trim(),
+//         mpn: parentMpn._id,
+//         LinkedMPNCategory: parentMpn?.Category ? parentMpn.Category : null,
+//         status: (row["status"] || "").trim().toLowerCase() === "inactive" ? "inactive" : "active",
+//       });
+//     }
+
+//     const results = [];
+//     for (const child of mappedData) {
+//       const updated = await Child.findOneAndUpdate(
+//         { ChildPartNo: child.ChildPartNo, mpn: child.mpn },
+//         { $set: child },
+//         { upsert: true, new: true }
+//       );
+//       results.push(updated);
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "Child data imported successfully",
+//       data: results,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+
 export const importChild = async (req, res) => {
   try {
-    if (!req.file)
-      return res.status(400).json({ success: false, message: "No file uploaded" });
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
+    }
 
     const workbook = XLSX.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
-    // Convert sheet to JSON WITHOUT relying on messy headers
+    // Read raw rows
     const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-    const headers = rawData[0];
+    if (!rawData.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Excel file is empty",
+      });
+    }
 
-    // Normalize headers → trim, lowercase, remove extra spaces/dots
-    const normalizedHeaders = headers.map(h =>
+    // Normalize headers
+    const headers = rawData[0].map(h =>
       String(h)
         .trim()
         .toLowerCase()
-        .replace(/\./g, "")         // remove dots
-        .replace(/\s+/g, "_")       // replace spaces with underscore
+        .replace(/\./g, "")
+        .replace(/\s+/g, "_")
     );
 
-    // Create array of objects with normalized keys
-    const data = rawData.slice(1).map(row => {
+    // Build row objects
+    const rows = rawData.slice(1).map(r => {
       const obj = {};
-      normalizedHeaders.forEach((key, i) => {
-        obj[key] = row[i];
+      headers.forEach((h, i) => {
+        obj[h] = r[i];
       });
       return obj;
     });
 
-    const mappedData = [];
+    const errors = [];
+    const inserted = [];
 
-    for (const row of data) {
-      const childPart = row["child_part_no"]; // normalized
-      const linkedMPN = row["linked_mpn"];    // normalized
+    // 🔑 To avoid duplicate inserts from SAME FILE
+    const seenChildParts = new Set();
 
-      if (!childPart || !linkedMPN) continue;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNo = i + 2;
 
-      const parentMpn = await MPN.findOne({ MPN: String(linkedMPN).trim() });
-      if (!parentMpn) {
-        console.warn(`MPN not found for child ${childPart}`);
-        continue;
+      try {
+        const childPartNo = String(row.child_part_no || "").trim();
+        const linkedMPN = String(row.linked_mpn || "").trim();
+
+        // ❌ Missing values
+        if (!childPartNo || childPartNo.toLowerCase() === "null") {
+          errors.push(`Row ${rowNo}: Invalid Child Part Number`);
+          continue;
+        }
+
+
+        // ❌ Duplicate in same Excel file
+        // if (seenChildParts.has(childPartNo)) {
+        //   errors.push(`Child Part ${childPartNo} duplicated in Excel`);
+        //   continue;
+        // }
+        seenChildParts.add(childPartNo);
+
+        // 🔎 Find parent MPN
+        const mpnDoc = await MPN.findOne({ MPN: linkedMPN }).lean();
+        if (!mpnDoc) {
+          errors.push(`Child Part ${childPartNo} → MPN "${linkedMPN}" not found`);
+          continue;
+        }
+
+        // 🔎 Existing child check
+        console.log('------childPartNo', childPartNo)
+        const existingChild = await Child.findOne({
+          ChildPartNo: childPartNo,
+        }).lean();
+
+        console.log('------existingChild', existingChild)
+        if (existingChild) {
+          errors.push(`Child Part ${row.child_part_no} already exists`);
+          continue;
+        }
+
+        // Already linked to another MPN
+        if (existingChild && String(existingChild.mpn) !== String(mpnDoc._id)) {
+          errors.push(
+            `Child Part ${childPartNo} already linked to another MPN`
+          );
+          continue;
+        }
+
+        // Already linked to same MPN
+        // if (existingChild && String(existingChild.mpn) === String(mpnDoc._id)) {
+        //   errors.push(
+        //     `Child Part ${childPartNo} already linked to this MPN`
+        //   );
+        //   continue;
+        // }
+
+        console.log('-----created---', childPartNo, mpnDoc._id, mpnDoc.Category);
+
+
+        const created = await Child.create({
+          ChildPartNo: childPartNo,
+          mpn: mpnDoc._id,
+          LinkedMPNCategory: mpnDoc.Category || null,
+          status: "Active",
+        });
+
+
+
+
+        inserted.push(created);
+      } catch (err) {
+        // ❌ Hide ugly Mongo errors
+        if (err.code === 11000) {
+          // errors.push(`Child Part ${row.child_part_no} already exists`);
+        } else {
+          errors.push(`Row ${rowNo}: ${err.message}`);
+        }
       }
-
-      mappedData.push({
-        ChildPartNo: String(childPart).trim(),
-        mpn: parentMpn._id,
-        LinkedMPNCategory: parentMpn?.Category ? parentMpn.Category : null,
-        status: (row["status"] || "").trim().toLowerCase() === "inactive" ? "inactive" : "active",
-      });
-    }
-
-    const results = [];
-    for (const child of mappedData) {
-      const updated = await Child.findOneAndUpdate(
-        { ChildPartNo: child.ChildPartNo, mpn: child.mpn },
-        { $set: child },
-        { upsert: true, new: true }
-      );
-      results.push(updated);
     }
 
     return res.json({
-      success: true,
-      message: "Child data imported successfully",
-      data: results,
+      success: errors.length === 0,
+      insertedCount: inserted.length,
+      errorCount: errors.length,
+      message:
+        errors.length > 0
+          ? errors.join(" | ")
+          : "Child data imported successfully",
+      data: inserted,
     });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: err.message });
+    console.error("importChild error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to import child data",
+    });
   }
 };
+
+
 
 
 

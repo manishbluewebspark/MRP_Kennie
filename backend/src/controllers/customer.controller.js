@@ -7,16 +7,48 @@ export const createCustomer = async (req, res) => {
   try {
 
     const emailLower = normalizeEmail(req?.body?.email);
+    const companyName = req?.body?.companyName?.trim();
+    const phone = req?.body?.phone?.trim();
+
+    // 🔍 EMAIL duplicate check
     if (emailLower) {
-      const exists = await Customer.findOne({ email: emailLower }).lean();
-      if (exists) {
-        return res.status(404).json({
+      const emailExists = await Customer.findOne({ email: emailLower }).lean();
+      if (emailExists) {
+        return res.status(400).json({
           success: false,
-          code: 'EMAIL_EXISTS',
-          message: 'A customer with this email already exists.',
+          code: "EMAIL_EXISTS",
+          message: "A customer with this email already exists.",
         });
       }
     }
+
+    // 🔍 COMPANY NAME duplicate check (case-insensitive)
+    if (companyName) {
+      const companyExists = await Customer.findOne({
+        companyName: { $regex: `^${companyName}$`, $options: "i" },
+      }).lean();
+
+      if (companyExists) {
+        return res.status(400).json({
+          success: false,
+          code: "COMPANY_EXISTS",
+          message: "A customer with this company name already exists.",
+        });
+      }
+    }
+
+    // 🔍 PHONE duplicate check
+    if (phone) {
+      const phoneExists = await Customer.findOne({ phone }).lean();
+      if (phoneExists) {
+        return res.status(400).json({
+          success: false,
+          code: "PHONE_EXISTS",
+          message: "A customer with this phone number already exists.",
+        });
+      }
+    }
+
 
 
 

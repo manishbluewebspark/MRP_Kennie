@@ -271,6 +271,7 @@ const MTOList = () => {
   const handleCloseQuoteModal = () => {
     setQuoteModalVisible(false);
     setSelectedQuoteType(null)
+    fetchData()
   };
 
   const handleQuoteTypeSelect = (type) => {

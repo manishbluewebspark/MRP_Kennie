@@ -19,9 +19,9 @@ const renderBadge = (text, type) => {
     let color;
     switch (type) {
         case "status":
-    const activeValues = ["active", "Active", "ACTIVE", "aCtive"];
-    color = activeValues.includes(text) ? "green" : "red";
-    break;
+            const activeValues = ["active", "Active", "ACTIVE", "aCtive"];
+            color = activeValues.includes(text) ? "green" : "red";
+            break;
         case "uom":
             color = "blue";
             break;
@@ -49,9 +49,9 @@ const ChildPartLibrary = () => {
     const { categories } = useSelector((state) => state.categories);
     const { librarys } = useSelector((state) => state);
 
-    console.log('-----Child Part Library',librarys)
+    console.log('-----Child Part Library', librarys)
     const [pagination, setPagination] = useState(null)
-    const [importExcel,setImportExcel] = useState(false);
+    const [importExcel, setImportExcel] = useState(false);
     const columns = [
         { title: "Child Part No", dataIndex: "ChildPartNo", key: "ChildPartNo", sorter: (a, b) => a.ChildPartNo - b.ChildPartNo },
         {
@@ -159,7 +159,11 @@ const ChildPartLibrary = () => {
             formData.append("file", file);
 
             const res = await LibraryService.importChild(formData);
-            message.success("MPN imported successfully!");
+            if (res?.success) {
+                message.success(res?.message || "MPN imported successfully!",3);
+            } else {
+                message.error(res?.message || "MPN imported failed!",3);
+            }
             fetchChildParts()
             setImportExcel(false)
             return res;
@@ -190,14 +194,14 @@ const ChildPartLibrary = () => {
     const fetchMpn = async (params = {}) => {
         try {
             const res = await LibraryService.getAllMpn();
-            console.log('-----res',res)
+            console.log('-----res', res)
             if (res.success) {
                 const options = res?.data?.map(mpn => ({
                     label: mpn?.MPN,   // show part number
                     value: mpn?._id,   // use _id as value
                     category: mpn?.Category?._id // optional, if you want to auto-fill category
                 }));
-                console.log('----options',options)
+                console.log('----options', options)
                 setMnpOption(options);
             }
         } catch (err) {
@@ -218,10 +222,10 @@ const ChildPartLibrary = () => {
         // dispatch(fetchAllMpn())
     }, [dispatch]);
 
-    useEffect(()=>{
+    useEffect(() => {
         fetchMpn()
         fetchChildParts();
-    },[])
+    }, [])
 
     const handleSearch = useDebounce((value) => {
         setPage(1); // reset page on search

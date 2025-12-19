@@ -21,28 +21,31 @@ const PurchaseSupplierManagementPage = () => {
 
   const handleCreate = async (data) => {
 
-    await dispatch(addSupplier({ ...data, gst: gstApplicable }));
-    message.success("Supplier added successfully");
+    const res = await dispatch(addSupplier({ ...data, gst: gstApplicable }));
+    if (res?.payload?.success) {
+      message.success("Supplier added successfully");
+    }
+
     setIsModalVisible(false);
     dispatch(fetchSuppliers());
   };
 
   const handleEdit = async (id, data) => {
-  await dispatch(
-    updateSupplier({ 
-      id, 
-      data: { 
-        ...data, 
-        gst: gstApplicable   // 👈 Add this!
-      }
-    })
-  );
+    await dispatch(
+      updateSupplier({
+        id,
+        data: {
+          ...data,
+          gst: gstApplicable   // 👈 Add this!
+        }
+      })
+    );
 
-  message.success("Supplier updated successfully");
-  dispatch(fetchSuppliers());
-  setIsModalVisible(false);
-  setEditingSupplier(null);
-};
+    message.success("Supplier updated successfully");
+    dispatch(fetchSuppliers());
+    setIsModalVisible(false);
+    setEditingSupplier(null);
+  };
 
 
   const handleDelete = async (id) => {

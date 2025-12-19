@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const childSchema = new mongoose.Schema(
   {
-    ChildPartNo: { type: String, required: true },
+    ChildPartNo: { type: String, required: true,unique:true },
 
     // Link to parent MPN
     mpn: {
@@ -15,7 +15,7 @@ const childSchema = new mongoose.Schema(
       ref: "Category",
       default:null
     },
-    status: { type: String, enum: ["Active", "Inactive"], default: "active" },
+    status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
     isDeleted: { type: Boolean, default: false }
   },
   { timestamps: true }

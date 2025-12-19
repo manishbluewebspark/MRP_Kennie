@@ -187,35 +187,35 @@ export const createQuote = async (req, res) => {
     // 6) Generate date-scoped sequential quote number: Q-YYYYMMDD-###
     // Generate Quote Number: QYY-XXXX
     const now = new Date();
-const year = now.getFullYear();
-const shortYear = String(year).slice(-2);   // 2025 → "25"
-const prefix = `Q${shortYear}-`;            // "Q25-"
+    const year = now.getFullYear();
+    const shortYear = String(year).slice(-2);   // 2025 → "25"
+    const prefix = `Q${shortYear}-`;            // "Q25-"
 
-// Find last quote number for this year
-const lastQuote = await Quote.findOne({
-  quoteNumber: { $regex: `^${prefix}\\d{5}$` },   // Match Q25-xxxxx
-})
-.sort({ quoteNumber: -1 })
-.select("quoteNumber")
-.lean();
+    // Find last quote number for this year
+    const lastQuote = await Quote.findOne({
+      quoteNumber: { $regex: `^${prefix}\\d{5}$` },   // Match Q25-xxxxx
+    })
+      .sort({ quoteNumber: -1 })
+      .select("quoteNumber")
+      .lean();
 
-let nextSeq = 1;  // Default beginning sequence
+    let nextSeq = 1;  // Default beginning sequence
 
-if (lastQuote?.quoteNumber) {
-  // Extract numeric part: Q25-00012 → 00012
-  const numberPart = lastQuote.quoteNumber.replace(prefix, ""); 
-  const parsed = parseInt(numberPart, 10);
+    if (lastQuote?.quoteNumber) {
+      // Extract numeric part: Q25-00012 → 00012
+      const numberPart = lastQuote.quoteNumber.replace(prefix, "");
+      const parsed = parseInt(numberPart, 10);
 
-  if (!isNaN(parsed)) {
-    nextSeq = parsed + 1;   // Always +1
-  }
-}
+      if (!isNaN(parsed)) {
+        nextSeq = parsed + 1;   // Always +1
+      }
+    }
 
-// Build 5-digit padded sequence
-const seq = String(nextSeq).padStart(5, "0");
+    // Build 5-digit padded sequence
+    const seq = String(nextSeq).padStart(5, "0");
 
-// Final quoteNumber output
-const quoteNumber = `${prefix}${seq}`;
+    // Final quoteNumber output
+    const quoteNumber = `${prefix}${seq}`;
 
 
 
@@ -245,6 +245,17 @@ const quoteNumber = `${prefix}${seq}`;
       createdBy: req.user?._id,
       updatedBy: req.user?._id,
     });
+
+    const quotedDrawingIds = quoteItems.map(it => it.drawingId);
+    await Drawing.updateMany(
+      { _id: { $in: quotedDrawingIds } },
+      {
+        $set: {
+          quotedDate: new Date(),
+        },
+      }
+    );
+
 
     // 9) Populate for response
     const populatedQuote = await Quote.findById(quote._id)
@@ -530,10 +541,10 @@ export const exportQuoteToExcel = async (req, res) => {
     const quote = await Quote.findById(quoteId)
       .populate("customerId")
       .populate("items.drawingId")
-      .populate("currency","code")
+      .populate("currency", "code")
       .lean();
 
-      
+
 
     if (!quote) {
       return res
@@ -725,7 +736,7 @@ export const exportQuoteToWord = async (req, res) => {
     const quote = await Quote.findById(quoteId)
       .populate("customerId")
       .populate("items.drawingId")
-      .populate("currency","code");
+      .populate("currency", "code");
 
     if (!quote) {
       return res.status(404).json({ success: false, message: "Quote not found" });

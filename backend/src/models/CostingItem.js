@@ -18,7 +18,7 @@ const CostingItemSchema = new mongoose.Schema({
     },
     childPart: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "ChildLibrary",
+        ref: "ChildLibrary"
     },
     // Material specific fields
     mpn: {

@@ -70,8 +70,8 @@ export const PurchaseFollowUpsCard = ({ data, loading }) => {
           )}
         />
       ) : (
-        <div style={{ textAlign: "center", color: "#999", padding: 12 }}>
-          No pending purchase follow-ups 🎉
+        <div style={{ textAlign: "center", color: "#999",alignContent:'center', padding: 12,height:'25vh' }}>
+          No pending purchase follow-ups 
         </div>
       )}
     </Card>
@@ -520,8 +520,8 @@ export const DefaultDashboard = () => {
                   <LowStockAlertCard key={item._id || item.id} item={item} />
                 ))
               ) : (
-                <div style={{ textAlign: "center", color: "#999", padding: 12 }}>
-                  No low stock alerts 🎉
+                <div style={{ textAlign: "center",justifyContent:'center',alignContent:'center', color: "#999", padding: 12,height:'33vh' }}>
+                  No low stock alerts 
                 </div>
               )}
             </div>

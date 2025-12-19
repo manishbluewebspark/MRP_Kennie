@@ -78,9 +78,11 @@ const QuoteTypeModal = ({
           handleClose();
         } else {
           message.error(res?.message || "Import failed");
+           handleClose();
         }
       } catch (err) {
         message.error(err?.message || "Import failed");
+        handleClose();
       } finally {
         hide();
         setUploading(false);

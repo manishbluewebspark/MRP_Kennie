@@ -240,7 +240,7 @@ export const getAllDrawings = async (req, res) => {
       quoteStatus, quoteType, projectId, customerId, drawingDate, drawingRange,
     } = req.query;
 
-    console.log('-------drawingDate',drawingDate)
+    console.log('-------drawingDate', drawingDate)
 
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
@@ -264,52 +264,52 @@ export const getAllDrawings = async (req, res) => {
       matchStage.customerId = new mongoose.Types.ObjectId(customerId);
     }
 
-const rawDrawingDate = req.query.drawingDate;
+    const rawDrawingDate = req.query.drawingDate;
 
-const parseMaybeJSON = (v) => {
-  if (typeof v === "string" && (v.trim().startsWith("{") || v.trim().startsWith("["))) {
-    try { return JSON.parse(v); } catch { /* ignore */ }
-  }
-  return v;
-};
+    const parseMaybeJSON = (v) => {
+      if (typeof v === "string" && (v.trim().startsWith("{") || v.trim().startsWith("["))) {
+        try { return JSON.parse(v); } catch { /* ignore */ }
+      }
+      return v;
+    };
 
-const toValidDate = (v) => {
-  const d = v ? new Date(v) : null;
-  return d && !isNaN(d.getTime()) ? d : null;
-};
+    const toValidDate = (v) => {
+      const d = v ? new Date(v) : null;
+      return d && !isNaN(d.getTime()) ? d : null;
+    };
 
-if (rawDrawingDate != null) {
-  const dd = parseMaybeJSON(rawDrawingDate);
-  let start = null, end = null;
+    if (rawDrawingDate != null) {
+      const dd = parseMaybeJSON(rawDrawingDate);
+      let start = null, end = null;
 
-  if (Array.isArray(dd)) {
-    // ["2025-11-06T...", "2025-11-07T..."]
-    start = toValidDate(dd[0]);
-    end   = toValidDate(dd[1]);
-  } else if (dd && typeof dd === "object" && (dd.$gte || dd.$lte)) {
-    // { $gte: "...", $lte: "..." }
-    start = toValidDate(dd.$gte);
-    end   = toValidDate(dd.$lte);
-  } else if (typeof dd === "string") {
-    // "2025-11-06T..."
-    const d = toValidDate(dd);
-    if (d) {
-      const s = new Date(d); s.setHours(0, 0, 0, 0);
-      const e = new Date(d); e.setHours(23, 59, 59, 999);
-      start = s;
-      end   = e;
+      if (Array.isArray(dd)) {
+        // ["2025-11-06T...", "2025-11-07T..."]
+        start = toValidDate(dd[0]);
+        end = toValidDate(dd[1]);
+      } else if (dd && typeof dd === "object" && (dd.$gte || dd.$lte)) {
+        // { $gte: "...", $lte: "..." }
+        start = toValidDate(dd.$gte);
+        end = toValidDate(dd.$lte);
+      } else if (typeof dd === "string") {
+        // "2025-11-06T..."
+        const d = toValidDate(dd);
+        if (d) {
+          const s = new Date(d); s.setHours(0, 0, 0, 0);
+          const e = new Date(d); e.setHours(23, 59, 59, 999);
+          start = s;
+          end = e;
+        }
+      }
+
+      const dateFilter = {};
+      if (start) dateFilter.$gte = start;
+      if (end) dateFilter.$lte = end;
+
+      if (Object.keys(dateFilter).length > 0) {
+        // IMPORTANT: apply to matchStage, not "query"
+        matchStage.createdAt = dateFilter;
+      }
     }
-  }
-
-  const dateFilter = {};
-  if (start) dateFilter.$gte = start;
-  if (end)   dateFilter.$lte = end;
-
-  if (Object.keys(dateFilter).length > 0) {
-    // IMPORTANT: apply to matchStage, not "query"
-    matchStage.createdAt = dateFilter;
-  }
-}
 
 
 
@@ -478,8 +478,8 @@ if (rawDrawingDate != null) {
         costingSummary: {
           byQuoteType: {
             material: { extTotal: round2(sums.material), markupPercent: materialMarkup, totalWithMarkup: round2(materialWith) },
-            manhour:  { extTotal: round2(sums.manhour),  markupPercent: manhourMarkup,  totalWithMarkup: round2(manhourWith)  },
-            packing:  { extTotal: round2(sums.packing),  markupPercent: packingMarkup,  totalWithMarkup: round2(packingWith)  },
+            manhour: { extTotal: round2(sums.manhour), markupPercent: manhourMarkup, totalWithMarkup: round2(manhourWith) },
+            packing: { extTotal: round2(sums.packing), markupPercent: packingMarkup, totalWithMarkup: round2(packingWith) },
           },
           extGrandTotal: round2(sums.material + sums.manhour + sums.packing),
           grandTotalWithMarkup: round2(markupPrice),
@@ -594,7 +594,7 @@ export const createDrawing = async (req, res) => {
     const { drawingNo, qty = 1, unitPrice = 0 } = data;
 
     // 1) Prevent duplicates
-     const exists = await Drawing.findOne({
+    const exists = await Drawing.findOne({
       drawingNo: { $regex: new RegExp(`^${drawingNo}$`, "i") },
     }).lean();
 
@@ -1240,7 +1240,7 @@ export const duplicateDrawing = async (req, res) => {
     if (
       originalDrawing.drawingNo &&
       originalDrawing.drawingNo.toString().trim().toLowerCase() ===
-        newDrawingNumber.toLowerCase()
+      newDrawingNumber.toLowerCase()
     ) {
       return res.status(400).json({
         success: false,
@@ -1798,8 +1798,62 @@ const getUomId = async (raw, errorsArr, ctx) => {
   return doc._id;
 };
 
+function formatCostingImportErrors(errors = []) {
+  if (!Array.isArray(errors) || errors.length === 0) return "";
+
+  // group by quoteType first (optional)
+  const byType = new Map();
+
+  for (const e of errors) {
+    const type = (e?.type || "unknown").toLowerCase();
+    if (!byType.has(type)) byType.set(type, []);
+    byType.get(type).push(e);
+  }
+
+  const lines = [];
+
+  for (const [type, list] of byType.entries()) {
+    lines.push(`${type.toUpperCase()} Errors:`);
+
+    // de-duplicate same msg+field+value, merge rows
+    const merged = new Map(); // key -> {rows:Set, message, field, value}
+    for (const e of list) {
+      const row = e?.row != null ? Number(e.row) : null;
+      const message = String(e?.message || "").trim();
+      const field = e?.field ? String(e.field).trim() : "";
+      const value =
+        e?.value === 0 || e?.value ? String(e.value).trim() : "";
+
+      const key = `${message}||${field}||${value}`;
+
+      if (!merged.has(key)) {
+        merged.set(key, { rows: new Set(), message, field, value });
+      }
+      if (row != null) merged.get(key).rows.add(row);
+    }
+
+    for (const m of merged.values()) {
+      const rowList = [...m.rows].sort((a, b) => a - b);
+      const rowText = rowList.length ? `Rows ${rowList.join(", ")}` : `Row -`;
+      const fieldText =
+        m.field
+          ? m.value !== ""
+            ? ` [${m.field}: ${m.value}]`
+            : ` [${m.field}]`
+          : "";
+      lines.push(`  • ${rowText} → ${m.message}${fieldText}`);
+    }
+
+    lines.push(""); // blank line
+  }
+
+  return lines.join("\n").trim();
+}
+
+
 export const importCostingItems = async (req, res) => {
   let filePath = null;
+
   try {
     const { drawingId } = req.params;
     const { quoteType } = req.body;
@@ -1808,41 +1862,35 @@ export const importCostingItems = async (req, res) => {
     if (!file) return res.status(400).json({ success: false, message: "No file uploaded" });
     filePath = file.path;
 
-    // 0) base validations
     if (!mongoose.Types.ObjectId.isValid(drawingId)) {
       return res.status(400).json({ success: false, message: "Invalid drawingId" });
     }
+
     const drawing = await Drawing.findById(drawingId);
     if (!drawing) return res.status(404).json({ success: false, message: "Drawing not found" });
 
-    // 1) read Excel
     const workbook = XLSX.readFile(filePath);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet);
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }); // defval important
 
-    // 2) last itemNumber seed
-    const lastItem = await CostingItems.findOne({ drawingId, quoteType }).sort({ itemNumber: -1 }).lean();
+    const lastItem = await CostingItems.findOne({ drawingId, quoteType })
+      .sort({ itemNumber: -1 })
+      .lean();
+
     let nextItemNumber = lastItem ? Number(lastItem.itemNumber) + 1 : 1;
 
     const newItems = [];
-    const errors = []; // ✅ collect all row-level errors here
-
+    const errors = [];
     let rowIndex = 0;
 
-    // 3) row loop
     for (const row of rows) {
       rowIndex += 1;
-
-      // Excel me generally row 2 se data start hota hai (row 1 = header)
-      const rowNumber = rowIndex + 1;
+      const rowNumber = rowIndex + 1; // header = row 1
 
       let newItem = null;
 
       try {
-        /** =========================
-         *  PACKING
-         *  Columns expected: MPN Name | Description | UOM | Quantity | Unit Price | SGA % | Max Burden % | Freight %
-         *  ========================= */
+        // ================= PACKING =================
         if (quoteType === "packing") {
           const mpnName = (row["MPN Name"] ?? "").toString().trim();
           const descriptionIn = (row["Description"] ?? row.Description ?? "").toString().trim();
@@ -1855,57 +1903,27 @@ export const importCostingItems = async (req, res) => {
           const freightPercent = toNum(row["Freight %"]);
 
           if (!mpnName) {
-            errors.push({
-              row: rowNumber,
-              type: "packing",
-              field: "MPN Name",
-              value: mpnName,
-              message: "MPN Name is required",
-            });
+            errors.push({ row: rowNumber, type: "packing", field: "MPN Name", value: mpnName, message: "MPN Name is required" });
             continue;
           }
           if (!uomCode) {
-            errors.push({
-              row: rowNumber,
-              type: "packing",
-              field: "UOM",
-              value: uomCode,
-              message: "UOM is required",
-            });
+            errors.push({ row: rowNumber, type: "packing", field: "UOM", value: uomCode, message: "UOM is required" });
             continue;
           }
           if (!(quantity > 0)) {
-            errors.push({
-              row: rowNumber,
-              type: "packing",
-              field: "Quantity",
-              value: row["Quantity"],
-              message: "Quantity must be > 0",
-            });
+            errors.push({ row: rowNumber, type: "packing", field: "Quantity", value: row["Quantity"], message: "Quantity must be > 0" });
             continue;
           }
 
           const mpn = await MPN.findOne({ MPN: mpnName }).select("_id Description Manufacturer").lean();
           if (!mpn) {
-            errors.push({
-              row: rowNumber,
-              type: "packing",
-              field: "MPN Name",
-              value: mpnName,
-              message: `MPN not found: ${mpnName}`,
-            });
+            errors.push({ row: rowNumber, type: "packing", field: "MPN Name", value: mpnName, message: `MPN not found: ${mpnName}` });
             continue;
           }
 
           const uomDoc = await UOM.findOne({ code: uomCode }).select("_id code").lean();
           if (!uomDoc) {
-            errors.push({
-              row: rowNumber,
-              type: "packing",
-              field: "UOM",
-              value: uomCode,
-              message: `UOM not found: ${uomCode}`,
-            });
+            errors.push({ row: rowNumber, type: "packing", field: "UOM", value: uomCode, message: `UOM not found: ${uomCode}` });
             continue;
           }
 
@@ -1915,23 +1933,19 @@ export const importCostingItems = async (req, res) => {
 
           newItem = {
             drawingId,
-            quoteType, // packing
+            quoteType,
             itemNumber: String(nextItemNumber).padStart(4, "0"),
-
             mpn: mpn._id,
             description: descriptionIn || (mpn.Description ?? ""),
             manufacturer: mpn.Manufacturer ?? "",
             uom: uomDoc._id,
-
             quantity,
             unitPrice,
             sgaPercent,
             maxBurden,
             freightPercent,
-
             extPrice,
             salesPrice,
-
             moq: 0,
             tolerance: 0,
             actualQty: quantity,
@@ -1939,123 +1953,100 @@ export const importCostingItems = async (req, res) => {
           };
         }
 
-        /** =========================
-         *  MANHOUR
-         *  Columns expected: Skill Level | Remarks | Quantity
-         *  ========================= */
+        // ================= MANHOUR =================
         else if (quoteType === "manhour") {
           const skillName = (row["Skill Level"] ?? "").toString().trim();
           const remarks = (row["Remarks"] ?? "").toString().trim();
           const quantity = toNum(row["Quantity"]);
 
-          if (!skillName) {
-            // empty row → skip silently
-            continue;
-          }
+          if (!skillName) continue; // empty row skip
+
           if (!(quantity > 0)) {
-            errors.push({
-              row: rowNumber,
-              type: "manhour",
-              field: "Quantity",
-              value: row["Quantity"],
-              message: "Quantity must be > 0",
-            });
+            errors.push({ row: rowNumber, type: "manhour", field: "Quantity", value: row["Quantity"], message: "Quantity must be > 0" });
             continue;
           }
 
           const skillLevel = await SkillLevelCosting.findOne({ skillLevelName: skillName }).populate("type");
           if (!skillLevel) {
-            errors.push({
-              row: rowNumber,
-              type: "manhour",
-              field: "Skill Level",
-              value: skillName,
-              message: `Skill Level not found: ${skillName}`,
-            });
+            errors.push({ row: rowNumber, type: "manhour", field: "Skill Level", value: skillName, message: `Skill Level not found: ${skillName}` });
             continue;
           }
 
           const unitPrice = toNum(skillLevel.unitPrice ?? skillLevel.rate);
           const extPrice = round2(unitPrice * quantity);
-          const salesPrice = extPrice; // same for manhour
+          const salesPrice = extPrice;
 
           newItem = {
             drawingId,
-            quoteType, // manhour
+            quoteType,
             itemNumber: String(nextItemNumber).padStart(4, "0"),
-
             description: skillLevel.skillLevelName,
             uom: skillLevel.type?._id || null,
             skillLevel: skillLevel._id,
-
             quantity,
             remarks,
-
             unitPrice,
             salesPrice,
             extPrice,
-
             lastEditedBy: req.user?._id || null,
           };
         }
 
-        /** =========================
-         *  MATERIAL
-         *  Columns expected: ChildPart/Part Number | UOM | Child Qty | Tolerance | SGA % | Mat Burden % | Freight Cost % | Fixed Freight Cost
-         *  ========================= */
+        // ================= MATERIAL =================
         else if (quoteType === "material") {
-          const childKey = row.ChildPart || row["Part Number"];
+          const childKey = (row["ChildPart"] ?? row["Part Number"] ?? "").toString().trim();
+
           if (!childKey) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "ChildPart / Part Number",
-              value: childKey,
-              message: "ChildPart / Part Number is required",
-            });
+            errors.push({ row: rowNumber, type: "material", field: "ChildPart / Part Number", value: "", message: "ChildPart / Part Number is required" });
             continue;
           }
 
           const childPart = await Child.findOne({ ChildPartNo: childKey }).populate("mpn");
+
           if (!childPart || !childPart.mpn) {
+            errors.push({ row: rowNumber, type: "material", field: "ChildPart", value: childKey, message: `MPN not found for ChildPart: ${childKey}` });
+            continue;
+          }
+
+          // 🔒 2) DB-level duplicate (same drawingId + same childPart)
+          const alreadyExists = await CostingItems.findOne({
+            drawingId,
+            quoteType: "material",
+            childPart: childPart._id,
+          }).lean();
+
+          if (alreadyExists) {
             errors.push({
               row: rowNumber,
               type: "material",
-              field: "ChildPart / Part Number",
+              field: "ChildPart",
               value: childKey,
-              message: `MPN not found for ChildPart: ${childKey}`,
+              message: `Child Part ${childKey} already added in this Drawing`,
             });
             continue;
           }
 
-          const uomRaw = row["UOM"];
+
+          const uomRaw = (row["UOM"] ?? "").toString().trim();
           const uomId = await getUomId(uomRaw);
           if (!uomId) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "UOM",
-              value: uomRaw,
-              message: `UOM not found: ${uomRaw}`,
-            });
+            errors.push({ row: rowNumber, type: "material", field: "UOM", value: uomRaw, message: `UOM not found: ${uomRaw}` });
             continue;
           }
 
           const quantity = toNum(row["Qty"]);
           if (!(quantity > 0)) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "Qty",
-              value: row["Qty"],
-              message: "Qty must be > 0",
-            });
+            errors.push({ row: rowNumber, type: "material", field: "Qty", value: row["Qty"], message: "Qty must be > 0" });
             continue;
           }
 
           const unitPrice = toNum(childPart?.mpn?.RFQUnitPrice);
-          const tolerance = toNum(row["Tolerance"]);
+          if (!(unitPrice > 0)) {
+            errors.push({ row: rowNumber, type: "material", field: "RFQ Unit Price", value: unitPrice, message: "RFQ Unit Price missing or 0 for this MPN" });
+            continue;
+          }
 
+          const tolerance = toNum(row["Tolerance"]);
           const sgaPercent = toNum(row["SGA %"]);
           const matBurden = toNum(row["Mat Burden %"]);
           const freightPercent = toNum(row["Freight Cost %"]);
@@ -2069,11 +2060,11 @@ export const importCostingItems = async (req, res) => {
 
           newItem = {
             drawingId,
-            quoteType, // material
+            quoteType,
             itemNumber: String(nextItemNumber).padStart(4, "0"),
             childPart: childPart?._id,
             mpn: childPart?.mpn?._id,
-            description: S(childPart?.mpn?.Description).trim(),
+            description: String(childPart?.mpn?.Description || "").trim(),
             manufacturer: childPart?.mpn?.Manufacturer || "",
             uom: uomId,
             moq: toNum(childPart?.mpn?.MOQ),
@@ -2081,7 +2072,6 @@ export const importCostingItems = async (req, res) => {
             rfqDate: childPart?.mpn?.RFQDate,
             supplier: childPart?.mpn?.Supplier,
             unitPrice,
-
             quantity,
             tolerance,
             actualQty,
@@ -2089,22 +2079,20 @@ export const importCostingItems = async (req, res) => {
             matBurden,
             freightPercent,
             fixedFreightCost,
-
             extPrice,
             salesPrice,
-
-            lastEditedBy: req.user?._id || "System",
+            lastEditedBy: req.user?._id || null,
           };
+        } else {
+          return res.status(400).json({ success: false, message: `Unsupported quoteType: ${quoteType}` });
         }
       } catch (rowErr) {
-        // koi unexpected error hua is row ke liye – usko bhi capture kar lo
-        errors.push({
-          row: rowNumber,
-          type: quoteType,
-          field: "row",
-          value: row,
-          message: rowErr.message || "Unexpected error while processing row",
-        });
+        // hide mongo ugly stuff
+        if (rowErr?.code === 11000) {
+          errors.push({ row: rowNumber, type: quoteType, field: "duplicate", value: "", message: "Duplicate row (already exists)" });
+        } else {
+          errors.push({ row: rowNumber, type: quoteType, field: "row", value: "", message: rowErr.message || "Unexpected error" });
+        }
         continue;
       }
 
@@ -2114,98 +2102,84 @@ export const importCostingItems = async (req, res) => {
       }
     }
 
-    // 4) Agar errors hai to import fail karo, insert mat karo
-   if (errors.length > 0) {
-  // Create detailed error messages
-  const errorMessages = errors.map(error => 
-    `Row ${error.row}: ${error.message}`
-  ).join(', ');
-  
-  return res.status(400).json({
-    success: false,
-    message: `Import failed due to validation errors: ${errorMessages}`,
-    errorCount: errors.length,
-    errors, // detailed errors array for frontend
-  });
-}
-
-    // 5) bulk insert (only if no errors)
+    // ✅ Insert valid rows (even if errors exist)
+    let insertedDocs = [];
     if (newItems.length > 0) {
-      await CostingItems.insertMany(newItems);
+      insertedDocs = await CostingItems.insertMany(newItems, { ordered: false }); // ordered false => best effort
     }
 
-    /** =========================
-     *  RECOMPUTE TOTALS + MARKUPS
-     *  ========================= */
-    const oid = new mongoose.Types.ObjectId(drawingId);
-    const grouped = await CostingItems.aggregate([
-      { $match: { drawingId: oid } },
-      {
-        $group: {
-          _id: "$quoteType",
-          bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
-        },
-      },
-    ]);
+    // ✅ Recompute totals if anything inserted
+    if (insertedDocs.length > 0) {
+      const oid = new mongoose.Types.ObjectId(drawingId);
+      const grouped = await CostingItems.aggregate([
+        { $match: { drawingId: oid } },
+        { $group: { _id: "$quoteType", bucketTotal: { $sum: { $toDouble: "$salesPrice" } } } },
+      ]);
 
-    let materialTotal = 0;
-    let manhourTotal = 0;
-    let packingTotal = 0;
-
-    for (const g of grouped) {
-      const t = toNum(g.bucketTotal);
-      switch ((g._id || "").toLowerCase()) {
-        case "material": materialTotal = t; break;
-        case "manhour":  manhourTotal  = t; break;
-        case "packing":  packingTotal  = t; break;
-        default: break;
+      let materialTotal = 0, manhourTotal = 0, packingTotal = 0;
+      for (const g of grouped) {
+        const t = toNum(g.bucketTotal);
+        switch ((g._id || "").toLowerCase()) {
+          case "material": materialTotal = t; break;
+          case "manhour": manhourTotal = t; break;
+          case "packing": packingTotal = t; break;
+          default: break;
+        }
       }
+
+      const materialMarkup = toNum(drawing.materialMarkup);
+      const manhourMarkup = toNum(drawing.manhourMarkup);
+      const packingMarkup = toNum(drawing.packingMarkup);
+
+      const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
+      const manhourWithMarkup = round2(manhourTotal + (manhourTotal * manhourMarkup) / 100);
+      const packingWithMarkup = round2(packingTotal + (packingTotal * packingMarkup) / 100);
+
+      drawing.materialTotal = round2(materialTotal);
+      drawing.manhourTotal = round2(manhourTotal);
+      drawing.packingTotal = round2(packingTotal);
+      drawing.totalPrice = round2(materialTotal + manhourTotal + packingTotal);
+      drawing.totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+
+      const importedMaxLTW = Math.max(0, ...newItems.map(x => toNum(x.leadTime ?? x.leadTimeWeeks)));
+      drawing.leadTimeWeeks = Math.max(toNum(drawing.leadTimeWeeks), importedMaxLTW);
+
+      drawing.lastEditedBy = req?.user?._id || drawing.lastEditedBy;
+      await drawing.save();
     }
 
-    const materialMarkup = toNum(drawing.materialMarkup);
-    const manhourMarkup = toNum(drawing.manhourMarkup);
-    const packingMarkup = toNum(drawing.packingMarkup);
+    // ✅ Build message
+    const errorMessage = formatCostingImportErrors(errors);
 
-    const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
-    const manhourWithMarkup  = round2(manhourTotal  + (manhourTotal  * manhourMarkup)  / 100);
-    const packingWithMarkup  = round2(packingTotal  + (packingTotal  * packingMarkup)  / 100);
+    // If nothing inserted & errors exist => fail
+    if (insertedDocs.length === 0 && errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        insertedCount: 0,
+        errorCount: errors.length,
+        message: errorMessage,
+        errors,
+      });
+    }
 
-    const totalPriceRaw        = round2(materialTotal + manhourTotal + packingTotal);
-    const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+    // Partial success => 207
+    if (errors.length > 0) {
+      return res.status(207).json({
+        success: true,
+        insertedCount: insertedDocs.length,
+        errorCount: errors.length,
+        message: `Imported ${insertedDocs.length} rows, some rows failed:\n\n${errorMessage}`,
+        errors,
+      });
+    }
 
-    // Lead time bump (optional): max(existing, any imported’s)
-    const existingLTW = toNum(drawing.leadTimeWeeks);
-    const importedMaxLTW = Math.max(0, ...newItems.map(x => toNum(x.leadTime ?? x.leadTimeWeeks)));
-    const finalLTW = Math.max(existingLTW, importedMaxLTW);
-
-    // 6) persist on drawing
-    drawing.materialTotal        = round2(materialTotal);
-    drawing.manhourTotal         = round2(manhourTotal);
-    drawing.packingTotal         = round2(packingTotal);
-    drawing.totalPrice           = totalPriceRaw;
-    drawing.totalPriceWithMarkup = totalPriceWithMarkup;
-    drawing.leadTimeWeeks        = finalLTW;
-    drawing.lastEditedBy         = req?.user?._id || drawing.lastEditedBy;
-
-    await drawing.save();
-
-    // 7) done
-    return res.json({
+    // Full success
+    return res.status(200).json({
       success: true,
+      insertedCount: insertedDocs.length,
       message: `✅ ${quoteType} import successful`,
-      count: newItems.length,
-      totals: {
-        materialTotal: drawing.materialTotal,
-        manhourTotal : drawing.manhourTotal,
-        packingTotal : drawing.packingTotal,
-        materialWithMarkup,
-        manhourWithMarkup,
-        packingWithMarkup,
-        totalPrice: drawing.totalPrice,
-        totalPriceWithMarkup: drawing.totalPriceWithMarkup,
-        leadTimeWeeks: drawing.leadTimeWeeks,
-      },
     });
+
   } catch (error) {
     console.error("❌ Import Error:", error);
     return res.status(500).json({
@@ -2215,10 +2189,433 @@ export const importCostingItems = async (req, res) => {
     });
   } finally {
     if (filePath) {
-      try { await fs.unlink(filePath); } catch {}
+      try { await fs.unlink(filePath); } catch { }
     }
   }
 };
+
+
+// export const importCostingItems = async (req, res) => {
+//   let filePath = null;
+//   try {
+//     const { drawingId } = req.params;
+//     const { quoteType } = req.body;
+//     const file = req.file;
+
+//     if (!file) return res.status(400).json({ success: false, message: "No file uploaded" });
+//     filePath = file.path;
+
+//     // 0) base validations
+//     if (!mongoose.Types.ObjectId.isValid(drawingId)) {
+//       return res.status(400).json({ success: false, message: "Invalid drawingId" });
+//     }
+//     const drawing = await Drawing.findById(drawingId);
+//     if (!drawing) return res.status(404).json({ success: false, message: "Drawing not found" });
+
+//     // 1) read Excel
+//     const workbook = XLSX.readFile(filePath);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const rows = XLSX.utils.sheet_to_json(sheet);
+
+//     // 2) last itemNumber seed
+//     const lastItem = await CostingItems.findOne({ drawingId, quoteType }).sort({ itemNumber: -1 }).lean();
+//     let nextItemNumber = lastItem ? Number(lastItem.itemNumber) + 1 : 1;
+
+//     const newItems = [];
+//     const errors = []; // ✅ collect all row-level errors here
+
+//     let rowIndex = 0;
+
+//     // 3) row loop
+//     for (const row of rows) {
+//       rowIndex += 1;
+
+//       // Excel me generally row 2 se data start hota hai (row 1 = header)
+//       const rowNumber = rowIndex + 1;
+
+//       let newItem = null;
+
+//       try {
+//         /** =========================
+//          *  PACKING
+//          *  Columns expected: MPN Name | Description | UOM | Quantity | Unit Price | SGA % | Max Burden % | Freight %
+//          *  ========================= */
+//         if (quoteType === "packing") {
+//           const mpnName = (row["MPN Name"] ?? "").toString().trim();
+//           const descriptionIn = (row["Description"] ?? row.Description ?? "").toString().trim();
+//           const uomCode = (row["UOM"] ?? row.UOM ?? "").toString().trim();
+
+//           const quantity = toNum(row["Quantity"]);
+//           const unitPrice = toNum(row["Unit Price"]);
+//           const sgaPercent = toNum(row["SGA %"]);
+//           const maxBurden = toNum(row["Max Burden %"]);
+//           const freightPercent = toNum(row["Freight %"]);
+
+//           if (!mpnName) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "MPN Name",
+//               value: mpnName,
+//               message: "MPN Name is required",
+//             });
+//             continue;
+//           }
+//           if (!uomCode) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "UOM",
+//               value: uomCode,
+//               message: "UOM is required",
+//             });
+//             continue;
+//           }
+//           if (!(quantity > 0)) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "Quantity",
+//               value: row["Quantity"],
+//               message: "Quantity must be > 0",
+//             });
+//             continue;
+//           }
+
+//           const mpn = await MPN.findOne({ MPN: mpnName }).select("_id Description Manufacturer").lean();
+//           if (!mpn) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "MPN Name",
+//               value: mpnName,
+//               message: `MPN not found: ${mpnName}`,
+//             });
+//             continue;
+//           }
+
+//           const uomDoc = await UOM.findOne({ code: uomCode }).select("_id code").lean();
+//           if (!uomDoc) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "UOM",
+//               value: uomCode,
+//               message: `UOM not found: ${uomCode}`,
+//             });
+//             continue;
+//           }
+
+//           const extPrice = round2(quantity * unitPrice);
+//           const upliftPct = (sgaPercent + maxBurden + freightPercent) / 100;
+//           const salesPrice = round2(extPrice * (1 + upliftPct));
+
+//           newItem = {
+//             drawingId,
+//             quoteType, // packing
+//             itemNumber: String(nextItemNumber).padStart(4, "0"),
+
+//             mpn: mpn._id,
+//             description: descriptionIn || (mpn.Description ?? ""),
+//             manufacturer: mpn.Manufacturer ?? "",
+//             uom: uomDoc._id,
+
+//             quantity,
+//             unitPrice,
+//             sgaPercent,
+//             maxBurden,
+//             freightPercent,
+
+//             extPrice,
+//             salesPrice,
+
+//             moq: 0,
+//             tolerance: 0,
+//             actualQty: quantity,
+//             lastEditedBy: req.user?._id || null,
+//           };
+//         }
+
+//         /** =========================
+//          *  MANHOUR
+//          *  Columns expected: Skill Level | Remarks | Quantity
+//          *  ========================= */
+//         else if (quoteType === "manhour") {
+//           const skillName = (row["Skill Level"] ?? "").toString().trim();
+//           const remarks = (row["Remarks"] ?? "").toString().trim();
+//           const quantity = toNum(row["Quantity"]);
+
+//           if (!skillName) {
+//             // empty row → skip silently
+//             continue;
+//           }
+//           if (!(quantity > 0)) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "manhour",
+//               field: "Quantity",
+//               value: row["Quantity"],
+//               message: "Quantity must be > 0",
+//             });
+//             continue;
+//           }
+
+//           const skillLevel = await SkillLevelCosting.findOne({ skillLevelName: skillName }).populate("type");
+//           if (!skillLevel) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "manhour",
+//               field: "Skill Level",
+//               value: skillName,
+//               message: `Skill Level not found: ${skillName}`,
+//             });
+//             continue;
+//           }
+
+//           const unitPrice = toNum(skillLevel.unitPrice ?? skillLevel.rate);
+//           const extPrice = round2(unitPrice * quantity);
+//           const salesPrice = extPrice; // same for manhour
+
+//           newItem = {
+//             drawingId,
+//             quoteType, // manhour
+//             itemNumber: String(nextItemNumber).padStart(4, "0"),
+
+//             description: skillLevel.skillLevelName,
+//             uom: skillLevel.type?._id || null,
+//             skillLevel: skillLevel._id,
+
+//             quantity,
+//             remarks,
+
+//             unitPrice,
+//             salesPrice,
+//             extPrice,
+
+//             lastEditedBy: req.user?._id || null,
+//           };
+//         }
+
+//         /** =========================
+//          *  MATERIAL
+//          *  Columns expected: ChildPart/Part Number | UOM | Child Qty | Tolerance | SGA % | Mat Burden % | Freight Cost % | Fixed Freight Cost
+//          *  ========================= */
+//         else if (quoteType === "material") {
+//           const childKey = row.ChildPart || row["Part Number"];
+//           if (!childKey) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "ChildPart / Part Number",
+//               value: childKey,
+//               message: "ChildPart / Part Number is required",
+//             });
+//             continue;
+//           }
+
+//           const childPart = await Child.findOne({ ChildPartNo: childKey }).populate("mpn");
+//           if (!childPart || !childPart.mpn) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "ChildPart / Part Number",
+//               value: childKey,
+//               message: `MPN not found for ChildPart: ${childKey}`,
+//             });
+//             continue;
+//           }
+
+//           const uomRaw = row["UOM"];
+//           const uomId = await getUomId(uomRaw);
+//           if (!uomId) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "UOM",
+//               value: uomRaw,
+//               message: `UOM not found: ${uomRaw}`,
+//             });
+//             continue;
+//           }
+
+//           const quantity = toNum(row["Qty"]);
+//           if (!(quantity > 0)) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "Qty",
+//               value: row["Qty"],
+//               message: "Qty must be > 0",
+//             });
+//             continue;
+//           }
+
+//           const unitPrice = toNum(childPart?.mpn?.RFQUnitPrice);
+//           const tolerance = toNum(row["Tolerance"]);
+
+//           const sgaPercent = toNum(row["SGA %"]);
+//           const matBurden = toNum(row["Mat Burden %"]);
+//           const freightPercent = toNum(row["Freight Cost %"]);
+//           const fixedFreightCost = toNum(row["Fixed Freight Cost"]);
+
+//           const actualQty = round2(quantity + (quantity * tolerance) / 100);
+//           const extPrice = round2(quantity * unitPrice);
+//           const salesPrice = round2(
+//             extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) + fixedFreightCost
+//           );
+
+//           newItem = {
+//             drawingId,
+//             quoteType, // material
+//             itemNumber: String(nextItemNumber).padStart(4, "0"),
+//             childPart: childPart?._id,
+//             mpn: childPart?.mpn?._id,
+//             description: S(childPart?.mpn?.Description).trim(),
+//             manufacturer: childPart?.mpn?.Manufacturer || "",
+//             uom: uomId,
+//             moq: toNum(childPart?.mpn?.MOQ),
+//             leadTime: toNum(childPart?.mpn?.LeadTime_WK),
+//             rfqDate: childPart?.mpn?.RFQDate,
+//             supplier: childPart?.mpn?.Supplier,
+//             unitPrice,
+
+//             quantity,
+//             tolerance,
+//             actualQty,
+//             sgaPercent,
+//             matBurden,
+//             freightPercent,
+//             fixedFreightCost,
+
+//             extPrice,
+//             salesPrice,
+
+//             lastEditedBy: req.user?._id || "System",
+//           };
+//         }
+//       } catch (rowErr) {
+//         // koi unexpected error hua is row ke liye – usko bhi capture kar lo
+//         errors.push({
+//           row: rowNumber,
+//           type: quoteType,
+//           field: "row",
+//           value: row,
+//           message: rowErr.message || "Unexpected error while processing row",
+//         });
+//         continue;
+//       }
+
+//       if (newItem) {
+//         newItems.push(newItem);
+//         nextItemNumber++;
+//       }
+//     }
+
+//     // 4) Agar errors hai to import fail karo, insert mat karo
+//    if (errors.length > 0) {
+//   // Create detailed error messages
+//   const errorMessages = errors.map(error => 
+//     `Row ${error.row}: ${error.message}`
+//   ).join(', ');
+
+//   return res.status(400).json({
+//     success: false,
+//     message: `Import failed due to validation errors: ${errorMessages}`,
+//     errorCount: errors.length,
+//     errors, // detailed errors array for frontend
+//   });
+// }
+
+//     // 5) bulk insert (only if no errors)
+//     if (newItems.length > 0) {
+//       await CostingItems.insertMany(newItems);
+//     }
+
+//     /** =========================
+//      *  RECOMPUTE TOTALS + MARKUPS
+//      *  ========================= */
+//     const oid = new mongoose.Types.ObjectId(drawingId);
+//     const grouped = await CostingItems.aggregate([
+//       { $match: { drawingId: oid } },
+//       {
+//         $group: {
+//           _id: "$quoteType",
+//           bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
+//         },
+//       },
+//     ]);
+
+//     let materialTotal = 0;
+//     let manhourTotal = 0;
+//     let packingTotal = 0;
+
+//     for (const g of grouped) {
+//       const t = toNum(g.bucketTotal);
+//       switch ((g._id || "").toLowerCase()) {
+//         case "material": materialTotal = t; break;
+//         case "manhour":  manhourTotal  = t; break;
+//         case "packing":  packingTotal  = t; break;
+//         default: break;
+//       }
+//     }
+
+//     const materialMarkup = toNum(drawing.materialMarkup);
+//     const manhourMarkup = toNum(drawing.manhourMarkup);
+//     const packingMarkup = toNum(drawing.packingMarkup);
+
+//     const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
+//     const manhourWithMarkup  = round2(manhourTotal  + (manhourTotal  * manhourMarkup)  / 100);
+//     const packingWithMarkup  = round2(packingTotal  + (packingTotal  * packingMarkup)  / 100);
+
+//     const totalPriceRaw        = round2(materialTotal + manhourTotal + packingTotal);
+//     const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+
+//     // Lead time bump (optional): max(existing, any imported’s)
+//     const existingLTW = toNum(drawing.leadTimeWeeks);
+//     const importedMaxLTW = Math.max(0, ...newItems.map(x => toNum(x.leadTime ?? x.leadTimeWeeks)));
+//     const finalLTW = Math.max(existingLTW, importedMaxLTW);
+
+//     // 6) persist on drawing
+//     drawing.materialTotal        = round2(materialTotal);
+//     drawing.manhourTotal         = round2(manhourTotal);
+//     drawing.packingTotal         = round2(packingTotal);
+//     drawing.totalPrice           = totalPriceRaw;
+//     drawing.totalPriceWithMarkup = totalPriceWithMarkup;
+//     drawing.leadTimeWeeks        = finalLTW;
+//     drawing.lastEditedBy         = req?.user?._id || drawing.lastEditedBy;
+
+//     await drawing.save();
+
+//     // 7) done
+//     return res.json({
+//       success: true,
+//       message: `✅ ${quoteType} import successful`,
+//       count: newItems.length,
+//       totals: {
+//         materialTotal: drawing.materialTotal,
+//         manhourTotal : drawing.manhourTotal,
+//         packingTotal : drawing.packingTotal,
+//         materialWithMarkup,
+//         manhourWithMarkup,
+//         packingWithMarkup,
+//         totalPrice: drawing.totalPrice,
+//         totalPriceWithMarkup: drawing.totalPriceWithMarkup,
+//         leadTimeWeeks: drawing.leadTimeWeeks,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("❌ Import Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to import costing items",
+//       error: error.message,
+//     });
+//   } finally {
+//     if (filePath) {
+//       try { await fs.unlink(filePath); } catch {}
+//     }
+//   }
+// };
 
 
 // export const importCostingItems = async (req, res) => {
@@ -2817,19 +3214,19 @@ export const importDrawings = async (req, res) => {
 
     const incomingQuoteType = toStr(req.body?.quoteType); // "other" | "cable_harness"
     if (!incomingQuoteType) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({ success: false, message: "quoteType is required" });
     }
 
     const incomingProject = toStr(req.body?.project);
     if (!incomingProject) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({ success: false, message: "Project is required" });
     }
 
     const name = (req.file.originalname || "").toLowerCase();
     if (!name.endsWith(".xlsx") && !name.endsWith(".xls")) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({ success: false, message: "Only .xlsx / .xls files are supported" });
     }
 
@@ -2838,28 +3235,28 @@ export const importDrawings = async (req, res) => {
     try {
       workbook = XLSX.readFile(filePath);
     } catch (e) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({ success: false, message: "Invalid Excel file", error: e.message });
     }
     if (!workbook.SheetNames?.length) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({ success: false, message: "Excel has no sheets" });
     }
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     if (!sheet) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({ success: false, message: "First sheet is missing" });
     }
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
     if (!Array.isArray(rows) || rows.length === 0) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({ success: false, message: "Sheet is empty" });
     }
 
     // 3) Load project & markups
     const projectData = await Project.findById(incomingProject).lean();
     if (!projectData) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({ success: false, message: "Project Data missing" });
     }
 
@@ -2922,7 +3319,7 @@ export const importDrawings = async (req, res) => {
 
     // 5) Only support 'other' and 'cable_harness' here
     if (!["other", "cable_harness"].includes(incomingQuoteType)) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({
         success: false,
         message: `Unsupported quoteType "${incomingQuoteType}". Use "other" or "cable_harness".`,
@@ -3297,6 +3694,7 @@ export const importDrawings = async (req, res) => {
         drawingDoc.manhourTotal = round2(manhourTotal);
         drawingDoc.packingTotal = round2(packingTotal);
         drawingDoc.totalPrice = totalPriceRaw;
+        drawingDoc.unitPrice = totalPriceRaw;
         drawingDoc.totalPriceWithMarkup = totalPriceWithMarkup;
         drawingDoc.leadTimeWeeks = importedMaxLTW;
         drawingDoc.lastEditedBy = req?.user?._id || drawingDoc.lastEditedBy;
@@ -3314,32 +3712,83 @@ export const importDrawings = async (req, res) => {
       });
     }
 
-    // 🔟 Helper: errors ko single string me convert karo
-  const formatErrorsToSingleMessage = (errors = []) => {
-  if (!Array.isArray(errors) || errors.length === 0) return "";
+    function formatImportErrors(errors = []) {
+      if (!Array.isArray(errors) || errors.length === 0) return "";
 
-  return errors
-    .map((e) => {
-      const drawing = e.drawingNo ? `Drawing ${e.drawingNo}` : "Drawing";
-      const row = e.row != null ? ` (Row ${e.row})` : "";
-      const field =
-        e.field && e.value != null
-          ? ` | ${e.field}: ${e.value}`
-          : "";
-      const message = e.message ? ` → ${e.message}` : "";
+      // 1) Normalize each error into a stable key so duplicates merge
+      const normalized = errors.map((e) => {
+        const drawingNo = e?.drawingNo || "UNKNOWN";
+        const row = e?.row != null ? Number(e.row) : null;
+        const message = String(e?.message || "").trim();
+        const field = e?.field ? String(e.field).trim() : "";
+        const value =
+          e?.value === 0 || e?.value
+            ? String(e.value).trim()
+            : "";
 
-      return `${drawing}${row}${message}${field}`;
-    })
-    .join("\n"); // 🔥 newline instead of comma
-};
+        // Key for de-duplication
+        const key = `${drawingNo}||${message}||${field}||${value}`;
+
+        return { drawingNo, row, message, field, value, key };
+      });
+
+      // 2) Group by drawingNo
+      const byDrawing = new Map();
+      for (const e of normalized) {
+        if (!byDrawing.has(e.drawingNo)) byDrawing.set(e.drawingNo, []);
+        byDrawing.get(e.drawingNo).push(e);
+      }
+
+      // 3) Build readable output
+      const lines = [];
+
+      for (const [drawingNo, list] of byDrawing.entries()) {
+        // Deduplicate same error (same message/field/value) but keep all rows
+        const merged = new Map(); // key -> { rows:Set, message, field, value }
+        for (const e of list) {
+          if (!merged.has(e.key)) {
+            merged.set(e.key, {
+              rows: new Set(),
+              message: e.message,
+              field: e.field,
+              value: e.value,
+            });
+          }
+          if (e.row != null) merged.get(e.key).rows.add(e.row);
+        }
+
+        lines.push(`Drawing ${drawingNo}:`);
+
+        for (const m of merged.values()) {
+          const rowList = [...m.rows].sort((a, b) => a - b);
+          const rowText = rowList.length ? `Rows ${rowList.join(", ")}` : `Row -`;
+
+          // show field/value only if useful
+          const fieldText =
+            m.field
+              ? m.value !== ""
+                ? ` [${m.field}: ${m.value}]`
+                : ` [${m.field}]`
+              : "";
+
+          lines.push(`  • ${rowText} → ${m.message}${fieldText}`);
+        }
+
+        lines.push(""); // blank line between drawings
+      }
+
+      return lines.join("\n").trim();
+    }
 
 
-    const errorMessage = formatErrorsToSingleMessage(results.errors);
+
+    const errorMessage = formatImportErrors(results.errors);
+
 
     // File cleanup
     try {
       fs.unlinkSync(req.file.path);
-    } catch {}
+    } catch { }
 
     // 🔚 If there are errors -> 400 with combined message
     if (results.errors.length > 0) {
@@ -3359,7 +3808,7 @@ export const importDrawings = async (req, res) => {
   } catch (error) {
     try {
       if (req.file?.path) fs.unlinkSync(req.file.path);
-    } catch {}
+    } catch { }
     return res.status(500).json({
       success: false,
       message: "Error importing drawings",

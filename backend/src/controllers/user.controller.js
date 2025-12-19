@@ -91,8 +91,22 @@ export const createUser = async (req, res) => {
     const { userName, tempPassword, name, email, role: roleId, permissions } = req.body;
 
     // check duplicate username
-    const existing = await User.findOne({ userName });
-    if (existing) return res.status(400).json({ message: "Username already exists" });
+    const existing = await User.findOne({
+      $or: [
+        { userName },
+        { email }
+      ]
+    });
+
+    if (existing) {
+      if (existing.userName === userName) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+      if (existing.email === email) {
+        return res.status(400).json({ message: "Email already exists" });
+      }
+    }
+
 
     // check role
     const role = await Role.findById(roleId);

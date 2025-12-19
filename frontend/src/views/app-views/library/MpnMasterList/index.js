@@ -47,15 +47,8 @@ const getPurchaseHistoryColumns = (maxPurchaseCount = MAX_PURCHASE_HISTORY) => {
                 dataIndex: ["purchaseHistory", i, "purchasedPrice"],
                 key: `purchaseHistory_purchasedPrice_${index}`,
                 render: (price, record) => {
-                    const currency = record.purchaseHistory?.[i]?.currency || "USD";
-                    const symbol = {
-                        "USD": "$",
-                        "EUR": "€",
-                        "GBP": "£",
-                        "INR": "₹"
-                    }[currency] || currency;
-
-                    return price ? `${symbol} ${parseFloat(price).toFixed(2)}` : "-";
+                    const currency = record.purchaseHistory[i]?.currency?.symbol || "";
+                    return price ? `${currency} ${parseFloat(price).toFixed(2)}` : "-";
                 }
             },
             {

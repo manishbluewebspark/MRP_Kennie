@@ -238,8 +238,13 @@ const DrawingDetails = () => {
         fd.append("file", file);
         fd.append("quoteType", getQuoteTypeFromActiveTab(activeTab));
         try {
-            await DrawingService.importCostingItems(id, fd);
-            message.success(`Excel imported successfully for ${getQuoteTypeFromActiveTab(activeTab)}!`);
+            const res = await DrawingService.importCostingItems(id, fd);
+            if (res?.errorCount > 0) {
+                message.error(res?.message);
+            } else {
+                message.success(res?.message);
+            }
+
             fetchCostingItems();
         } catch (error) {
             console.error(error);
@@ -277,27 +282,75 @@ const DrawingDetails = () => {
         }
     };
 
+    // const handleModalAction = async (type, values, quoteType) => {
+    //     try {
+    //         if (!values.extPrice && values.quantity && values.unitPrice) {
+    //             values.extPrice = Number(values.quantity) * Number(values.unitPrice);
+    //         }
+    //         if (editingItem) {
+    //             await DrawingService.updateCostingItem(id, editingItem._id, { ...values, quoteType });
+    //             message.success("Costing item updated successfully");
+    //         } else {
+    //             await DrawingService.addCostingItem(id, { ...values, quoteType });
+    //             message.success("Costing item added successfully");
+    //         }
+    //         fetchCostingItems();
+    //         getDrawingData();
+    //         setCostingModalVisible(false);
+    //         setEditingItem(null);
+    //     } catch (err) {
+    //         console.error("Error saving costing item:", err);
+    //         message.error("Something went wrong while saving item");
+    //     }
+    // };
+
     const handleModalAction = async (type, values, quoteType) => {
-        try {
-            if (!values.extPrice && values.quantity && values.unitPrice) {
-                values.extPrice = Number(values.quantity) * Number(values.unitPrice);
-            }
-            if (editingItem) {
-                await DrawingService.updateCostingItem(id, editingItem._id, { ...values, quoteType });
-                message.success("Costing item updated successfully");
-            } else {
-                await DrawingService.addCostingItem(id, { ...values, quoteType });
-                message.success("Costing item added successfully");
-            }
-            fetchCostingItems();
-            getDrawingData();
-            setCostingModalVisible(false);
-            setEditingItem(null);
-        } catch (err) {
-            console.error("Error saving costing item:", err);
+    try {
+        if (!values.extPrice && values.quantity && values.unitPrice) {
+            values.extPrice = Number(values.quantity) * Number(values.unitPrice);
+        }
+
+        if (editingItem) {
+            await DrawingService.updateCostingItem(
+                id,
+                editingItem._id,
+                { ...values, quoteType }
+            );
+            message.success("Costing item updated successfully");
+        } else {
+            await DrawingService.addCostingItem(
+                id,
+                { ...values, quoteType }
+            );
+            message.success("Costing item added successfully");
+        }
+
+        fetchCostingItems();
+        getDrawingData();
+        setCostingModalVisible(false);
+        setEditingItem(null);
+
+    } catch (err) {
+        console.error("Error saving costing item:", err);
+
+        // 🔥 Handle duplicate child part
+        if (
+            err?.response?.data?.error?.includes("E11000") ||
+            err?.response?.data?.error?.includes("childPart")
+        ) {
+            message.error("This Child Part is already added in this Drawing");
+        } 
+        // 🔥 Backend custom message
+        else if (err?.response?.data?.message) {
+            message.error(err.response.data.message);
+        } 
+        // fallback
+        else {
             message.error("Something went wrong while saving item");
         }
-    };
+    }
+};
+
 
     const handleModalClose = () => {
         setCostingModalVisible(false);
