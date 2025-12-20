@@ -1739,7 +1739,7 @@ export const getAllCostingItems = async (req, res) => {
           { path: "currencyType", select: "name symbol" }, // populate currency type details
         ],
       })
-      .populate("mpn", "MPN")
+      .populate("mpn", "MPN RFQUnitPrice")
       .populate('childPart', "ChildPartNo")
       .populate("uom", "code")
       .populate("lastEditedBy", "name")
@@ -4137,65 +4137,251 @@ export const importDrawings = async (req, res) => {
 //   }
 // };
 
+// export const updateLatestPrice = async (req, res) => {
+//   try {
+//     const { id } = req.params; // costing item ID
+//     const userId = req.user.id;
+
+//     console.log("----- updateLatestPrice API Called -----");
+//     console.log("Costing Item ID:", id);
+//     console.log("User ID:", userId);
+
+//     // 🟢 1) Find costing item by ID + populate MPN
+//     const costingItem = await CostingItems.findById(id)
+//       .populate("mpn", "RFQUnitPrice");
+
+//     console.log("Found costingItem:", costingItem);
+//     console.log("Related MPN:", costingItem?.mpn);
+
+//     if (!costingItem) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Costing item not found",
+//       });
+//     }
+
+//     if (!costingItem.mpn) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "MPN not associated with this costing item",
+//       });
+//     }
+
+//     // 🟢 2) Update Prices
+//     const oldUnitPrice = Number(costingItem.unitPrice || 0);
+//     const newUnitPrice = Number(costingItem.mpn.RFQUnitPrice || 0);
+
+//     if (!newUnitPrice) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "MPN RFQUnitPrice is not set",
+//       });
+//     }
+
+//     costingItem.unitPrice = newUnitPrice;
+//     costingItem.updated_by = userId;
+
+//     await costingItem.save();
+
+//     return res.json({
+//       success: true,
+//       message: "Unit price updated successfully from MPN",
+//       data: {
+//         id: costingItem.id,
+//         previousUnitPrice: oldUnitPrice,
+//         newUnitPrice: newUnitPrice,
+//         priceDifference: newUnitPrice - oldUnitPrice,
+//       },
+//     });
+
+//   } catch (error) {
+//     console.error("❌ Error updating latest price:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//       error: error.message,
+//     });
+//   }
+// };
+
 export const updateLatestPrice = async (req, res) => {
   try {
-    const { id } = req.params; // costing item ID
-    const userId = req.user.id;
+    const {id } = req.params; // ✅ same pattern as updateCostingItem
 
-    console.log("----- updateLatestPrice API Called -----");
-    console.log("Costing Item ID:", id);
-    console.log("User ID:", userId);
+   
 
-    // 🟢 1) Find costing item by ID + populate MPN
+    // 1) Load costing item + MPN
     const costingItem = await CostingItems.findById(id)
-      .populate("mpn", "RFQUnitPrice");
+      .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK Supplier RFQDate Description Manufacturer UOM")
+      .lean(false); // must be mongoose doc (save)
 
-    console.log("Found costingItem:", costingItem);
-    console.log("Related MPN:", costingItem?.mpn);
+      console.log('------costingItem',costingItem)
+
+       // ✅ validate ids
+    if (!mongoose.Types.ObjectId.isValid(costingItem?.drawingId)) {
+      return res.status(400).json({ success: false, message: "Invalid drawingId" });
+    }
+    // if (!mongoose.Types.ObjectId.isValid(itemId)) {
+    //   return res.status(400).json({ success: false, message: "Invalid itemId" });
+    // }
 
     if (!costingItem) {
-      return res.status(404).json({
-        success: false,
-        message: "Costing item not found",
-      });
+      return res.status(404).json({ success: false, message: "Costing item not found" });
     }
-
     if (!costingItem.mpn) {
-      return res.status(400).json({
-        success: false,
-        message: "MPN not associated with this costing item",
-      });
+      return res.status(400).json({ success: false, message: "MPN not associated with this costing item" });
     }
 
-    // 🟢 2) Update Prices
-    const oldUnitPrice = Number(costingItem.unitPrice || 0);
-    const newUnitPrice = Number(costingItem.mpn.RFQUnitPrice || 0);
-
-    if (!newUnitPrice) {
-      return res.status(400).json({
-        success: false,
-        message: "MPN RFQUnitPrice is not set",
-      });
+    // ✅ support only material (optional)
+    if ((costingItem.quoteType || "").toLowerCase() !== "material") {
+      return res.status(400).json({ success: false, message: "updateLatestPrice works only for material items" });
     }
 
+    // helpers
+    const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+    const toNum = (v, d = 0) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : d;
+    };
+
+    // 2) Set latest unit price from MPN
+    const oldUnitPrice = toNum(costingItem.unitPrice);
+    const newUnitPrice = toNum(costingItem.mpn.RFQUnitPrice);
+
+    if (!(newUnitPrice > 0)) {
+      return res.status(400).json({ success: false, message: "MPN RFQUnitPrice is not set or 0" });
+    }
+
+    // 3) ✅ sync optional fields from MPN (same like you want)
+    // Comment out if you don't want to overwrite manually edited fields
+    costingItem.moq = toNum(costingItem.mpn.MOQ, toNum(costingItem.moq));
+    costingItem.leadTime = toNum(costingItem.mpn.LeadTime_WK, toNum(costingItem.leadTime));
+    costingItem.supplier = costingItem.mpn.Supplier || costingItem.supplier || null;
+    costingItem.rfqDate = costingItem.mpn.RFQDate || costingItem.rfqDate || null;
+
+    costingItem.description = String(costingItem.mpn.Description || costingItem.description || "").trim();
+    costingItem.manufacturer = String(costingItem.mpn.Manufacturer || costingItem.manufacturer || "").trim();
+    costingItem.uom = costingItem.mpn.UOM || costingItem.uom || null;
+
+    // 4) ✅ recalc all derived fields
     costingItem.unitPrice = newUnitPrice;
-    costingItem.updated_by = userId;
+
+    const quantity = toNum(costingItem.quantity);
+    const tolerance = toNum(costingItem.tolerance);
+    const sgaPercent = toNum(costingItem.sgaPercent);
+    const matBurden = toNum(costingItem.matBurden);
+
+    // NOTE: your schema uses freightPercent + fixedFreightCost (in other code)
+    // but sample doc has freightCost also. We'll support both safely.
+    const freightPercent = toNum(costingItem.freightPercent);
+    const fixedFreightCost = toNum(costingItem.fixedFreightCost, toNum(costingItem.freightCost, 0));
+
+    const actualQty = quantity + (quantity * tolerance) / 100;
+
+    // ✅ Decide extPrice formula:
+    // You currently do extPrice = quantity * unitPrice in import.
+    // Better: use actualQty. If you want old behavior, replace actualQty with quantity.
+    const extPrice = actualQty * newUnitPrice;
+
+    const upliftPct = (sgaPercent + matBurden + freightPercent) / 100;
+    const salesPrice = extPrice * (1 + upliftPct) + fixedFreightCost;
+
+    costingItem.actualQty = round2(actualQty);
+    costingItem.extPrice = round2(extPrice);
+    costingItem.salesPrice = round2(salesPrice);
+
+    // audit fields
+    costingItem.lastEditedBy = req.user?._id || costingItem.lastEditedBy;
+    costingItem.updatedAt = new Date();
 
     await costingItem.save();
 
+    // 5) Load drawing
+    const drawing = await Drawing.findById(costingItem?.drawingId);
+    if (!drawing) {
+      return res.status(404).json({ success: false, message: "Drawing not found" });
+    }
+
+    // 6) Recompute ALL totals from DB (exactly like updateCostingItem)
+    const oid = new mongoose.Types.ObjectId(costingItem?.drawingId);
+    const grouped = await CostingItems.aggregate([
+      { $match: { drawingId: oid } },
+      {
+        $group: {
+          _id: "$quoteType",
+          bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
+        },
+      },
+    ]);
+
+    let materialTotal = 0;
+    let manhourTotal = 0;
+    let packingTotal = 0;
+
+    for (const g of grouped) {
+      const t = toNum(g.bucketTotal);
+      switch ((g._id || "").toLowerCase()) {
+        case "material": materialTotal = t; break;
+        case "manhour": manhourTotal = t; break;
+        case "packing": packingTotal = t; break;
+        default: break;
+      }
+    }
+
+    const materialMarkup = toNum(drawing.materialMarkup);
+    const manhourMarkup = toNum(drawing.manhourMarkup);
+    const packingMarkup = toNum(drawing.packingMarkup);
+
+    const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
+    const manhourWithMarkup = round2(manhourTotal + (manhourTotal * manhourMarkup) / 100);
+    const packingWithMarkup = round2(packingTotal + (packingTotal * packingMarkup) / 100);
+
+    const totalPriceRaw = round2(materialTotal + manhourTotal + packingTotal);
+    const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+
+    // ✅ Lead time update: use max of all items leadTime
+    // (Better than req.body.leadTime)
+    const leadAgg = await CostingItems.aggregate([
+      { $match: { drawingId: oid } },
+      { $group: { _id: null, maxLT: { $max: "$leadTime" } } },
+    ]);
+    const maxLeadTime = toNum(leadAgg?.[0]?.maxLT, 0);
+
+    drawing.materialTotal = round2(materialTotal);
+    drawing.manhourTotal = round2(manhourTotal);
+    drawing.packingTotal = round2(packingTotal);
+    drawing.totalPrice = totalPriceRaw;
+    drawing.totalPriceWithMarkup = totalPriceWithMarkup;
+    drawing.leadTimeWeeks = Math.max(toNum(drawing.leadTimeWeeks), maxLeadTime);
+    drawing.lastEditedBy = req?.user?._id || drawing.lastEditedBy;
+
+    await drawing.save();
+
     return res.json({
       success: true,
-      message: "Unit price updated successfully from MPN",
+      message: "✅ Latest MPN price applied + drawing totals updated",
       data: {
-        id: costingItem.id,
+        itemId: costingItem._id,
         previousUnitPrice: oldUnitPrice,
-        newUnitPrice: newUnitPrice,
-        priceDifference: newUnitPrice - oldUnitPrice,
+        newUnitPrice,
+        extPrice: costingItem.extPrice,
+        salesPrice: costingItem.salesPrice,
+        actualQty: costingItem.actualQty,
+      },
+      totals: {
+        materialTotal: round2(materialTotal),
+        manhourTotal: round2(manhourTotal),
+        packingTotal: round2(packingTotal),
+        materialWithMarkup,
+        manhourWithMarkup,
+        packingWithMarkup,
+        totalPrice: drawing.totalPrice,
+        totalPriceWithMarkup: drawing.totalPriceWithMarkup,
+        leadTimeWeeks: drawing.leadTimeWeeks,
       },
     });
-
   } catch (error) {
-    console.error("❌ Error updating latest price:", error);
+    console.error("❌ updateLatestPrice error:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -4203,5 +4389,6 @@ export const updateLatestPrice = async (req, res) => {
     });
   }
 };
+
 
 

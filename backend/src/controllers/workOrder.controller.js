@@ -1032,7 +1032,7 @@ export const importWorkOrders = async (req, res) => {
       const projectType = normalizeProjectType(rawProjectType);
 
       // --- PO Number string bana lo (trimmed)
-      const poNumber = row["PO NO"]?.toString().trim() || "";
+      const poNumber = row["PONO"]?.toString().trim() || "";
 
       // --- Work Order No (Excel se ya auto) ---
       const excelWO = row["WorkOrder No"]
@@ -1093,7 +1093,7 @@ export const importWorkOrders = async (req, res) => {
 
       // --- Excel Status mapping (optional)
       const rawStatus = (row["Status"] || "").toString().trim().toLowerCase();
-      let status = "on_hold"; // default
+      let status = "No Progress Yet"; // default
 
       if (rawStatus === "on hold" || rawStatus === "hold") {
         status = "on_hold";
@@ -1119,8 +1119,8 @@ export const importWorkOrders = async (req, res) => {
         drawingId,
         projectId: drawing?.projectId || null,
         projectType,
-        posNo: Number(row["POS NO"]) || 0,
-        quantity: Number(row["Prod_Qty"]) || 1,
+        posNo: Number(row["POSNO"]) || 0,
+        quantity: Number(row["Actual_Qty"]) || 1,
         uom,
         remarks: row["Description"]?.toString().trim() || "",
         needDate,

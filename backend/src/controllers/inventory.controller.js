@@ -201,10 +201,10 @@ export const getInventoryList = async (req, res) => {
     return res.json({
       success: true,
       data: rows,
-      total: filtered.length,
+      total: total,
       page: pageNum,
       limit: limitNum,
-      totalPages: Math.ceil(filtered.length / limitNum),
+      totalPages: Math.ceil(total / limitNum),
     });
   } catch (error) {
     console.error("getInventoryList error:", error);

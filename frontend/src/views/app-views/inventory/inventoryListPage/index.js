@@ -76,11 +76,12 @@ const InventoryListPage = () => {
 
     const [lowStockAlertData, setLowStockAlertData] = useState([])
     const [materialRequiredData, setMaterialRequiredData] = useState([])
-    const [pagination, setPagination] = useState({
-        current: 1,
-        pageSize: 10,
-        total: 0
-    });
+   const [pagination, setPagination] = useState({
+  page: 1,
+  limit: 10,
+  total: 0,
+});
+
 
     const {
         purchaseOrders,
@@ -93,34 +94,37 @@ const InventoryListPage = () => {
 
 
 
-    const getInventoryList = async (page = 1, search = '') => {
-        setLoading(true);
-        try {
-            const params = {
-                page,
-                limit: pagination.pageSize,
-                search: search
-            };
-
-            const response = await InventoryService.getInventoryList(params);
-            console.log('-------response', response)
-            if (response.success) {
-                setInventoryData(response.data);
-                setPagination({
-                    ...pagination,
-                    current: response.page,
-                    total: response.total
-                });
-            } else {
-                message.error('Failed to fetch inventory data');
-            }
-        } catch (error) {
-            console.error('Error fetching inventory:', error);
-            message.error('Error loading inventory data');
-        } finally {
-            setLoading(false);
-        }
+  const getInventoryList = async (page = 1, searchText = "") => {
+  setLoading(true);
+  try {
+    const params = {
+      page,
+      limit: pagination.limit,
+      search: searchText,
     };
+
+    const response = await InventoryService.getInventoryList(params);
+
+    if (response.success) {
+      setInventoryData(response.data);
+
+      setPagination(prev => ({
+        ...prev,
+        page: response.page,      // ✅ SAME KEY
+        limit: response.limit,
+        total: response.total,
+      }));
+    } else {
+      message.error("Failed to fetch inventory data");
+    }
+  } catch (err) {
+    console.error(err);
+    message.error("Error loading inventory data");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
     const getMaterialRequiredList = async (page = 1, search = '') => {
         setLoading(true);
@@ -502,11 +506,11 @@ const InventoryListPage = () => {
             align: 'center',
             render: (_, record) =>
                 // record?.purchaseData?.length > 0 ? (
-                    <SettingFilled
-                        style={{ color: '#1890ff', fontSize: 18, cursor: 'pointer' }}
-                        onClick={() => handleEdit(record)}
-                    />
-                // ) : null
+                <SettingFilled
+                    style={{ color: '#1890ff', fontSize: 18, cursor: 'pointer' }}
+                    onClick={() => handleEdit(record)}
+                />
+            // ) : null
         },
     ];
 
@@ -767,11 +771,18 @@ const InventoryListPage = () => {
         fetchData();
     }, [activeTab]); // Refetch data when tab changes
 
-    const handleSearch = useDebounce((value) => {
-        setPage(1);
-        // Add search functionality here
-        console.log("Search:", value);
-    }, 500);
+    useEffect(() => {
+  if (activeTab === "inventory_list") {
+    getInventoryList(pagination.page, search);
+  }
+}, [pagination.page, pagination.limit, activeTab]);
+
+
+  const handleSearch = useDebounce((value) => {
+  setSearch(value);
+  setPagination(prev => ({ ...prev, page: 1 }));
+}, 500);
+
 
     const handleFilterSubmit = async (data) => {
         console.log('Filter data:', data);
@@ -863,21 +874,32 @@ const InventoryListPage = () => {
 
             {/* Table */}
             <Card>
-                <Table
-                    columns={getCurrentColumns()}
-                    dataSource={getCurrentData()}
-                    loading={loading}
-                    pagination={activeTab === 'inventory_list' ? {
-                        current: page,
-                        pageSize: limit,
-                        total: getCurrentData().length,
-                        // showSizeChanger: true,
-                        // showQuickJumper: true,
-                        // showTotal: (total, range) =>
-                        //     `${range[0]}-${range[1]} of ${total} items`
-                    } : false}
-                    scroll={activeTab === 'inventory_list' ? { x: 1300 } : undefined}
-                />
+               <Table
+  columns={getCurrentColumns()}
+  dataSource={getCurrentData()}
+  loading={loading}
+  rowKey="_id"
+  pagination={
+    activeTab === "inventory_list"
+      ? {
+          current: pagination.page,
+          pageSize: pagination.limit,
+          total: pagination.total,
+          showSizeChanger: true,
+          onChange: (page, pageSize) => {
+            setPagination(prev => ({
+              ...prev,
+              page,
+              limit: pageSize,
+            }));
+          },
+        }
+      : false
+  }
+/>
+
+
+
             </Card>
 
             <GlobalFilterModal

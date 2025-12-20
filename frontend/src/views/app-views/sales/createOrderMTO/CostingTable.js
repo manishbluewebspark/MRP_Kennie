@@ -98,7 +98,7 @@ const CostingTable = ({
       width: 150,
       align: 'right',
       sorter: (a, b) => a.unitPrice - b.unitPrice, // enable sorting arrow
-      render: (value) => (
+      render: (value,record) => (
         <div
           style={{
             // backgroundColor: '#ffeaea', // light red background
@@ -108,7 +108,7 @@ const CostingTable = ({
             fontWeight: 600,
           }}
         >
-          ${Number(value || 0).toFixed(2)}
+          ${Number(record?.mpn?.RFQUnitPrice || 0).toFixed(2)}
         </div>
       ),
     }
