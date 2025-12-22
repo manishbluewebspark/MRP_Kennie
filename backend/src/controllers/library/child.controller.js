@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import Child from "../../models/library/Child.js";
 import MPN from "../../models/library/MPN.js";
 import XLSX from "xlsx";
-
+import path from 'path'
+import fs from 'fs'
 /**
  * Add new Child
  */
@@ -546,152 +547,507 @@ export const getAllChild = async (req, res) => {
 //   }
 // };
 
+// export const importChild = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "No file uploaded",
+//       });
+//     }
+
+//     const workbook = XLSX.readFile(req.file.path);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+//     // Read raw rows
+//     const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+//     if (!rawData.length) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Excel file is empty",
+//       });
+//     }
+
+//     // Normalize headers
+//     const headers = rawData[0].map(h =>
+//       String(h)
+//         .trim()
+//         .toLowerCase()
+//         .replace(/\./g, "")
+//         .replace(/\s+/g, "_")
+//     );
+
+//     // Build row objects
+//     const rows = rawData.slice(1).map(r => {
+//       const obj = {};
+//       headers.forEach((h, i) => {
+//         obj[h] = r[i];
+//       });
+//       return obj;
+//     });
+
+//     const errors = [];
+//     const inserted = [];
+
+//     // 🔑 To avoid duplicate inserts from SAME FILE
+//     const seenChildParts = new Set();
+
+//     for (let i = 0; i < rows.length; i++) {
+//       const row = rows[i];
+//       const rowNo = i + 2;
+
+//       try {
+//         const childPartNo = String(row.child_part_no || "").trim();
+//         const linkedMPN = String(row.linked_mpn || "").trim();
+
+//         // ❌ Missing values
+//         if (!childPartNo || childPartNo.toLowerCase() === "null") {
+//           errors.push(`Row ${rowNo}: Invalid Child Part Number`);
+//           continue;
+//         }
+
+
+//         // ❌ Duplicate in same Excel file
+//         // if (seenChildParts.has(childPartNo)) {
+//         //   errors.push(`Child Part ${childPartNo} duplicated in Excel`);
+//         //   continue;
+//         // }
+//         seenChildParts.add(childPartNo);
+
+//         // 🔎 Find parent MPN
+//         const mpnDoc = await MPN.findOne({ MPN: linkedMPN }).lean();
+//         if (!mpnDoc) {
+//           errors.push(`Child Part ${childPartNo} → MPN "${linkedMPN}" not found`);
+//           continue;
+//         }
+
+//         // 🔎 Existing child check
+//         console.log('------childPartNo', childPartNo)
+//         const existingChild = await Child.findOne({
+//           ChildPartNo: childPartNo,
+//         }).lean();
+
+//         console.log('------existingChild', existingChild)
+//         if (existingChild) {
+//           errors.push(`Child Part ${row.child_part_no} already exists`);
+//           continue;
+//         }
+
+//         // Already linked to another MPN
+//         if (existingChild && String(existingChild.mpn) !== String(mpnDoc._id)) {
+//           errors.push(
+//             `Child Part ${childPartNo} already linked to another MPN`
+//           );
+//           continue;
+//         }
+
+//         // Already linked to same MPN
+//         // if (existingChild && String(existingChild.mpn) === String(mpnDoc._id)) {
+//         //   errors.push(
+//         //     `Child Part ${childPartNo} already linked to this MPN`
+//         //   );
+//         //   continue;
+//         // }
+
+//         console.log('-----created---', childPartNo, mpnDoc._id, mpnDoc.Category);
+
+
+//         const created = await Child.create({
+//           ChildPartNo: childPartNo,
+//           mpn: mpnDoc._id,
+//           LinkedMPNCategory: mpnDoc.Category || null,
+//           status: "Active",
+//         });
+
+
+
+
+//         inserted.push(created);
+//       } catch (err) {
+//         // ❌ Hide ugly Mongo errors
+//         if (err.code === 11000) {
+//           // errors.push(`Child Part ${row.child_part_no} already exists`);
+//         } else {
+//           errors.push(`Row ${rowNo}: ${err.message}`);
+//         }
+//       }
+//     }
+
+//     return res.json({
+//       success: errors.length === 0,
+//       insertedCount: inserted.length,
+//       errorCount: errors.length,
+//       message:
+//         errors.length > 0
+//           ? errors.join(" | ")
+//           : "Child data imported successfully",
+//       data: inserted,
+//     });
+
+//   } catch (err) {
+//     console.error("importChild error:", err);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to import child data",
+//     });
+//   }
+// };
+
+// export const importChild = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "No file uploaded",
+//       });
+//     }
+
+//     const workbook = XLSX.readFile(req.file.path);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+//     const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+//     if (!rawData.length) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Excel file is empty",
+//       });
+//     }
+
+//     const headers = rawData[0].map((h) =>
+//       String(h)
+//         .trim()
+//         .toLowerCase()
+//         .replace(/\./g, "")
+//         .replace(/\s+/g, "_")
+//     );
+
+//     const rows = rawData.slice(1).map((r) => {
+//       const obj = {};
+//       headers.forEach((h, i) => {
+//         obj[h] = r[i];
+//       });
+//       return obj;
+//     });
+
+//     const inserted = [];
+
+//     // ✅ Collect errors as objects (better control + short message)
+//     const errors = []; // { rowNo, childPartNo, linkedMPN, error }
+
+//     const seenChildParts = new Set();
+
+//     for (let i = 0; i < rows.length; i++) {
+//       const row = rows[i];
+//       const rowNo = i + 2;
+
+//       try {
+//         const childPartNo = String(row.child_part_no || "").trim();
+//         const linkedMPN = String(row.linked_mpn || "").trim();
+
+//         // ❌ Missing Child Part
+//         if (!childPartNo || childPartNo.toLowerCase() === "null") {
+//           errors.push({
+//             rowNo,
+//             childPartNo: childPartNo || null,
+//             linkedMPN: linkedMPN || null,
+//             error: "Invalid Child Part Number",
+//           });
+//           continue;
+//         }
+
+//         // ✅ Duplicate in SAME Excel file (optional)
+//         if (seenChildParts.has(childPartNo)) {
+//           errors.push({
+//             rowNo,
+//             childPartNo,
+//             linkedMPN: linkedMPN || null,
+//             error: "Duplicate Child Part in Excel file",
+//           });
+//           continue;
+//         }
+//         seenChildParts.add(childPartNo);
+
+//         // ✅ 1) FIRST: Find parent MPN
+//         const mpnDoc = await MPN.findOne({ MPN: linkedMPN }).lean();
+
+//         // ✅ If MPN not found → STOP HERE for this row (no further checks)
+//         if (!mpnDoc) {
+//           errors.push({
+//             rowNo,
+//             childPartNo,
+//             linkedMPN,
+//             error: `MPN "${linkedMPN}" not found`,
+//           });
+//           continue;
+//         }
+
+//         // ✅ 2) THEN: Check existing child only if MPN exists
+//         const existingChild = await Child.findOne({
+//           ChildPartNo: childPartNo,
+//         }).lean();
+
+//         if (existingChild) {
+//           // Already exists - short message
+//           errors.push({
+//             rowNo,
+//             childPartNo,
+//             linkedMPN,
+//             error: "Child Part already exists",
+//           });
+//           continue;
+//         }
+
+//         const created = await Child.create({
+//           ChildPartNo: childPartNo,
+//           mpn: mpnDoc._id,
+//           LinkedMPNCategory: mpnDoc.Category || null,
+//           status: "Active",
+//         });
+
+//         inserted.push(created);
+//       } catch (err) {
+//         // if (err?.code === 11000) {
+//         //   errors.push({
+//         //     rowNo,
+//         //     childPartNo: String(rows[i]?.child_part_no || "").trim() || null,
+//         //     linkedMPN: String(rows[i]?.linked_mpn || "").trim() || null,
+//         //     error: "Duplicate key error (already exists)",
+//         //   });
+//         // } else {
+//         //   errors.push({
+//         //     rowNo,
+//         //     childPartNo: String(rows[i]?.child_part_no || "").trim() || null,
+//         //     linkedMPN: String(rows[i]?.linked_mpn || "").trim() || null,
+//         //     error: err.message,
+//         //   });
+//         // }
+//       }
+//     }
+
+//     // ✅ Short message (no long join)
+//     const success = errors.length === 0;
+
+//     // ✅ return only first 10 errors in message (optional)
+//     const MAX_ERRORS_IN_MESSAGE = 10;
+//     const shortErrors = errors
+//       .slice(0, MAX_ERRORS_IN_MESSAGE)
+//       .map((e) => `Row ${e.rowNo}: ${e.error}`);
+
+//     const messageText = success
+//       ? "Child data imported successfully"
+//       : `Import completed with errors (${errors.length}). ` +
+//         `${shortErrors.join(" | ")}` +
+//         (errors.length > MAX_ERRORS_IN_MESSAGE ? " | ...more" : "");
+
+//     return res.json({
+//       success,
+//       insertedCount: inserted.length,
+//       errorCount: errors.length,
+//       message: messageText,
+
+//       // ✅ full errors separate - frontend can show in table/download
+//       errors, // array of objects
+//       data: inserted,
+//     });
+//   } catch (err) {
+//     console.error("importChild error:", err);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to import child data",
+//     });
+//   }
+// };
+
 export const importChild = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "No file uploaded",
-      });
+      return res.status(400).json({ success: false, message: "No file uploaded" });
     }
 
     const workbook = XLSX.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-
-    // Read raw rows
     const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
     if (!rawData.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Excel file is empty",
-      });
+      return res.status(400).json({ success: false, message: "Excel file is empty" });
     }
 
-    // Normalize headers
-    const headers = rawData[0].map(h =>
-      String(h)
-        .trim()
-        .toLowerCase()
-        .replace(/\./g, "")
-        .replace(/\s+/g, "_")
+    const headers = rawData[0].map((h) =>
+      String(h).trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, "_")
     );
 
-    // Build row objects
-    const rows = rawData.slice(1).map(r => {
+    const rows = rawData.slice(1).map((r) => {
       const obj = {};
-      headers.forEach((h, i) => {
-        obj[h] = r[i];
-      });
+      headers.forEach((h, i) => (obj[h] = r[i]));
       return obj;
     });
 
-    const errors = [];
     const inserted = [];
+    const errors = [];
 
-    // 🔑 To avoid duplicate inserts from SAME FILE
+    // ✅ Missing MPN export list
+    const missingMpns = []; // { rowNo, childPartNo, missingMPN }
+    const missingKeySet = new Set();
+
     const seenChildParts = new Set();
+
+    // ✅ CSV helper
+    const toCSV = (list) => {
+      const esc = (v) => {
+        const s = String(v ?? "");
+        if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+
+      const header = ["rowNo", "childPartNo", "missingMPN", "note"];
+      const lines = [
+        header.join(","),
+        ...list.map((x) =>
+          [
+            esc(x.rowNo),
+            esc(x.childPartNo),
+            esc(x.missingMPN),
+            esc(x.note || "MPN not found in MPN library"),
+          ].join(",")
+        ),
+      ];
+      return lines.join("\n");
+    };
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNo = i + 2;
 
-      try {
-        const childPartNo = String(row.child_part_no || "").trim();
-        const linkedMPN = String(row.linked_mpn || "").trim();
+      const childPartNo = String(row.child_part_no || "").trim();
+      const linkedMPN = String(row.linked_mpn || "").trim();
 
-        // ❌ Missing values
-        if (!childPartNo || childPartNo.toLowerCase() === "null") {
-          errors.push(`Row ${rowNo}: Invalid Child Part Number`);
-          continue;
-        }
-
-
-        // ❌ Duplicate in same Excel file
-        // if (seenChildParts.has(childPartNo)) {
-        //   errors.push(`Child Part ${childPartNo} duplicated in Excel`);
-        //   continue;
-        // }
-        seenChildParts.add(childPartNo);
-
-        // 🔎 Find parent MPN
-        const mpnDoc = await MPN.findOne({ MPN: linkedMPN }).lean();
-        if (!mpnDoc) {
-          errors.push(`Child Part ${childPartNo} → MPN "${linkedMPN}" not found`);
-          continue;
-        }
-
-        // 🔎 Existing child check
-        console.log('------childPartNo', childPartNo)
-        const existingChild = await Child.findOne({
-          ChildPartNo: childPartNo,
-        }).lean();
-
-        console.log('------existingChild', existingChild)
-        if (existingChild) {
-          errors.push(`Child Part ${row.child_part_no} already exists`);
-          continue;
-        }
-
-        // Already linked to another MPN
-        if (existingChild && String(existingChild.mpn) !== String(mpnDoc._id)) {
-          errors.push(
-            `Child Part ${childPartNo} already linked to another MPN`
-          );
-          continue;
-        }
-
-        // Already linked to same MPN
-        // if (existingChild && String(existingChild.mpn) === String(mpnDoc._id)) {
-        //   errors.push(
-        //     `Child Part ${childPartNo} already linked to this MPN`
-        //   );
-        //   continue;
-        // }
-
-        console.log('-----created---', childPartNo, mpnDoc._id, mpnDoc.Category);
-
-
-        const created = await Child.create({
-          ChildPartNo: childPartNo,
-          mpn: mpnDoc._id,
-          LinkedMPNCategory: mpnDoc.Category || null,
-          status: "Active",
-        });
-
-
-
-
-        inserted.push(created);
-      } catch (err) {
-        // ❌ Hide ugly Mongo errors
-        if (err.code === 11000) {
-          // errors.push(`Child Part ${row.child_part_no} already exists`);
-        } else {
-          errors.push(`Row ${rowNo}: ${err.message}`);
-        }
+      // ❌ Missing Child Part
+      if (!childPartNo || childPartNo.toLowerCase() === "null") {
+        errors.push({ rowNo, childPartNo: childPartNo || null, linkedMPN: linkedMPN || null, error: "Invalid Child Part Number" });
+        continue;
       }
+
+      // ❌ Duplicate in same Excel
+      if (seenChildParts.has(childPartNo)) {
+        errors.push({ rowNo, childPartNo, linkedMPN: linkedMPN || null, error: "Duplicate Child Part in Excel file" });
+        continue;
+      }
+      seenChildParts.add(childPartNo);
+
+      // ✅ Find parent MPN
+      const mpnDoc = await MPN.findOne({ MPN: linkedMPN }).lean();
+
+      // ✅ If MPN missing: add to missing list + continue (import should NOT stop)
+      if (!mpnDoc) {
+        const key = `${linkedMPN}__${childPartNo}`;
+        if (!missingKeySet.has(key)) {
+          missingKeySet.add(key);
+          missingMpns.push({
+            rowNo,
+            childPartNo,
+            missingMPN: linkedMPN,
+            note: "MPN not found in MPN library",
+          });
+        }
+
+        // optional: also add in errors (short)
+        errors.push({ rowNo, childPartNo, linkedMPN, error: `MPN "${linkedMPN}" not found` });
+        continue;
+      }
+
+      // ✅ Existing child only if MPN exists
+      const existingChild = await Child.findOne({ ChildPartNo: childPartNo }).lean();
+      if (existingChild) {
+        errors.push({ rowNo, childPartNo, linkedMPN, error: "Child Part already exists" });
+        continue;
+      }
+
+      const created = await Child.create({
+        ChildPartNo: childPartNo,
+        mpn: mpnDoc._id,
+        LinkedMPNCategory: mpnDoc.Category || null,
+        status: "Active",
+      });
+
+      inserted.push(created);
     }
+
+    let missingMpnsFileUrl = null;
+
+    if (missingMpns.length > 0) {
+      const exportDir = path.join(process.cwd(), "uploads", "exports");
+      if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true });
+
+      const fileName = `missing-mpns-${Date.now()}.xlsx`;
+      const filePath = path.join(exportDir, fileName);
+
+      // ✅ Prepare clean rows
+      const excelRows = missingMpns.map((x) => ({
+        "Row No": x.rowNo,
+        "Child Part No": x.childPartNo,
+        "Missing MPN": x.missingMPN,
+        "Note": x.note || "MPN not found in MPN library",
+      }));
+
+      // ✅ Create workbook & sheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelRows);
+
+      // ✅ Set column widths (wch = character width)
+      ws["!cols"] = [
+        { wch: 8 },   // Row No
+        { wch: 20 },  // Child Part No
+        { wch: 22 },  // Missing MPN
+        { wch: 40 },  // Note
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, "Missing_MPNs");
+
+      // ✅ Write Excel file
+      XLSX.writeFile(wb, filePath);
+
+      // ✅ Public URL
+      missingMpnsFileUrl = `/uploads/exports/${fileName}`;
+    }
+
+
+
+    // ✅ short message
+    const MAX_ERRORS_IN_MESSAGE = 5;
+    const shortErrors = errors.slice(0, MAX_ERRORS_IN_MESSAGE).map((e) => `Row ${e.rowNo}: ${e.error}`);
+
+    const messageText =
+      errors.length === 0
+        ? "Child data imported successfully"
+        : `Import completed. Inserted: ${inserted.length}, Errors: ${errors.length}` +
+        (missingMpns.length ? `, Missing MPN: ${missingMpns.length}` : "") +
+        ` | ${shortErrors.join(" | ")}` +
+        (errors.length > MAX_ERRORS_IN_MESSAGE ? " | ...more" : "");
 
     return res.json({
       success: errors.length === 0,
       insertedCount: inserted.length,
       errorCount: errors.length,
-      message:
-        errors.length > 0
-          ? errors.join(" | ")
-          : "Child data imported successfully",
+      missingMpnCount: missingMpns.length,
+      message: messageText,
+
+      // ✅ download link for excel/csv
+      missingMpnsFileUrl,
+
+      // optional previews
+      missingMpnsPreview: missingMpns.slice(0, 20),
+      errors, // full errors
       data: inserted,
     });
-
   } catch (err) {
     console.error("importChild error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to import child data",
-    });
+    return res.status(500).json({ success: false, message: "Failed to import child data" });
   }
 };
+
+
 
 
 

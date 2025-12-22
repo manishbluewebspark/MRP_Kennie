@@ -146,34 +146,64 @@ const ChildPartLibrary = () => {
         }
     };
 
+    const autoDownloadMissingMpn = (fileUrl) => {
+        if (!fileUrl) return;
+
+        const apiBase = process.env.REACT_APP_API_URL?.replace(/\/$/, "");
+        const fullUrl = `${apiBase}${fileUrl}`;
+
+        // auto open / download
+        window.open(fullUrl, "_blank");
+    };
+
+
     const handleMpnImport = async (file) => {
-        setImportExcel(true)
+        setImportExcel(true);
 
         if (!file) {
-            setImportExcel(false)
-            message.error("Please select file")
-            return
+            setImportExcel(false);
+            message.error("Please select file");
+            return;
         }
+
         try {
             const formData = new FormData();
             formData.append("file", file);
 
             const res = await LibraryService.importChild(formData);
-            if (res?.success) {
-                message.success(res?.message || "MPN imported successfully!",3);
-            } else {
-                message.error(res?.message || "MPN imported failed!",3);
+
+            // ✅ AUTO DOWNLOAD if missing MPN file exists
+            if (res?.missingMpnsFileUrl) {
+                autoDownloadMissingMpn(res.missingMpnsFileUrl);
+
+                message.warning({
+                    duration: 6,
+                    content: (
+                        <span>
+                            Missing MPN found: <b>{res.missingMpnCount}</b>.
+                            File downloaded automatically.
+                        </span>
+                    ),
+                });
             }
-            fetchChildParts()
-            setImportExcel(false)
+
+            if (res?.success) {
+                message.success(res?.message || "MPN imported successfully!", 3);
+            } else {
+                message.error(res?.message || "MPN import completed with errors!", 3);
+            }
+
+            fetchChildParts();
+            setImportExcel(false);
             return res;
         } catch (err) {
-            setImportExcel(false)
+            setImportExcel(false);
             console.error("Import failed:", err);
             message.error(err?.response?.data?.message || "Import failed!");
             throw err;
         }
     };
+
 
     const fetchChildParts = async (params = {}) => {
         setLoading(true);
