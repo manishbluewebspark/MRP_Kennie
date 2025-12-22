@@ -89,7 +89,7 @@ const CostingTable = ({
       key: 'unitPrice',
       width: 110,
       align: 'right',
-      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+      render: (v,record) => `${record?.mpn?.currency?.symbol} ${(Number(v || 0)).toFixed(2)}`,
     },
     {
       title: 'Latest P. Price',
@@ -108,7 +108,7 @@ const CostingTable = ({
             fontWeight: 600,
           }}
         >
-          ${Number(record?.mpn?.RFQUnitPrice || 0).toFixed(2)}
+          {Number(record?.mpn?.RFQUnitPrice || 0).toFixed(2)}
         </div>
       ),
     }
@@ -119,7 +119,7 @@ const CostingTable = ({
       key: 'extPrice',
       width: 110,
       align: 'right',
-      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+      render: (v) => `${(Number(v || 0)).toFixed(2)}`,
     },
     {
       title: 'Sales Price',
@@ -127,7 +127,7 @@ const CostingTable = ({
       key: 'salesPrice',
       width: 120,
       align: 'right',
-      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+      render: (v) => `${(Number(v || 0)).toFixed(2)}`,
     },
   ];
 
@@ -222,7 +222,7 @@ const CostingTable = ({
       key: 'unitPrice',
       width: 110,
       align: 'right',
-      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+      render: (v) => `${(Number(v || 0)).toFixed(2)}`,
     },
     {
       title: 'Sales Price',
@@ -230,7 +230,7 @@ const CostingTable = ({
       key: 'salesPrice',
       width: 120,
       align: 'right',
-      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+      render: (v) => `${(Number(v || 0)).toFixed(2)}`,
     },
     {
       title: 'Remarks',
@@ -280,7 +280,7 @@ const CostingTable = ({
       key: 'unitPrice',
       width: 110,
       align: 'right',
-      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+      render: (v) => `${(Number(v || 0)).toFixed(2)}`,
     },
      {
       title: 'Ex. Price',
@@ -288,7 +288,7 @@ const CostingTable = ({
       key: 'extPrice',
       width: 110,
       align: 'right',
-      render: (v) => `$${(Number(v || 0)).toFixed(2)}`,
+      render: (v) => `${(Number(v || 0)).toFixed(2)}`,
     },
     {
       title: 'SGA%',
@@ -372,10 +372,10 @@ const CostingTable = ({
               <Table.Summary.Cell index={1} />
               <Table.Summary.Cell index={2} />
               <Table.Summary.Cell index={3} align="right">
-                <Text strong>${totals.extPrice.toFixed(2)}</Text>
+                <Text strong>{totals.extPrice.toFixed(2)}</Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={4} colSpan={columns.length - 4} align="right">
-                <Text strong>${totals.salesPrice.toFixed(2)}</Text>
+                <Text strong>{totals.salesPrice.toFixed(2)}</Text>
               </Table.Summary.Cell>
             </Table.Summary.Row>
 
@@ -393,7 +393,7 @@ const CostingTable = ({
                 </div>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={1} align="right">
-                <Text strong>${totalWithMarkup.toFixed(2)}</Text>
+                <Text strong>{totalWithMarkup.toFixed(2)}</Text>
               </Table.Summary.Cell>
             </Table.Summary.Row>
           </Table.Summary>

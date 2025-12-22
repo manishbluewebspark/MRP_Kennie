@@ -525,7 +525,7 @@ export const getDrawingById = async (req, res) => {
       .populate("projectId")
       .populate("customerId")
       .populate("lastEditedBy", "name")
-      .populate("currency", "code")
+      .populate("currency", "code symbol name")
 
     if (!drawing)
       return res.status(404).json({ success: false, message: "Drawing not found" });
@@ -1739,7 +1739,14 @@ export const getAllCostingItems = async (req, res) => {
           { path: "currencyType", select: "name symbol" }, // populate currency type details
         ],
       })
-      .populate("mpn", "MPN RFQUnitPrice")
+       .populate({
+        path: "mpn", // parent reference
+        select:"MPN RFQUnitPrice",
+        populate: [
+          { path: "currency", select: "name symbol" }, // populate currency type details
+        ],
+      })
+      // .populate("mpn", "MPN RFQUnitPrice currency")
       .populate('childPart', "ChildPartNo")
       .populate("uom", "code")
       .populate("lastEditedBy", "name")
@@ -2048,9 +2055,9 @@ export const importCostingItems = async (req, res) => {
 
           const tolerance = toNum(row["Tolerance"]);
           const sgaPercent = toNum(row["SGA %"]);
-          const matBurden = toNum(row["Mat Burden %"]);
-          const freightPercent = toNum(row["Freight Cost %"]);
-          const fixedFreightCost = toNum(row["Fixed Freight Cost"]);
+          const matBurden = toNum(row["Mat Burden %"] || 0);
+          const freightPercent = toNum(row["Freight Cost %"] || 0);
+          const fixedFreightCost = toNum(row["Fixed Freight Cost"] || 0);
 
           const actualQty = round2(quantity + (quantity * tolerance) / 100);
           const extPrice = round2(quantity * unitPrice);

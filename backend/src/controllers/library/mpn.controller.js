@@ -89,7 +89,8 @@ export const deleteMpn = async (req, res) => {
  */
 export const getMpnById = async (req, res) => {
   try {
-    const mpn = await MPN.findById(req.params.id);
+    const mpn = await MPN.findById(req.params.id)
+    .populate("currency", "name code symbol");
     if (!mpn) return res.status(404).json({ success: false, message: "MPN not found" });
     return res.json({ success: true, data: mpn });
   } catch (err) {
