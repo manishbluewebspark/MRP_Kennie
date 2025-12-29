@@ -108,7 +108,7 @@ export const getAllSuppliers = async (req, res) => {
     sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
 
     const [suppliers, total] = await Promise.all([
-      Suppliers.find(filter).populate("currency", "code").sort(sortOptions).skip(skip).limit(Number(limit)),
+      Suppliers.find(filter).populate("currency", "code symbol name").sort(sortOptions).skip(skip).limit(Number(limit)),
       Suppliers.countDocuments(filter),
     ]);
 

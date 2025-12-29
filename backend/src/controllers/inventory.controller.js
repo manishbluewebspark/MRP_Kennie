@@ -9,6 +9,67 @@ import Customer from "../models/Customer.js";
 import Project from "../models/Project.js";
 import SystemSettings from "../models/SystemSettings.js";
 
+
+
+
+
+import mongoose from "mongoose";
+import CostingItems from "../models/CostingItem.js";
+
+// DemandQty map: mpnId -> totalDemandQty
+async function buildDemandMap() {
+  // 1) Workorders (filter status if you want)
+  const workOrders = await WorkOrder.find({
+    // status: { $in: ["No Progress Yet", "In Progress"] } // optional
+  })
+    .select("_id drawingId quantity")
+    .lean();
+
+  if (!workOrders.length) return new Map();
+
+  // 2) group wo by drawingId and keep woQty sum
+  const woQtyByDrawing = new Map(); // drawingId -> total WO quantity
+  const drawingIds = new Set();
+
+  for (const wo of workOrders) {
+    const dId = String(wo.drawingId);
+    if (!dId) continue;
+    drawingIds.add(dId);
+    const prev = woQtyByDrawing.get(dId) || 0;
+    woQtyByDrawing.set(dId, prev + Number(wo.quantity || 1));
+  }
+
+  const drawingObjectIds = [...drawingIds].map((id) => new mongoose.Types.ObjectId(id));
+
+  // 3) CostingItems of those drawings (material)
+  const costingItems = await CostingItems.find({
+    drawingId: { $in: drawingObjectIds },
+    quoteType: "material",
+  })
+    .select("drawingId mpn quantity")
+    .lean();
+
+  if (!costingItems.length) return new Map();
+
+  // 4) mpn demand = sum( costingItem.qty * woQtyOfDrawing )
+  const demandMap = new Map(); // mpnId -> demandQty
+
+  for (const ci of costingItems) {
+    const dId = String(ci.drawingId);
+    const mpnId = String(ci.mpn);
+    if (!mpnId) continue;
+
+    const woQty = woQtyByDrawing.get(dId) || 0;
+    if (woQty <= 0) continue;
+
+    const needed = Number(ci.quantity || 0) * woQty;
+
+    demandMap.set(mpnId, (demandMap.get(mpnId) || 0) + needed);
+  }
+
+  return demandMap;
+}
+
 // controllers/inventoryController.js
 // export const getInventoryList = async (req, res) => {
 //   try {
@@ -132,88 +193,117 @@ export const adjustInventory = async (req, res) => {
   }
 };
 
-export const getInventoryList = async (req, res) => {
-  try {
-    const {
-      page = 1,
-      limit = 10,
-      search = "",
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = req.query;
+// export const getInventoryList = async (req, res) => {
+//   try {
+//     const {
+//       page = 1,
+//       limit = 10,
+//       search = "",
+//       sortBy = "createdAt",
+//       sortOrder = "desc",
+//     } = req.query;
 
-    const pageNum = Math.max(parseInt(page) || 1, 1);
-    const limitNum = Math.max(parseInt(limit) || 10, 1);
+//     const pageNum = Math.max(parseInt(page) || 1, 1);
+//     const limitNum = Math.max(parseInt(limit) || 10, 1);
+//     const skip = (pageNum - 1) * limitNum;
 
-    // 🔍 Inventory filter
-    const inventoryFilter = {};
+//     const s = String(search || "").trim();
+//     const sortDir = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
 
-    // 🔍 Search will be applied AFTER populate (MPN fields)
-    // so yahan empty rakhenge
+//     // ✅ inventoryFilter yahan rakho (agar inventory fields se filter chahiye)
+//     const inventoryMatch = {};
 
-    const total = await Inventory.countDocuments(inventoryFilter);
+//     // ✅ search on MPN model fields
+//     const mpnSearchMatch = s
+//       ? {
+//           $or: [
+//             { "mpn.MPN": { $regex: s, $options: "i" } },
+//             { "mpn.Description": { $regex: s, $options: "i" } },
+//             { "mpn.Manufacturer": { $regex: s, $options: "i" } },
+//           ],
+//         }
+//       : {};
 
-    const inventories = await Inventory.find(inventoryFilter)
-      .populate({
-        path: "mpnId",
-        select: "MPN Description Manufacturer UOM StorageLocation",
-        populate: {
-          path: "UOM",
-          select: "code",
-        },
-      })
-      .sort({ [sortBy]: sortOrder === "asc" ? 1 : -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean();
+//     const pipeline = [
+//       { $match: inventoryMatch },
 
-    // 🔍 Apply search on populated MPN fields
-    let filtered = inventories;
+//       // Inventory.mpnId -> mpns collection lookup
+//       {
+//         $lookup: {
+//           from: "mpnlibraries",                 // ⚠️ apni actual collection name check karo
+//           localField: "mpnId",
+//           foreignField: "_id",
+//           as: "mpn",
+//         },
+//       },
+//       { $unwind: { path: "$mpn", preserveNullAndEmptyArrays: true } },
 
-    if (search) {
-      const s = search.toLowerCase();
-      filtered = inventories.filter((inv) => {
-        const mpn = inv.mpnId || {};
-        return (
-          mpn.MPN?.toLowerCase().includes(s) ||
-          mpn.Description?.toLowerCase().includes(s) ||
-          mpn.Manufacturer?.toLowerCase().includes(s)
-        );
-      });
-    }
+//       // UOM populate (mpn.UOM -> uoms collection)
+//       {
+//         $lookup: {
+//           from: "uoms",                 // ⚠️ actual collection name
+//           localField: "mpn.UOM",
+//           foreignField: "_id",
+//           as: "uom",
+//         },
+//       },
+//       { $unwind: { path: "$uom", preserveNullAndEmptyArrays: true } },
 
-    // ✅ Final mapping
-    const rows = filtered.map((inv) => ({
-      _id: inv._id,
-      mpnId: inv.mpnId?._id || null,
+//       // ✅ Apply search AFTER lookup
+//       ...(s ? [{ $match: mpnSearchMatch }] : []),
 
-      MPN: inv.mpnId?.MPN || "N/A",
-      Description: inv.mpnId?.Description || "N/A",
-      Manufacturer: inv.mpnId?.Manufacturer || "N/A",
-      UOM: inv.mpnId?.UOM || "N/A",
+//       // ✅ Sort (allow inventory fields; if mpn fields sort chahiye to map karo)
+//       { $sort: { [sortBy]: sortDir } },
 
-      Storage: inv?.mpnId?.StorageLocation,
-      balanceQuantity: inv.balanceQuantity || 0,
+//       // ✅ Count + paginated data in one go
+//       {
+//         $facet: {
+//           data: [
+//             { $skip: skip },
+//             { $limit: limitNum },
+//             {
+//               $project: {
+//                 _id: 1,
+//                 mpnId: "$mpn._id",
+//                 balanceQuantity: 1,
+//                 createdAt: 1,
 
-      Status: getInventoryStatus(inv.balanceQuantity || 0, 0),
-    }));
+//                 MPN: { $ifNull: ["$mpn.MPN", ""] },
+//                 Description: { $ifNull: ["$mpn.Description", ""] },
+//                 Manufacturer: { $ifNull: ["$mpn.Manufacturer", ""] },
+//                 UOM: { $ifNull: ["$uom.code", ""] },
+//                 Storage: "$mpn.StorageLocation",
+//               },
+//             },
+//           ],
+//           total: [{ $count: "count" }],
+//         },
+//       },
+//     ];
 
-    return res.json({
-      success: true,
-      data: rows,
-      total: total,
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(total / limitNum),
-    });
-  } catch (error) {
-    console.error("getInventoryList error:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+//     const result = await Inventory.aggregate(pipeline);
+//     const rows = result?.[0]?.data || [];
+//     const total = result?.[0]?.total?.[0]?.count || 0;
+
+//     // ✅ add status mapping if needed
+//     const finalRows = rows.map((r) => ({
+//       ...r,
+//       Status: getInventoryStatus(r.balanceQuantity || 0, 0),
+//     }));
+
+//     return res.json({
+//       success: true,
+//       data: finalRows,
+//       total,
+//       page: pageNum,
+//       limit: limitNum,
+//       totalPages: Math.ceil(total / limitNum),
+//     });
+//   } catch (error) {
+//     console.error("getInventoryList error:", error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
 
 
 
@@ -426,82 +516,97 @@ export const getInventoryList = async (req, res) => {
 
 // export const getInventoryList = async (req, res) => {
 //   try {
-//     const { 
-//       page = 1, 
-//       limit = 10, 
+//     const {
+//       page = 1,
+//       limit = 10,
 //       search = "",
-//       sortBy = "partNumber",
-//       sortOrder = "asc" 
+//       sortBy = "createdAt",
+//       sortOrder = "desc",
 //     } = req.query;
 
-//     const pageNum = parseInt(page);
-//     const limitNum = parseInt(limit);
+//     const pageNum = Math.max(parseInt(page) || 1, 1);
+//     const limitNum = Math.max(parseInt(limit) || 10, 1);
 
-//     // Build filter
+//     // ✅ Inventory filter (Inventory ke fields pe)
 //     const filter = {};
 
-//     if (search) {
-//       filter.$or = [
-//         { MPN: { $regex: search, $options: "i" } },
-//         { Description: { $regex: search, $options: "i" } },
-//         { Manufacturer: { $regex: search, $options: "i" } }
-//       ];
+//     // ✅ FIX: search MPNLibrary me hoga, then mpnId filter inventory me
+//     if (search && String(search).trim()) {
+//       const s = String(search).trim();
+
+//       const mpnDocs = await MPNLibrary.find({
+//         $or: [
+//           { MPN: { $regex: s, $options: "i" } },
+//           { Description: { $regex: s, $options: "i" } },
+//           { Manufacturer: { $regex: s, $options: "i" } },
+//         ],
+//       }).select("_id").lean();
+
+//       const mpnIds = mpnDocs.map(d => d._id);
+
+//       // ✅ agar search me kuch match hi nahi mila, direct empty response
+//       if (!mpnIds.length) {
+//         return res.json({
+//           success: true,
+//           data: [],
+//           total: 0,
+//           page: pageNum,
+//           limit: limitNum,
+//           totalPages: 0,
+//         });
+//       }
+
+//       filter.mpnId = { $in: mpnIds };
 //     }
 
-//     // Get total count
+//     // ✅ total count
 //     const total = await Inventory.countDocuments(filter);
 
-//     // Get inventory data with population
+//     // ✅ Inventory list
 //     const inventoryList = await Inventory.find(filter)
 //       .populate({
 //         path: "mpnId",
 //         select: "MPN Description Manufacturer UOM StorageLocation",
-//         model: "MPNLibrary"
+//         model: "MPNLibrary",
+//         populate: { path: "UOM", select: "code" },
 //       })
 //       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
 //       .skip((pageNum - 1) * limitNum)
 //       .limit(limitNum)
 //       .lean();
 
-//     // Get incoming PO data for each inventory item
+//     // ✅ PO calculation (tumhara code same)
 //     const inventoryWithPOData = await Promise.all(
 //       inventoryList.map(async (item) => {
 //         try {
-//           // Find pending purchase orders for this MPN
 //           const pendingPOs = await PurchaseOrders.find({
 //             "items.mpn": item.mpnId?._id,
-//             "status": { $in: ["Pending", "Approved", "Partially Received"] }
+//             status: { $in: ["Pending", "Approved", "Partially Received"] },
 //           })
-//           .select("poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt")
-//           .populate("items.mpn", "MPN Description Manufacturer")
-//           .populate("supplier", "name contactEmail phoneNumber")
-//           .lean();
+//             .select("poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt")
+//             .populate("items.mpn", "MPN Description Manufacturer")
+//             .populate("supplier", "name contactEmail phoneNumber")
+//             .lean();
 
 //           let totalIncomingQty = 0;
 //           let incomingPONumbers = [];
 //           let earliestCommitDate = null;
 //           let purchaseData = [];
 
-//           // Calculate incoming quantities from pending POs and collect full PO data
-//           pendingPOs.forEach(po => {
-//             po.items.forEach(poItem => {
-//               // Check if this PO item matches our MPN
-//               if (poItem.mpn && poItem.mpn._id.toString() === item.mpnId?._id?.toString()) {
-//                 const remainingQty = poItem.qty - (poItem.receivedQty || 0);
+//           pendingPOs.forEach((po) => {
+//             po.items.forEach((poItem) => {
+//               if (poItem.mpn && String(poItem.mpn._id) === String(item.mpnId?._id)) {
+//                 const remainingQty = Number(poItem.qty || 0) - Number(poItem.receivedQty || 0);
 
 //                 if (remainingQty > 0) {
 //                   totalIncomingQty += remainingQty;
 //                   incomingPONumbers.push(po.poNumber);
 
-//                   // Find earliest commit date
 //                   if (poItem.commitDate) {
 //                     const commitDate = new Date(poItem.commitDate);
-//                     if (!earliestCommitDate || commitDate < earliestCommitDate) {
-//                       earliestCommitDate = commitDate;
-//                     }
+//                     if (!earliestCommitDate || commitDate < earliestCommitDate) earliestCommitDate = commitDate;
 //                   }
 
-//                   // Add full PO data for this item
 //                   purchaseData.push({
 //                     poNumber: po.poNumber,
 //                     supplier: po.supplier || { name: "N/A" },
@@ -513,27 +618,23 @@ export const getInventoryList = async (req, res) => {
 //                     status: po.status,
 //                     createdAt: po.createdAt,
 //                     updatedAt: po.updatedAt,
-//                     poStatus: po.status,
-//                     // Additional fields you might need
 //                     itemDescription: poItem.mpn?.Description || "N/A",
-//                     itemManufacturer: poItem.mpn?.Manufacturer || "N/A"
+//                     itemManufacturer: poItem.mpn?.Manufacturer || "N/A",
 //                   });
 //                 }
 //               }
 //             });
 //           });
 
-//           // Remove duplicate PO numbers
 //           incomingPONumbers = [...new Set(incomingPONumbers)];
 
 //           return {
 //             ...item,
 //             calculatedIncomingQty: totalIncomingQty,
-//             incomingPONumbers: incomingPONumbers,
-//             earliestCommitDate: earliestCommitDate,
-//             purchaseData: purchaseData // Full PO data added here
+//             incomingPONumbers,
+//             earliestCommitDate,
+//             purchaseData,
 //           };
-
 //         } catch (error) {
 //           console.error(`Error processing MPN ${item.mpnId?.MPN}:`, error);
 //           return {
@@ -541,14 +642,14 @@ export const getInventoryList = async (req, res) => {
 //             calculatedIncomingQty: 0,
 //             incomingPONumbers: [],
 //             earliestCommitDate: null,
-//             purchaseData: [] // Empty array in case of error
+//             purchaseData: [],
 //           };
 //         }
 //       })
 //     );
 
-//     // Transform data to match required format
-//     const transformedData = inventoryWithPOData.map(item => {
+//     // ✅ transform
+//     const transformedData = inventoryWithPOData.map((item) => {
 //       const mpnData = item.mpnId || {};
 
 //       return {
@@ -556,38 +657,216 @@ export const getInventoryList = async (req, res) => {
 //         MPN: mpnData.MPN || "N/A",
 //         Manufacturer: mpnData.Manufacturer || "N/A",
 //         Description: mpnData.Description || "N/A",
-//         Storage: mpnData.StorageLocation || "Main Warehouse",
+//         Storage: mpnData.StorageLocation || "-",
+//         UOM:mpnData?.UOM?.code,
 //         balanceQuantity: item.balanceQuantity || 0,
-//         IncomingQty: item.calculatedIncomingQty || 0, // From pending POs
-//         IncomingPoNumber: item.incomingPONumbers.length > 0 
-//           ? item.incomingPONumbers.join(", ") 
-//           : "N/A",
-//         commitDate: item.earliestCommitDate 
-//           ? new Date(item.earliestCommitDate).toLocaleDateString() 
-//           : "N/A",
-//         Status: getInventoryStatus(item.balanceQuantity, item.calculatedIncomingQty),
-//         mpnId: item.mpnId?._id, // For reference
-//         purchaseData: item.purchaseData // Full purchase data included
+//         IncomingQty: item.calculatedIncomingQty || 0,
+
+//         IncomingPoNumber: item.incomingPONumbers?.length ? item.incomingPONumbers.join(", ") : "",
+//         commitDate: item.earliestCommitDate ? new Date(item.earliestCommitDate).toLocaleDateString() : "",
+
+//         Status: getInventoryStatus(item.balanceQuantity || 0, item.calculatedIncomingQty || 0),
+
+//         mpnId: item.mpnId?._id,
+//         purchaseData: item.purchaseData,
 //       };
 //     });
 
-//     res.json({
+//     return res.json({
 //       success: true,
 //       data: transformedData,
 //       total,
 //       page: pageNum,
 //       limit: limitNum,
-//       totalPages: Math.ceil(total / limitNum)
+//       totalPages: Math.ceil(total / limitNum),
 //     });
-
 //   } catch (error) {
 //     console.error("Get Inventory List Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: error.message
-//     });
+//     return res.status(500).json({ success: false, message: error.message });
 //   }
 // };
+
+export const getInventoryList = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      view = "all", // all | shortage | incoming | low
+    } = req.query;
+
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const limitNum = Math.max(parseInt(limit) || 10, 1);
+
+    const filter = {};
+
+    // ✅ Search fix (MPNLibrary -> mpnIds -> Inventory filter)
+    if (search && String(search).trim()) {
+      const s = String(search).trim();
+      const mpnDocs = await MPNLibrary.find({
+        $or: [
+          { MPN: { $regex: s, $options: "i" } },
+          { Description: { $regex: s, $options: "i" } },
+          { Manufacturer: { $regex: s, $options: "i" } },
+        ],
+      }).select("_id").lean();
+
+      const mpnIds = mpnDocs.map((d) => d._id);
+
+      if (!mpnIds.length) {
+        return res.json({ success: true, data: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 });
+      }
+
+      filter.mpnId = { $in: mpnIds };
+    }
+
+    // ✅ demand map (ONE TIME)
+    const demandMap = await buildDemandMap();
+
+    const total = await Inventory.countDocuments(filter);
+
+    const inventoryList = await Inventory.find(filter)
+      .populate({
+        path: "mpnId",
+        select: "MPN Description Manufacturer UOM StorageLocation",
+        model: "MPNLibrary",
+        populate: { path: "UOM", select: "code" },
+      })
+      .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .lean();
+
+    // ✅ PO calculation same as yours
+    const inventoryWithPOData = await Promise.all(
+      inventoryList.map(async (item) => {
+        try {
+          const pendingPOs = await PurchaseOrders.find({
+            "items.mpn": item.mpnId?._id,
+            status: { $in: ["Pending", "Approved", "Partially Received"] },
+          })
+            .select("poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt")
+            .populate("items.mpn", "MPN Description Manufacturer")
+            .populate("supplier", "name contactEmail phoneNumber")
+            .lean();
+
+          let totalIncomingQty = 0;
+          let incomingPONumbers = [];
+          let earliestCommitDate = null;
+          let purchaseData = [];
+
+          pendingPOs.forEach((po) => {
+            po.items.forEach((poItem) => {
+              if (poItem.mpn && String(poItem.mpn._id) === String(item.mpnId?._id)) {
+                const remainingQty = Number(poItem.qty || 0) - Number(poItem.receivedQty || 0);
+                if (remainingQty > 0) {
+                  totalIncomingQty += remainingQty;
+                  incomingPONumbers.push(po.poNumber);
+
+                  if (poItem.commitDate) {
+                    const commitDate = new Date(poItem.commitDate);
+                    if (!earliestCommitDate || commitDate < earliestCommitDate) earliestCommitDate = commitDate;
+                  }
+
+                  purchaseData.push({
+                    poNumber: po.poNumber,
+                    supplier: po.supplier || { name: "N/A" },
+                    quantity: remainingQty,
+                    totalQuantity: poItem.qty,
+                    receivedQuantity: poItem.receivedQty || 0,
+                    needDate: poItem.needDate ? new Date(poItem.needDate).toLocaleDateString() : "N/A",
+                    committedDate: poItem.commitDate ? new Date(poItem.commitDate).toLocaleDateString() : "N/A",
+                    status: po.status,
+                    createdAt: po.createdAt,
+                    updatedAt: po.updatedAt,
+                    itemDescription: poItem.mpn?.Description || "N/A",
+                    itemManufacturer: poItem.mpn?.Manufacturer || "N/A",
+                  });
+                }
+              }
+            });
+          });
+
+          return {
+            ...item,
+            calculatedIncomingQty: totalIncomingQty,
+            incomingPONumbers: [...new Set(incomingPONumbers)],
+            earliestCommitDate,
+            purchaseData,
+          };
+        } catch (error) {
+          console.error(`Error processing MPN ${item.mpnId?.MPN}:`, error);
+          return { ...item, calculatedIncomingQty: 0, incomingPONumbers: [], earliestCommitDate: null, purchaseData: [] };
+        }
+      })
+    );
+
+    // ✅ transform + Demand + Shortage
+    let transformedData = inventoryWithPOData.map((item) => {
+      const mpnData = item.mpnId || {};
+      const mpnIdStr = String(item.mpnId?._id || "");
+
+      const balanceQty = Number(item.balanceQuantity || 0);
+      const incomingQty = Number(item.calculatedIncomingQty || 0);
+      const demandQty = demandMap.get(mpnIdStr) || 0;
+
+      const shortageQty = calcShortageQty(balanceQty, incomingQty, demandQty);
+
+      return {
+        _id: item._id,
+        mpnId: item.mpnId?._id,
+
+        MPN: mpnData.MPN || "N/A",
+        Manufacturer: mpnData.Manufacturer || "N/A",
+        Description: mpnData.Description || "N/A",
+        Storage: mpnData.StorageLocation || "-",
+        UOM: mpnData?.UOM?.code || "",
+
+        balanceQuantity: balanceQty,
+        IncomingQty: incomingQty,
+        DemandQty: demandQty,
+        ShortageQty: shortageQty,
+
+        IncomingPoNumber: item.incomingPONumbers?.length ? item.incomingPONumbers.join(", ") : "",
+        commitDate: item.earliestCommitDate ? new Date(item.earliestCommitDate).toLocaleDateString() : "",
+
+        Status: getInventoryStatusV2(balanceQty, incomingQty, demandQty),
+        purchaseData: item.purchaseData,
+      };
+    });
+
+    // ✅ optional view filters (quick)
+    if (view === "shortage") transformedData = transformedData.filter((x) => x.ShortageQty < 0);
+    if (view === "incoming") transformedData = transformedData.filter((x) => x.IncomingQty > 0);
+    if (view === "low") transformedData = transformedData.filter((x) => x.ShortageQty >= 0 && x.ShortageQty < 10);
+
+    return res.json({
+      success: true,
+      data: transformedData,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
+    });
+  } catch (error) {
+    console.error("Get Inventory List Error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) =>
+  Number(balanceQty || 0) + Number(incomingQty || 0) - Number(demandQty || 0);
+
+const getInventoryStatusV2 = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
+  const shortageQty = calcShortageQty(balanceQty, incomingQty, demandQty);
+  if (shortageQty < 0) return "Out of Stock";
+  if (shortageQty === 0 || shortageQty < 10) return "Low Stock";
+  return "In Stock";
+};
+
+
 
 // Helper function to determine inventory status
 const getInventoryStatus = (balanceQty, incomingQty) => {

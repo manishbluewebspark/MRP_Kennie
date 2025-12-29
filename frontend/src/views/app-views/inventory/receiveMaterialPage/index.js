@@ -42,7 +42,7 @@ const PurchaseOrdersReceivePage = () => {
 
     // ✅ Page load pe Pending POs fetch
     useEffect(() => {
-        dispatch(fetchPurchaseOrders({ status: ["Pending", "Partially Received"] }));
+        dispatch(fetchPurchaseOrders({ status: ["Emailed", "Partially Received"] }));
     }, [dispatch]);
 
     // 🔹 Card pe "Click to receive"
@@ -73,7 +73,7 @@ const PurchaseOrdersReceivePage = () => {
                 // PO list ko refresh karo (sirf Pending hi chahiye toh)
                 dispatch(
                     fetchPurchaseOrders({
-                        status: ["Pending", "Partially Received"],
+                        status: ["Emailed", "Partially Received"],
                     })
                 );
 

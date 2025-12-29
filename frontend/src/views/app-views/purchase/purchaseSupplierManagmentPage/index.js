@@ -62,12 +62,14 @@ const PurchaseSupplierManagementPage = () => {
 
   const columns = [
     {
-      title: "Company Name",
-      dataIndex: "companyName",
-      key: "companyName",
-      width: 200,
-      render: (text) => <strong>{text}</strong>,
-    },
+  title: "Company Name",
+  dataIndex: "companyName",
+  key: "companyName",
+  width: 200,
+  sorter: (a, b) =>
+    (a.companyName || "").localeCompare(b.companyName || ""),
+  render: (text) => <strong>{text}</strong>,
+},
     {
       title: "Contact Person",
       dataIndex: "contactPerson",
@@ -103,7 +105,7 @@ const PurchaseSupplierManagementPage = () => {
       render: (currency) => {
         // If currency is an object { code, symbol, name }
         if (currency && typeof currency === "object") {
-          return <Tag color="blue">{currency.symbol} - {currency.code}</Tag>;
+          return <Tag color="blue">{currency.symbol} {currency.name} - {currency.code}</Tag>;
         }
         return <Tag color="blue">{currency || "-"}</Tag>;
       },

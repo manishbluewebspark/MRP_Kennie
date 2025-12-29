@@ -27,9 +27,11 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
                 category: formData.Category,
                 note: formData.note,
                 status: formData.Status,
-                currency: `${formData.currency?.symbol} ${formData.currency?.code} - ${formData.currency?.name}  `
+                currency: formData?.currency
+                    ? `${formData.currency.symbol} ${formData.currency.code} - ${formData.currency.name}`
+                    : ""
             });
-            setSelectRFQUnitPriceCurrency(formData.currency?.symbol)
+            setSelectRFQUnitPriceCurrency(formData?.currency ? formData.currency?.symbol : "")
         } else {
             form.resetFields(); // Add case
         }

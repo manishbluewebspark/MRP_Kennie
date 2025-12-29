@@ -142,11 +142,15 @@ const MpnMasterList = () => {
             key: "StorageLocation",
         },
         {
-            title: "RFQ Unit Price",
-            dataIndex: "RFQUnitPrice",
-            key: "RFQUnitPrice",
-            sorter: (a, b) => (a.RFQUnitPrice || 0) - (b.RFQUnitPrice || 0),
-        },
+  title: "RFQ Unit Price",
+  dataIndex: "RFQUnitPrice",
+  key: "RFQUnitPrice",
+  sorter: (a, b) => (a.RFQUnitPrice || 0) - (b.RFQUnitPrice || 0),
+  render: (_, record) =>
+    record?.currency && record?.RFQUnitPrice != null
+      ? `${record.currency.symbol} ${record.RFQUnitPrice}`
+      : ""
+},
         {
             title: "MOQ",
             dataIndex: "MOQ",
@@ -284,9 +288,9 @@ const MpnMasterList = () => {
 
     useEffect(() => {
         fetchMpn();
-        dispatch(getAllUOMs());
-        dispatch(fetchSuppliers());
-        dispatch(getAllCategories());
+        dispatch(getAllUOMs({ limit: 5000 }));
+        dispatch(fetchSuppliers({ limit: 5000 }));
+        dispatch(getAllCategories({ limit: 5000 }));
         dispatch(getAllCurrencies());
     }, []);
 
@@ -497,7 +501,7 @@ const MpnMasterList = () => {
                 uoms={uoms}
                 suppliers={suppliers}
                 categories={categories}
-                  currencies={currencies}
+                currencies={currencies}
             />
 
             {/* Filter Modal */}

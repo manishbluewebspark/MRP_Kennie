@@ -365,7 +365,7 @@ const CableAssemblyCard = ({
               gap: 10,
             }}
           >
-            {stages.map((stage) => {
+            {stages.map((stage, index) => {
               const isActive = stage.key === activeKey;
               const { status } = stage;
 
@@ -374,6 +374,9 @@ const CableAssemblyCard = ({
               let textColor = "#555";
               let borderColor = 'white';
               let boxShadow = ''
+
+              const sequenceAllowed = index === 0 || stages.slice(0, index).every(s => s.status === "completed");
+              const canClick = sequenceAllowed && (status === "new" || status === "in_progress");
               // Completed = solid green (no blink)
               if (status === "completed") {
                 bg = "#2e7d32";       // dark green
@@ -395,7 +398,8 @@ const CableAssemblyCard = ({
                 boxShadow = 'rgba(185, 125, 53, 0.8) 0px 0px 9.97317px 0px'
               }
 
-              const canClick = status === "new" || status === "in_progress";
+
+
 
               return (
                 <Tooltip
@@ -813,6 +817,7 @@ const SkillLevelCostingList = () => {
         visible={modalVisible}
         onCancel={() => {
           setModalVisible(false);
+          fetchWorkOrdersData()
         }}
         onSave={handleSave}
         selectWorkOrderData={selectWorkOrderData}

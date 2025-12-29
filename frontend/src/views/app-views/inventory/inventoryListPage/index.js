@@ -1012,6 +1012,7 @@ const InventoryListPage = () => {
   const [showPoDataModal, setShowPoDataModal] = useState(false);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
   const [selectedPurchaseData, setSelectedPurchaseData] = useState(null);
+const [view, setView] = useState("all"); // all | incoming | shortage | low
 
   const { purchaseOrders } = useSelector((state) => state.purchaseOrders);
 
@@ -1029,6 +1030,7 @@ const InventoryListPage = () => {
         page: pagination.page,
         limit: pagination.limit,
         search,
+        view
       };
 
       const response = await InventoryService.getInventoryList(params);
@@ -1049,7 +1051,7 @@ const InventoryListPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search]);
+  }, [pagination.page, pagination.limit, search, view]);
 
   // ✅ Other tabs API (no pagination in UI, but still can use same keys)
   const getMaterialRequiredList = useCallback(async () => {
@@ -1344,13 +1346,21 @@ const InventoryListPage = () => {
     { title: "MPN", dataIndex: "MPN", key: "MPN", width: 120 },
     { title: "Manufacturer", dataIndex: "Manufacturer", key: "Manufacturer", width: 150 },
     { title: "Description", dataIndex: "Description", key: "Description", width: 180 },
-    {
-      title: "UOM",
-      dataIndex: "UOM",
-      key: "UOM",
-      width: 120,
-      render: (_, record) => <Text>{record?.UOM?.code || record?.UOM || ""}</Text>,
-    },
+   {
+  title: "UOM",
+  dataIndex: "UOM",
+  key: "UOM",
+  width: 120,
+  render: (_, record) => {
+    const uom = record?.UOM;
+
+    if (!uom) return <Text>-</Text>;
+    if (typeof uom === "string") return <Text>{uom}</Text>;
+    if (typeof uom === "object" && uom.code) return <Text>{uom.code}</Text>;
+
+    return <Text>-</Text>;
+  },
+},
     { title: "Storage", dataIndex: "Storage", key: "Storage", width: 100, align: "center" },
     { title: "Balance Qty", dataIndex: "balanceQuantity", key: "balanceQuantity", width: 120, align: "center" },
     {
@@ -1366,6 +1376,8 @@ const InventoryListPage = () => {
         </div>
       ),
     },
+    { title: "Demand Qty", dataIndex: "DemandQty", key: "DemandQty", width: 120, align: "center" },
+    { title: "Shortage Qty", dataIndex: "ShortageQty", key: "ShortageQty", width: 120, align: "center" },
     {
       title: "Status",
       dataIndex: "Status",
@@ -1401,6 +1413,30 @@ const InventoryListPage = () => {
     return inventoryListColumns;
   };
 
+const filterConfig = [
+  {
+    type: "select",
+    name: "view",                 // ✅ important: Form.Item expects `name`
+    label: "View",
+    placeholder: "Select filter",
+    options: [
+      { label: "All", value: "all" },
+      { label: "Show Shortage Only", value: "shortage" },
+      { label: "Show Incoming Qty Only", value: "incoming" },
+      { label: "Show Low Stock Only", value: "low" }, // optional
+    ],
+  },
+];
+
+
+const handleFilterSubmit = async (data) => {
+  setView(data?.view || "all");
+  setPagination((p) => ({ ...p, page: 1 })); // optional: reset to first page
+  setIsFilterModalOpen(false)
+};
+
+
+
   return (
     <div>
       {/* Header */}
@@ -1435,7 +1471,7 @@ const InventoryListPage = () => {
         }}
         showExport={true}
         onExport={handleExport}
-        showFilter={false}
+        showFilter={true}
         onFilter={() => setIsFilterModalOpen(true)}
         showExportPDF={false}
         showProductSetting={false}
@@ -1470,7 +1506,7 @@ const InventoryListPage = () => {
         />
       </Card>
 
-      <GlobalFilterModal visible={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} onSubmit={() => {}} filters={[]} title="Filters" />
+      <GlobalFilterModal visible={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} onSubmit={(data) => handleFilterSubmit(data)} filters={filterConfig} title="Filters" />
 
       <SelectPurchaseOrderModal
         visible={isPurchaseOrderModalOpen}

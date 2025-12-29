@@ -6,6 +6,9 @@ import { mapRowToSchemaforMPN } from "../../utils/mapRowToSchema.js";
 import Category from "../../models/Category.js";
 import Suppliers from "../../models/Suppliers.js";
 import UOM from "../../models/UOM.js";
+import mongoose from "mongoose"; // make sure this is imported where your controllers live
+import Currency from "../../models/Currency.js";
+import Inventory from "../../models/Inventory.js";
 
 const fieldMap = {
   "MPN": "MPN",
@@ -183,11 +186,6 @@ export const getMpnById = async (req, res) => {
 //   }
 // };
 
-import mongoose from "mongoose"; // make sure this is imported where your controllers live
-import Currency from "../../models/Currency.js";
-import Inventory from "../../models/Inventory.js";
-
-
 export const getAllMpn = async (req, res) => {
   try {
     let { page, limit, search = "", category, status } = req.query;
@@ -217,6 +215,7 @@ export const getAllMpn = async (req, res) => {
       .populate("UOM", "code")
       .populate("Supplier", "companyName")
       .populate("Category", "name")
+      .populate("currency", "name code symbol")
       .populate({
         path: "purchaseHistory.Supplier", // Populate Supplier in purchaseHistory array
         select: "companyName"

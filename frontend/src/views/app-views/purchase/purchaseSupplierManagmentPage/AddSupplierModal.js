@@ -153,6 +153,7 @@ const AddSupplierModal = ({ visible, onCancel, onCreate, onEdit, editData, isEdi
               rules={[{ required: true, message: 'Please select payment terms' }]}
             >
               <Select placeholder="Select" size="large">
+                <Option value="COD">COD</Option>
                 <Option value="Net 30">Net 30</Option>
                 <Option value="Net 15">Net 15</Option>
                 <Option value="Net 45">Net 45</Option>

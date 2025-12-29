@@ -188,7 +188,7 @@ const ChildPartLibrary = () => {
             }
 
             if (res?.success) {
-                message.success(res?.message || "MPN imported successfully!", 3);
+                message.success(res?.message || "MPN imported successfully!", 6);
             } else {
                 message.error(res?.message || "MPN import completed with errors!", 3);
             }

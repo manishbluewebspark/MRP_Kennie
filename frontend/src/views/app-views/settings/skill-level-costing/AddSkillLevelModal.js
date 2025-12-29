@@ -14,7 +14,11 @@ const AddSkillLevelModal = ({ visible, onCancel, onSubmit, formData, currencies 
 
   useEffect(() => {
     if (formData) {
-      form.setFieldsValue(formData);
+      form.setFieldsValue({
+      ...formData,
+      currencyType: formData?.currencyType?._id,
+      type:formData?.type?._id
+    });
     } else {
       form.resetFields();
     }
