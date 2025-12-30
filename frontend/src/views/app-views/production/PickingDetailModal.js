@@ -42,14 +42,17 @@ const PickingDetailModal = ({
     materials = [], // agar backend se aayega to yaha pass kar dena
 }) => {
 
- const normalize = (str = "") =>
-  str.toLowerCase().replace(/[\s_]+/g, "");
+    const normalize = (str = "") =>
+        str.toLowerCase().replace(/[\s_]+/g, "");
 
     const processStageData =
-  selectWorkOrderData?.processHistory?.find(
-    (r) =>
-      normalize(r.process) === normalize(stage)
-  ) || [];
+        selectWorkOrderData?.processHistory?.find(
+            (r) =>
+                normalize(r.process) === normalize(stage)
+        ) || [];
+
+
+        console.log('--------processStageData',processStageData)
 
     const getDrawingId = (workOrder) => {
         return (
@@ -69,6 +72,9 @@ const PickingDetailModal = ({
     const workQty = Number(wo.quantity || 0);
     useEffect(() => {
         if (!visible) return; // Run only when modal opened
+        form.resetFields();
+        setPickedQuantities({});
+  setStageQty(null);
 
         const drawingId = getDrawingId(selectWorkOrderData);
         console.log("FINAL DRAWING ID:", drawingId);
@@ -217,7 +223,7 @@ const PickingDetailModal = ({
                     typeKey: "Picking",
                     layout: "single",
                     labels: {
-                        single: `Picking Qty * (Max: ${wo.remainingPickingQty ?? workQty})`,
+                        single: `Picking Qty * (Max: ${wo.remainingPickingQty ?? workQty - processStageData?.qty})`,
                     },
                     helpers: {
                         single:
@@ -291,34 +297,34 @@ const PickingDetailModal = ({
         //     ),
         // },
         {
-  title: "Picked Qty",
-  dataIndex: "pickedQty",
-  key: "pickedQty",
-  width: 120,
-  render: (_, record) => {
-    // ✅ Only show input in Picking stage
-    if (stage?.toLowerCase() !== "picking") {
-      return record.pickedQty ?? "-";
-    }
+            title: "Picked Qty",
+            dataIndex: "pickedQty",
+            key: "pickedQty",
+            width: 120,
+            render: (_, record) => {
+                // ✅ Only show input in Picking stage
+                if (stage?.toLowerCase() !== "picking") {
+                    return record.pickedQty ?? "-";
+                }
 
-    return (
-      <InputNumber
-        min={0}
-        max={record.maxQty}
-        placeholder={`Max: ${record.maxQty}`}
-        style={{ width: "100%" }}
-        value={pickedQuantities[record.key]}
-        onChange={(value) =>
-          setPickedQuantities((prev) => ({
-            ...prev,
-            [record.key]: value,
-          }))
+                return (
+                    <InputNumber
+                        min={0}
+                        max={record.maxQty}
+                        placeholder={`Max: ${record.maxQty - processStageData?.qty * record?.quantity}`}
+                        style={{ width: "100%" }}
+                        value={pickedQuantities[record.key]}
+                        onChange={(value) =>
+                            setPickedQuantities((prev) => ({
+                                ...prev,
+                                [record.key]: value,
+                            }))
+                        }
+                    />
+                );
+            },
         }
-      />
-    );
-  },
-}
-,
+        ,
         {
             title: "Shortage",
             dataIndex: "shortage",
@@ -359,6 +365,7 @@ const PickingDetailModal = ({
                     <span>{stageConfig.modalTitle}</span>
                 </Space>
             }
+            destroyOnClose
             open={visible}
             onCancel={onCancel}
             width={1200}

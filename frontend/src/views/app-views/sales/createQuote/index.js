@@ -659,7 +659,7 @@ const CreateQuote = () => {
           columns={columns}
           dataSource={filteredData}
           rowKey={(record) => record._id || record.id} // 👈 IMPORTANT
-          rowSelection={rowSelection}
+          // rowSelection={rowSelection}
           pagination={{
             current: page,
             pageSize: limit,

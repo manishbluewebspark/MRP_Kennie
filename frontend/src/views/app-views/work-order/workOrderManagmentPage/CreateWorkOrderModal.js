@@ -652,7 +652,7 @@ const CreateWorkOrderModal = ({
   const fetchDrawings = async (params = {}) => {
     setLoading(true);
     try {
-      const response = await DrawingService.getAllDrawings(params);
+      const response = await DrawingService.getAllDrawings({...params,showOnlyQuoted:true});
       if (!response?.success) {
         message.error("Failed to fetch drawings");
         setAllRows([]);

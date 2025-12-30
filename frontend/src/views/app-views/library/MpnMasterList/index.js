@@ -140,11 +140,13 @@ const MpnMasterList = () => {
             title: "Storage Location",
             dataIndex: "StorageLocation",
             key: "StorageLocation",
+              ellipsis: true,
         },
         {
   title: "RFQ Unit Price",
   dataIndex: "RFQUnitPrice",
   key: "RFQUnitPrice",
+   ellipsis: true,
   sorter: (a, b) => (a.RFQUnitPrice || 0) - (b.RFQUnitPrice || 0),
   render: (_, record) =>
     record?.currency && record?.RFQUnitPrice != null
@@ -161,6 +163,7 @@ const MpnMasterList = () => {
             title: "RFQ Date",
             dataIndex: "RFQDate",
             key: "RFQDate",
+              ellipsis: true,
             render: (date) => formatDate(date),
             sorter: (a, b) => new Date(a.RFQDate) - new Date(b.RFQDate),
         },
@@ -174,6 +177,7 @@ const MpnMasterList = () => {
             title: "Lead Time (WK)",
             dataIndex: "LeadTime_WK",
             key: "LeadTime_WK",
+              ellipsis: true,
             sorter: (a, b) => (a.LeadTime_WK || 0) - (b.LeadTime_WK || 0),
         },
         {

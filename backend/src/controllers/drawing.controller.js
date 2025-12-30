@@ -237,7 +237,7 @@ export const getAllDrawings = async (req, res) => {
   try {
     let {
       page = 1, limit = 10, search = "", sortBy = "createdAt", sortOrder = "desc",
-      quoteStatus, quoteType, projectId, customerId, drawingDate, drawingRange,
+      quoteStatus, quoteType, projectId, customerId, drawingDate, drawingRange,showOnlyQuoted
     } = req.query;
 
     console.log('-------drawingDate', drawingDate)
@@ -253,6 +253,9 @@ export const getAllDrawings = async (req, res) => {
         { drawingNo: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
       ];
+    }
+    if(showOnlyQuoted){
+      matchStage.quotedDate = { $ne: null };
     }
     if (quoteStatus) matchStage.quoteStatus = quoteStatus;
     if (quoteType) matchStage.quoteType = quoteType;
