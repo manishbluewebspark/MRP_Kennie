@@ -39,7 +39,7 @@ const SkillLevelCostingList = () => {
 
   useEffect(() => {
     dispatch(getAllCurrencies());
-    dispatch(getAllUOMs())
+    dispatch(getAllUOMs({limit:3000}))
   }, [dispatch]);
 
 

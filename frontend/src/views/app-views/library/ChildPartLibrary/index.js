@@ -151,58 +151,70 @@ const ChildPartLibrary = () => {
 
         const apiBase = process.env.REACT_APP_API_URL?.replace(/\/$/, "");
         const fullUrl = `${apiBase}${fileUrl}`;
-
+        console.log('------missingMpnsFileUrl',fullUrl)
         // auto open / download
         window.open(fullUrl, "_blank");
     };
 
 
-    const handleMpnImport = async (file) => {
-        setImportExcel(true);
+ const handleMpnImport = async (file) => {
+  setImportExcel(true);
 
-        if (!file) {
-            setImportExcel(false);
-            message.error("Please select file");
-            return;
-        }
+  if (!file) {
+    setImportExcel(false);
+    message.error("Please select file");
+    return;
+  }
 
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
+  // ✅ user gesture time par tab open
+  const downloadWin = window.open("", "_blank");
 
-            const res = await LibraryService.importChild(formData);
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
 
-            // ✅ AUTO DOWNLOAD if missing MPN file exists
-            if (res?.missingMpnsFileUrl) {
-                autoDownloadMissingMpn(res.missingMpnsFileUrl);
+    const res = await LibraryService.importChild(formData);
 
-                message.warning({
-                    duration: 6,
-                    content: (
-                        <span>
-                            Missing MPN found: <b>{res.missingMpnCount}</b>.
-                            File downloaded automatically.
-                        </span>
-                    ),
-                });
-            }
+    if (res?.missingMpnsFileUrl) {
+      const apiBase = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
+      const fullUrl = `${apiBase}${res.missingMpnsFileUrl}`;
 
-            if (res?.success) {
-                message.success(res?.message || "MPN imported successfully!", 6);
-            } else {
-                message.error(res?.message || "MPN import completed with errors!", 3);
-            }
+      // ✅ now redirect already-open tab
+      if (downloadWin) {
+        downloadWin.location.href = fullUrl;
+      } else {
+        // fallback if blocked
+        window.location.href = fullUrl;
+      }
 
-            fetchChildParts();
-            setImportExcel(false);
-            return res;
-        } catch (err) {
-            setImportExcel(false);
-            console.error("Import failed:", err);
-            message.error(err?.response?.data?.message || "Import failed!");
-            throw err;
-        }
-    };
+      message.warning({
+        duration: 6,
+        content: (
+          <span>
+            Missing MPN found: <b>{res.missingMpnCount}</b>. File opened/downloaded.
+          </span>
+        ),
+      });
+    } else {
+      // ✅ if no file, close blank tab
+      if (downloadWin) downloadWin.close();
+    }
+
+    if (res?.success) message.success(res?.message || "MPN imported successfully!", 6);
+    else message.error(res?.message || "MPN import completed with errors!", 3);
+
+    fetchChildParts();
+    setImportExcel(false);
+    return res;
+  } catch (err) {
+    if (downloadWin) downloadWin.close();
+    setImportExcel(false);
+    console.error("Import failed:", err);
+    message.error(err?.response?.data?.message || "Import failed!");
+    throw err;
+  }
+};
+
 
 
     const fetchChildParts = async (params = {}) => {

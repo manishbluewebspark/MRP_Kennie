@@ -701,22 +701,33 @@ export const getInventoryList = async (req, res) => {
     const limitNum = Math.max(parseInt(limit) || 10, 1);
 
     const filter = {};
+    const isViewFiltered = view && view !== "all";
 
     // ✅ Search fix (MPNLibrary -> mpnIds -> Inventory filter)
     if (search && String(search).trim()) {
       const s = String(search).trim();
-      const mpnDocs = await MPNLibrary.find({
+
+      const mpnDocs = await MPN.find({
         $or: [
           { MPN: { $regex: s, $options: "i" } },
           { Description: { $regex: s, $options: "i" } },
           { Manufacturer: { $regex: s, $options: "i" } },
         ],
-      }).select("_id").lean();
+      })
+        .select("_id")
+        .lean();
 
       const mpnIds = mpnDocs.map((d) => d._id);
 
       if (!mpnIds.length) {
-        return res.json({ success: true, data: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 });
+        return res.json({
+          success: true,
+          data: [],
+          total: 0,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: 0,
+        });
       }
 
       filter.mpnId = { $in: mpnIds };
@@ -725,83 +736,121 @@ export const getInventoryList = async (req, res) => {
     // ✅ demand map (ONE TIME)
     const demandMap = await buildDemandMap();
 
-    const total = await Inventory.countDocuments(filter);
+    // ✅ total (base)
+    let total = 0;
 
-    const inventoryList = await Inventory.find(filter)
-      .populate({
-        path: "mpnId",
-        select: "MPN Description Manufacturer UOM StorageLocation",
-        model: "MPNLibrary",
-        populate: { path: "UOM", select: "code" },
+    // ✅ inventory fetch
+    let inventoryList = [];
+
+    if (!isViewFiltered) {
+      // ✅ FAST: normal pagination at DB level
+      total = await Inventory.countDocuments(filter);
+
+      inventoryList = await Inventory.find(filter)
+        .populate({
+          path: "mpnId",
+          select: "MPN Description Manufacturer UOM StorageLocation",
+          model: "MPNLibrary",
+          populate: { path: "UOM", select: "code" },
+        })
+        .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean();
+    } else {
+      // ✅ view filter case: total must match filtered data, so fetch all (search-filtered)
+      inventoryList = await Inventory.find(filter)
+        .populate({
+          path: "mpnId",
+          select: "MPN Description Manufacturer UOM StorageLocation",
+          model: "MPNLibrary",
+          populate: { path: "UOM", select: "code" },
+        })
+        .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
+        .lean();
+    }
+
+    // ✅ collect mpnIds from fetched list (page list OR full list)
+    const mpnIdsOnList = inventoryList
+      .map((x) => x?.mpnId?._id)
+      .filter(Boolean);
+
+    // ✅ one-time PO fetch for all mpnIds in this list
+    let pendingPOs = [];
+    if (mpnIdsOnList.length) {
+      pendingPOs = await PurchaseOrders.find({
+        status: { $in: ["Pending", "Approved", "Partially Received"] },
+        "items.mpn": { $in: mpnIdsOnList },
       })
-      .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean();
+        .select(
+          "poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt"
+        )
+        .populate("items.mpn", "MPN Description Manufacturer")
+        .populate("supplier", "name contactEmail phoneNumber")
+        .lean();
+    }
 
-    // ✅ PO calculation same as yours
-    const inventoryWithPOData = await Promise.all(
-      inventoryList.map(async (item) => {
-        try {
-          const pendingPOs = await PurchaseOrders.find({
-            "items.mpn": item.mpnId?._id,
-            status: { $in: ["Pending", "Approved", "Partially Received"] },
-          })
-            .select("poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt")
-            .populate("items.mpn", "MPN Description Manufacturer")
-            .populate("supplier", "name contactEmail phoneNumber")
-            .lean();
+    // ✅ build PO Map: mpnId -> summary
+    const poMap = new Map();
 
-          let totalIncomingQty = 0;
-          let incomingPONumbers = [];
-          let earliestCommitDate = null;
-          let purchaseData = [];
+    for (const po of pendingPOs) {
+      for (const it of po.items || []) {
+        const mid = String(it?.mpn?._id || it?.mpn || "");
+        if (!mid) continue;
 
-          pendingPOs.forEach((po) => {
-            po.items.forEach((poItem) => {
-              if (poItem.mpn && String(poItem.mpn._id) === String(item.mpnId?._id)) {
-                const remainingQty = Number(poItem.qty || 0) - Number(poItem.receivedQty || 0);
-                if (remainingQty > 0) {
-                  totalIncomingQty += remainingQty;
-                  incomingPONumbers.push(po.poNumber);
+        const remainingQty = Number(it.qty || 0) - Number(it.receivedQty || 0);
+        if (remainingQty <= 0) continue;
 
-                  if (poItem.commitDate) {
-                    const commitDate = new Date(poItem.commitDate);
-                    if (!earliestCommitDate || commitDate < earliestCommitDate) earliestCommitDate = commitDate;
-                  }
-
-                  purchaseData.push({
-                    poNumber: po.poNumber,
-                    supplier: po.supplier || { name: "N/A" },
-                    quantity: remainingQty,
-                    totalQuantity: poItem.qty,
-                    receivedQuantity: poItem.receivedQty || 0,
-                    needDate: poItem.needDate ? new Date(poItem.needDate).toLocaleDateString() : "N/A",
-                    committedDate: poItem.commitDate ? new Date(poItem.commitDate).toLocaleDateString() : "N/A",
-                    status: po.status,
-                    createdAt: po.createdAt,
-                    updatedAt: po.updatedAt,
-                    itemDescription: poItem.mpn?.Description || "N/A",
-                    itemManufacturer: poItem.mpn?.Manufacturer || "N/A",
-                  });
-                }
-              }
-            });
+        if (!poMap.has(mid)) {
+          poMap.set(mid, {
+            totalIncomingQty: 0,
+            incomingPONumbers: new Set(),
+            earliestCommitDate: null,
+            purchaseData: [],
           });
-
-          return {
-            ...item,
-            calculatedIncomingQty: totalIncomingQty,
-            incomingPONumbers: [...new Set(incomingPONumbers)],
-            earliestCommitDate,
-            purchaseData,
-          };
-        } catch (error) {
-          console.error(`Error processing MPN ${item.mpnId?.MPN}:`, error);
-          return { ...item, calculatedIncomingQty: 0, incomingPONumbers: [], earliestCommitDate: null, purchaseData: [] };
         }
-      })
-    );
+
+        const entry = poMap.get(mid);
+        entry.totalIncomingQty += remainingQty;
+        entry.incomingPONumbers.add(po.poNumber);
+
+        if (it.commitDate) {
+          const cd = new Date(it.commitDate);
+          if (!entry.earliestCommitDate || cd < entry.earliestCommitDate) {
+            entry.earliestCommitDate = cd;
+          }
+        }
+
+        entry.purchaseData.push({
+          poNumber: po.poNumber,
+          supplier: po.supplier || { name: "N/A" },
+          quantity: remainingQty,
+          totalQuantity: it.qty,
+          receivedQuantity: it.receivedQty || 0,
+          needDate: it.needDate ? new Date(it.needDate).toLocaleDateString() : "N/A",
+          committedDate: it.commitDate ? new Date(it.commitDate).toLocaleDateString() : "N/A",
+          status: po.status,
+          createdAt: po.createdAt,
+          updatedAt: po.updatedAt,
+          itemDescription: it.mpn?.Description || "N/A",
+          itemManufacturer: it.mpn?.Manufacturer || "N/A",
+        });
+      }
+    }
+
+    // ✅ attach PO map to each inventory item
+    const inventoryWithPOData = inventoryList.map((item) => {
+      const mid = String(item.mpnId?._id || "");
+      const p = poMap.get(mid);
+
+      return {
+        ...item,
+        calculatedIncomingQty: p?.totalIncomingQty || 0,
+        incomingPONumbers: p ? [...p.incomingPONumbers] : [],
+        earliestCommitDate: p?.earliestCommitDate || null,
+        purchaseData: p?.purchaseData || [],
+      };
+    });
 
     // ✅ transform + Demand + Shortage
     let transformedData = inventoryWithPOData.map((item) => {
@@ -837,10 +886,20 @@ export const getInventoryList = async (req, res) => {
       };
     });
 
-    // ✅ optional view filters (quick)
+    // ✅ view filters
     if (view === "shortage") transformedData = transformedData.filter((x) => x.ShortageQty < 0);
     if (view === "incoming") transformedData = transformedData.filter((x) => x.IncomingQty > 0);
     if (view === "low") transformedData = transformedData.filter((x) => x.ShortageQty >= 0 && x.ShortageQty < 10);
+
+    // ✅ FIX: total should match returned data set
+    if (isViewFiltered) {
+      total = transformedData.length;
+
+      // ✅ paginate AFTER filtering
+      const start = (pageNum - 1) * limitNum;
+      const end = start + limitNum;
+      transformedData = transformedData.slice(start, end);
+    }
 
     return res.json({
       success: true,
@@ -855,6 +914,7 @@ export const getInventoryList = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) =>
   Number(balanceQty || 0) + Number(incomingQty || 0) - Number(demandQty || 0);
@@ -1359,112 +1419,196 @@ export const exportExcel = async (req, res) => {
 
     console.log("Exporting inventory data to Excel...");
 
-    // Build filter
-    const filter = {};
+    const invFilter = {};
 
-    if (search) {
-      filter.$or = [
-        { MPN: { $regex: search, $options: "i" } },
-        { Description: { $regex: search, $options: "i" } },
-        { Manufacturer: { $regex: search, $options: "i" } }
-      ];
+    // ✅ Search should be on MPNLibrary, then filter Inventory by mpnId
+    if (search && String(search).trim()) {
+      const s = String(search).trim();
+
+      const mpnDocs = await MPN.find({
+        $or: [
+          { MPN: { $regex: s, $options: "i" } },
+          { Description: { $regex: s, $options: "i" } },
+          { Manufacturer: { $regex: s, $options: "i" } },
+        ],
+      })
+        .select("_id")
+        .lean();
+
+      const mpnIds = mpnDocs.map((d) => d._id);
+
+      if (!mpnIds.length) {
+        // ✅ empty export (no matches)
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.json_to_sheet([]);
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory List");
+        const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+        const fileName = `inventory-export-${Date.now()}.xlsx`;
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
+        return res.send(buffer);
+      }
+
+      invFilter.mpnId = { $in: mpnIds };
     }
 
-    // Get inventory data with population
-    const inventoryList = await Inventory.find(filter)
+    // ✅ demand map (ONE TIME)
+    const demandMap = await buildDemandMap();
+
+    // ✅ get inventory
+    const inventoryList = await Inventory.find(invFilter)
       .populate({
         path: "mpnId",
         select: "MPN Description Manufacturer UOM StorageLocation minStockLevel unitPrice",
-        model: "MPNLibrary"
+        model: "MPNLibrary",
+        populate: { path: "UOM", select: "code" },
       })
       .sort({ createdAt: -1 })
       .lean();
 
-    // Transform data for export with exact column names
+    // ✅ collect mpnIds for PO calculation
+    const mpnIds = inventoryList.map((x) => x?.mpnId?._id).filter(Boolean);
+
+    // ✅ fetch all pending POs for these mpnIds (single query)
+    let pendingPOs = [];
+    if (mpnIds.length) {
+      pendingPOs = await PurchaseOrders.find({
+        status: { $in: ["Pending", "Approved", "Partially Received"] },
+        "items.mpn": { $in: mpnIds },
+      })
+        .select("poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt")
+        .populate("items.mpn", "MPN Description Manufacturer")
+        .populate("supplier", "name contactEmail phoneNumber")
+        .lean();
+    }
+
+    // ✅ build PO map: mpnId -> incomingQty + poNumbers + earliestCommitDate
+    const poMap = new Map();
+
+    for (const po of pendingPOs) {
+      for (const it of po.items || []) {
+        const mid = String(it?.mpn?._id || it?.mpn || "");
+        if (!mid) continue;
+
+        const remaining = Number(it.qty || 0) - Number(it.receivedQty || 0);
+        if (remaining <= 0) continue;
+
+        if (!poMap.has(mid)) {
+          poMap.set(mid, {
+            incomingQty: 0,
+            poNumbers: new Set(),
+            earliestCommitDate: null,
+          });
+        }
+
+        const entry = poMap.get(mid);
+        entry.incomingQty += remaining;
+        entry.poNumbers.add(po.poNumber);
+
+        if (it.commitDate) {
+          const cd = new Date(it.commitDate);
+          if (!entry.earliestCommitDate || cd < entry.earliestCommitDate) entry.earliestCommitDate = cd;
+        }
+      }
+    }
+
+    // ✅ Transform data for Excel
     const exportData = inventoryList.map((item, index) => {
       const mpnData = item.mpnId || {};
+      const mpnIdStr = String(mpnData?._id || "");
 
-      const balanceQty = item.balanceQuantity || 0;
-      const unitPrice = mpnData.unitPrice || 0;
+      const balanceQty = Number(item.balanceQuantity || 0);
+      const incomingQty = Number(poMap.get(mpnIdStr)?.incomingQty || 0);
+      const demandQty = Number(demandMap.get(mpnIdStr) || 0);
+
+      const shortageQty = calcShortageQty(balanceQty, incomingQty, demandQty);
+      const status = getInventoryStatusV2(balanceQty, incomingQty, demandQty);
+
+      const poNumbers = poMap.get(mpnIdStr)?.poNumbers
+        ? [...poMap.get(mpnIdStr).poNumbers].join(", ")
+        : "";
+
+      const commitDate = poMap.get(mpnIdStr)?.earliestCommitDate
+        ? new Date(poMap.get(mpnIdStr).earliestCommitDate).toLocaleDateString()
+        : "";
+
+      const minStockLevel = Number(mpnData.minStockLevel || 0);
+      const unitPrice = Number(mpnData.unitPrice || 0);
       const totalValue = balanceQty * unitPrice;
-
-      // Calculate stock status
-      const minStockLevel = mpnData.minStockLevel || 0;
-      let stockStatus = "In Stock";
-      if (balanceQty <= 0) stockStatus = "Out of Stock";
-      else if (balanceQty < minStockLevel) stockStatus = "Low Stock";
-      else if (balanceQty < minStockLevel * 2) stockStatus = "Adequate";
-      else stockStatus = "Well Stocked";
 
       return {
         "Running No.": index + 1,
-        "MPN Number": mpnData.MPN || "N/A",
         "MPN": mpnData.MPN || "N/A",
         "Manufacturer": mpnData.Manufacturer || "N/A",
         "Description": mpnData.Description || "N/A",
-        "UOM": mpnData.UOM || "PCS",
-        "Storage Location": mpnData.StorageLocation || "Main Warehouse",
+        "UOM": mpnData?.UOM?.code || "PCS",
+        "Storage Location": mpnData.StorageLocation || "-",
+
         "Balance Qty": balanceQty,
-        "Incoming Qty": item.IncomingQty || 0,
+        "Incoming Qty": incomingQty,
+        "Demand Qty": demandQty,
+        "Shortage Qty": shortageQty,
+
+        "Incoming PO Numbers": poNumbers,
+        "Earliest Commit Date": commitDate,
+
         "Min Stock Level": minStockLevel,
-        "Unit Price": `$${unitPrice.toFixed(2)}`,
-        "Total Value": `$${totalValue.toFixed(2)}`,
-        "Stock Status": stockStatus
+        "Unit Price": unitPrice,
+        "Total Value": totalValue,
+
+        "Status": status,
       };
     });
 
-    // Create workbook
+    // ✅ Create workbook
     const workbook = XLSX.utils.book_new();
-
-    // Create worksheet
     const worksheet = XLSX.utils.json_to_sheet(exportData);
 
-    // Add worksheet to workbook
+    // ✅ set column widths
+    worksheet["!cols"] = [
+      { wch: 12 }, // Running No.
+      { wch: 18 }, // MPN
+      { wch: 22 }, // Manufacturer
+      { wch: 45 }, // Description
+      { wch: 8 },  // UOM
+      { wch: 18 }, // Storage
+
+      { wch: 12 }, // Balance
+      { wch: 12 }, // Incoming
+      { wch: 12 }, // Demand
+      { wch: 12 }, // Shortage
+
+      { wch: 35 }, // PO Numbers
+      { wch: 18 }, // Commit date
+
+      { wch: 15 }, // Min stock
+      { wch: 12 }, // Unit price
+      { wch: 15 }, // Total value
+
+      { wch: 14 }, // Status
+    ];
+
     XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory List");
 
-    // Set column widths
-    const colWidths = [
-      { wch: 12 }, // Running No.
-      { wch: 15 }, // MPN Number
-      { wch: 15 }, // MPN
-      { wch: 20 }, // Manufacturer
-      { wch: 40 }, // Description
-      { wch: 10 }, // UOM
-      { wch: 20 }, // Storage Location
-      { wch: 12 }, // Balance Qty
-      { wch: 12 }, // Incoming Qty
-      { wch: 15 }, // Min Stock Level
-      { wch: 12 }, // Unit Price
-      { wch: 15 }, // Total Value
-      { wch: 15 }  // Stock Status
-    ];
-    worksheet['!cols'] = colWidths;
+    // ✅ buffer
+    const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
-    // Generate buffer
-    const excelBuffer = XLSX.write(workbook, {
-      bookType: 'xlsx',
-      type: 'buffer'
-    });
-
-    // Set response headers
     const fileName = `inventory-export-${Date.now()}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-
-    // Send file
-    res.send(excelBuffer);
-
-    console.log(`Inventory data exported successfully. Total records: ${exportData.length}`);
-
+    console.log(`Inventory exported. Total records: ${exportData.length}`);
+    return res.send(excelBuffer);
   } catch (error) {
-    console.error('Export Excel Error:', error);
-    res.status(500).json({
+    console.error("Export Excel Error:", error);
+    return res.status(500).json({
       success: false,
-      message: error.message || 'Failed to export inventory data'
+      message: error.message || "Failed to export inventory data",
     });
   }
 };
+
 
 export const exportMaterialRequiredExcel = async (req, res) => {
   try {
@@ -1556,58 +1700,154 @@ export const exportInventoryListExcel = async (req, res) => {
   try {
     const { search = "" } = req.query;
 
-    const filter = {};
+    // ✅ Inventory filter (mpnId based)
+    const invFilter = {};
 
-    if (search) {
-      filter.$or = [
-        { MPN: { $regex: search, $options: "i" } },
-        { Description: { $regex: search, $options: "i" } },
-        { Manufacturer: { $regex: search, $options: "i" } }
-      ];
+    // ✅ Search should be on MPNLibrary then apply to Inventory by mpnId
+    if (search && String(search).trim()) {
+      const s = String(search).trim();
+
+      const mpnDocs = await MPN.find({
+        $or: [
+          { MPN: { $regex: s, $options: "i" } },
+          { Description: { $regex: s, $options: "i" } },
+          { Manufacturer: { $regex: s, $options: "i" } },
+        ],
+      })
+        .select("_id")
+        .lean();
+
+      const mpnIds = mpnDocs.map((d) => d._id);
+
+      if (!mpnIds.length) {
+        // ✅ return empty excel
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet([]);
+        XLSX.utils.book_append_sheet(wb, ws, "Inventory List");
+        const xlsBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+        res.setHeader("Content-Disposition", "attachment; filename=inventory-list.xlsx");
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        return res.end(xlsBuffer);
+      }
+
+      invFilter.mpnId = { $in: mpnIds };
     }
 
-    const inventoryList = await Inventory.find(filter)
+    // ✅ demand map once
+    const demandMap = await buildDemandMap();
+
+    // ✅ fetch inventory + populate UOM.code
+    const inventoryList = await Inventory.find(invFilter)
       .populate({
         path: "mpnId",
         select: "MPN Description Manufacturer UOM StorageLocation",
-        model: "MPNLibrary"
+        model: "MPNLibrary",
+        populate: { path: "UOM", select: "code" },
       })
+      .sort({ createdAt: -1 })
       .lean();
 
-    const excelData = inventoryList.map((item) => ({
-      "MPN": item.mpnId?.MPN || "N/A",
-      "Description": item.mpnId?.Description || "N/A",
-      "Manufacturer": item.mpnId?.Manufacturer || "N/A",
-      "UOM": item.mpnId?.UOM || "PCS",
-      "Storage Location": item.mpnId?.StorageLocation || "Main",
-      "Current Stock": item.balanceQuantity || 0,
-    }));
+    // ✅ mpnIds for PO incoming
+    const mpnIdsOnList = inventoryList.map((x) => x?.mpnId?._id).filter(Boolean);
+
+    // ✅ one PO query
+    let pendingPOs = [];
+    if (mpnIdsOnList.length) {
+      pendingPOs = await PurchaseOrders.find({
+        status: { $in: ["Pending", "Approved", "Partially Received"] },
+        "items.mpn": { $in: mpnIdsOnList },
+      })
+        .select("poNumber items.mpn items.qty items.receivedQty items.commitDate")
+        .lean();
+    }
+
+    // ✅ PO map: mpnId -> incomingQty + poNumbers + earliestCommitDate
+    const poMap = new Map();
+
+    for (const po of pendingPOs) {
+      for (const it of po.items || []) {
+        const mid = String(it?.mpn || "");
+        if (!mid) continue;
+
+        const remaining = Number(it.qty || 0) - Number(it.receivedQty || 0);
+        if (remaining <= 0) continue;
+
+        if (!poMap.has(mid)) {
+          poMap.set(mid, {
+            incomingQty: 0,
+            poNumbers: new Set(),
+            earliestCommitDate: null,
+          });
+        }
+
+        const entry = poMap.get(mid);
+        entry.incomingQty += remaining;
+        entry.poNumbers.add(po.poNumber);
+
+        if (it.commitDate) {
+          const cd = new Date(it.commitDate);
+          if (!entry.earliestCommitDate || cd < entry.earliestCommitDate) entry.earliestCommitDate = cd;
+        }
+      }
+    }
+
+    // ✅ excel rows
+    const excelData = inventoryList.map((item, idx) => {
+      const mpn = item.mpnId || {};
+      const mpnIdStr = String(mpn?._id || "");
+
+      const balanceQty = Number(item.balanceQuantity || 0);
+      const incomingQty = Number(poMap.get(mpnIdStr)?.incomingQty || 0);
+      const demandQty = Number(demandMap.get(mpnIdStr) || 0);
+
+      const shortageQty = calcShortageQty(balanceQty, incomingQty, demandQty);
+      const status = getInventoryStatusV2(balanceQty, incomingQty, demandQty);
+
+      const poNumbers = poMap.get(mpnIdStr)?.poNumbers ? [...poMap.get(mpnIdStr).poNumbers].join(", ") : "";
+      const commitDate = poMap.get(mpnIdStr)?.earliestCommitDate
+        ? new Date(poMap.get(mpnIdStr).earliestCommitDate).toLocaleDateString()
+        : "";
+
+      return {
+        "Running No.": idx + 1,
+        "MPN": mpn.MPN || "N/A",
+        "Description": mpn.Description || "N/A",
+        "Manufacturer": mpn.Manufacturer || "N/A",
+        "UOM": mpn?.UOM?.code || (typeof mpn.UOM === "string" ? mpn.UOM : "PCS"),
+        "Storage Location": mpn.StorageLocation || "Main",
+
+        "Balance Qty": balanceQty,
+        "Incoming Qty": incomingQty,
+        "Demand Qty": demandQty,
+        "Shortage Qty": shortageQty,
+        "Status": status,
+
+        "Incoming PO Numbers": poNumbers,
+        "Earliest Commit Date": commitDate,
+      };
+    });
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(excelData);
 
-    ws["!cols"] = Object.keys(excelData[0]).map((c) => ({
-      wch: Math.max(15, c.length + 2)
-    }));
+    // ✅ safe cols even when empty
+    const headers = excelData?.[0] ? Object.keys(excelData[0]) : [];
+    ws["!cols"] = headers.map((c) => ({ wch: Math.max(15, c.length + 2) }));
 
     XLSX.utils.book_append_sheet(wb, ws, "Inventory List");
     const xlsBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=inventory-list.xlsx"
-    );
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Disposition", `attachment; filename=inventory-list-${Date.now()}.xlsx`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
     return res.end(xlsBuffer);
   } catch (error) {
     console.error("exportInventoryListExcel Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 export const exportInventoryAlertsExcel = async (req, res) => {
   try {
