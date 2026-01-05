@@ -137,22 +137,31 @@ const MpnMasterList = () => {
             ellipsis: true,
         },
         {
+            title: "UOM",
+            dataIndex: "UOM",
+            key: "UOM",
+            render: (text) => renderBadge(text?.code, "uom"),
+            fixed: 'left',
+            width: 250,
+            ellipsis: true,
+        },
+        {
             title: "Storage Location",
             dataIndex: "StorageLocation",
             key: "StorageLocation",
-              ellipsis: true,
+            ellipsis: true,
         },
         {
-  title: "RFQ Unit Price",
-  dataIndex: "RFQUnitPrice",
-  key: "RFQUnitPrice",
-   ellipsis: true,
-  sorter: (a, b) => (a.RFQUnitPrice || 0) - (b.RFQUnitPrice || 0),
-  render: (_, record) =>
-    record?.currency && record?.RFQUnitPrice != null
-      ? `${record.currency.symbol} ${record.RFQUnitPrice}`
-      : ""
-},
+            title: "RFQ Unit Price",
+            dataIndex: "RFQUnitPrice",
+            key: "RFQUnitPrice",
+            ellipsis: true,
+            sorter: (a, b) => (a.RFQUnitPrice || 0) - (b.RFQUnitPrice || 0),
+            render: (_, record) =>
+                record?.currency && record?.RFQUnitPrice != null
+                    ? `${record.currency.symbol} ${record.RFQUnitPrice}`
+                    : ""
+        },
         {
             title: "MOQ",
             dataIndex: "MOQ",
@@ -163,7 +172,7 @@ const MpnMasterList = () => {
             title: "RFQ Date",
             dataIndex: "RFQDate",
             key: "RFQDate",
-              ellipsis: true,
+            ellipsis: true,
             render: (date) => formatDate(date),
             sorter: (a, b) => new Date(a.RFQDate) - new Date(b.RFQDate),
         },
@@ -177,14 +186,8 @@ const MpnMasterList = () => {
             title: "Lead Time (WK)",
             dataIndex: "LeadTime_WK",
             key: "LeadTime_WK",
-              ellipsis: true,
+            ellipsis: true,
             sorter: (a, b) => (a.LeadTime_WK || 0) - (b.LeadTime_WK || 0),
-        },
-        {
-            title: "UOM",
-            dataIndex: "UOM",
-            key: "UOM",
-            render: (text) => renderBadge(text?.code, "uom"),
         },
         {
             title: "Category",

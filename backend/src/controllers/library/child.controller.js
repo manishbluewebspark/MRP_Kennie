@@ -319,9 +319,12 @@ export const getChildById = async (req, res) => {
 //   }
 // };
 
+const escapeRegex = (s = "") => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const getAllChild = async (req, res) => {
   try {
-    const pageNum = Math.max(parseInt(req.query.page, 50) || 1, 1);
+    // ✅ FIX: radix must be 10
+    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 200);
 
     const { search = "", category, mpn, status } = req.query;
@@ -337,49 +340,51 @@ export const getAllChild = async (req, res) => {
       query.mpn = new mongoose.Types.ObjectId(mpn);
     }
     if (status && status !== "All") {
-      // exact case-insensitive via collation; if you want partial, use regex instead
       query.status = String(status);
     }
 
     if (search && String(search).trim()) {
-      const rx = new RegExp(String(search).trim(), "i");
+      const safe = escapeRegex(String(search).trim());
+      const rx = new RegExp(safe, "i");
 
-      // Child’s string fields only
+      // Child string fields
       orClauses.push(
         { ChildPartNo: { $regex: rx } },
         { description: { $regex: rx } },
-        { status: { $regex: rx } },
+        { status: { $regex: rx } }
       );
 
-      // Search MPN by its string code then filter by ids
+      // MPN search -> ids
       const matchedMpns = await MPN.find({ MPN: { $regex: rx } }, { _id: 1 }).lean();
       if (matchedMpns.length) {
-        orClauses.push({ mpn: { $in: matchedMpns.map(m => m._id) } });
+        orClauses.push({ mpn: { $in: matchedMpns.map((m) => m._id) } });
       }
 
-      // Search Category by name only if the model exists
-      const CategoryModel = mongoose.models.Category; // <- safe lookup
+      // Category name search -> ids
+      const CategoryModel = mongoose.models.Category;
       if (CategoryModel) {
         const matchedCats = await CategoryModel.find({ name: { $regex: rx } }, { _id: 1 }).lean();
         if (matchedCats.length) {
-          orClauses.push({ LinkedMPNCategory: { $in: matchedCats.map(c => c._id) } });
+          orClauses.push({ LinkedMPNCategory: { $in: matchedCats.map((c) => c._id) } });
         }
-      } else {
-        // Optional: log once so you remember to register/import the model
-        // console.warn("Category model not registered here; skipping category-name search.");
       }
     }
 
     if (orClauses.length) query.$or = orClauses;
 
-    const total = await Child.countDocuments(query).collation(collation);
+    // ✅ total
+    const total = await Child.countDocuments(query);
+
+    // ✅ if page too high (after filters/search), clamp to last page
+    const totalPages = Math.max(Math.ceil(total / limitNum), 1);
+    const safePage = Math.min(pageNum, totalPages);
 
     const children = await Child.find(query)
       .collation(collation)
       .populate("mpn")
       .populate("LinkedMPNCategory", "name")
       .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
+      .skip((safePage - 1) * limitNum)
       .limit(limitNum)
       .lean();
 
@@ -388,9 +393,11 @@ export const getAllChild = async (req, res) => {
       data: children,
       pagination: {
         total,
-        page: pageNum,
+        page: safePage,         // ✅ important: return clamped page
         limit: limitNum,
-        totalPages: Math.ceil(total / limitNum),
+        totalPages,
+        hasNextPage: safePage < totalPages,
+        hasPrevPage: safePage > 1,
       },
     });
   } catch (err) {
@@ -398,6 +405,7 @@ export const getAllChild = async (req, res) => {
     return res.status(400).json({ success: false, message: err.message });
   }
 };
+
 
 /**
  * Import Child data

@@ -42,16 +42,31 @@ export const getPurchaseSettingById = async (req, res) => {
  */
 export const addOrUpdatePurchaseSetting = async (req, res) => {
   try {
-    const { addresses, defaultTerms, status } = req.body;
+    const { addresses, defaultTerms, status,paymentTerms, incoterms } = req.body;
 
     // Fetch the first (and only) existing document
     let existing = await PurchaseSettings.findOne();
+
+    const cleanStringArray = (arr) => {
+      if (!Array.isArray(arr)) return undefined;
+      return arr
+        .map((x) => String(x || "").trim())
+        .filter((x) => x.length > 0);
+    };
+
+    const cleanedPaymentTerms = cleanStringArray(paymentTerms);
+    const cleanedIncoterms = cleanStringArray(incoterms);
+
 
     if (existing) {
       // Update existing
       existing.addresses = addresses || existing.addresses;
       existing.defaultTerms = defaultTerms || existing.defaultTerms;
       existing.status = status || existing.status;
+
+            if (cleanedPaymentTerms !== undefined) existing.paymentTerms = cleanedPaymentTerms;
+      if (cleanedIncoterms !== undefined) existing.incoterms = cleanedIncoterms;
+
       await existing.save();
 
       return res.status(200).json({
@@ -65,6 +80,8 @@ export const addOrUpdatePurchaseSetting = async (req, res) => {
         addresses,
         defaultTerms,
         status: status || "Active",
+        paymentTerms: cleanedPaymentTerms || [], // ✅ array
+        incoterms: cleanedIncoterms || [],
       });
 
       return res.status(201).json({

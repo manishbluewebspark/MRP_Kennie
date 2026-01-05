@@ -12,6 +12,8 @@ const PurchaseSettingsSchema = new Schema(
     addresses: { type: [AddressSchema], default: [] }, // multiple addresses
     defaultTerms: { type: String, default: "" }, // default terms & conditions
     status: { type: String, enum: ["active", "inactive"], default: "active" },
+    paymentTerms: { type: [String], default: [] },
+incoterms: { type: [String], default: [] },
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }

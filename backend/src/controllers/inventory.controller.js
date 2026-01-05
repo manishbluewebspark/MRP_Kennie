@@ -853,15 +853,23 @@ export const getInventoryList = async (req, res) => {
     });
 
     // ✅ transform + Demand + Shortage
+    // ✅ transform + Demand + Shortage
     let transformedData = inventoryWithPOData.map((item) => {
       const mpnData = item.mpnId || {};
       const mpnIdStr = String(item.mpnId?._id || "");
 
-      const balanceQty = Number(item.balanceQuantity || 0);
-      const incomingQty = Number(item.calculatedIncomingQty || 0);
-      const demandQty = demandMap.get(mpnIdStr) || 0;
+      const balanceQty = toNum(item.balanceQuantity);
+      const incomingQty = toNum(item.calculatedIncomingQty);
+      const demandQty = toNum(demandMap.get(mpnIdStr) || 0);
 
-      const shortageQty = calcShortageQty(balanceQty, incomingQty, demandQty);
+      // ✅ raw net (for internal / analytics)
+      const netQty = calcNetQty(balanceQty, incomingQty, demandQty);
+
+      // ✅ shortage shown to purchaser (only negative else 0)
+      const shortageQty = netQty < 0 ? netQty : 0;
+
+      // ✅ optional: surplus (if you want)
+      const surplusQty = netQty > 0 ? netQty : 0;
 
       return {
         _id: item._id,
@@ -876,20 +884,26 @@ export const getInventoryList = async (req, res) => {
         balanceQuantity: balanceQty,
         IncomingQty: incomingQty,
         DemandQty: demandQty,
-        ShortageQty: shortageQty,
+
+        // ✅ IMPORTANT:
+        NetQty: netQty,              // raw balance+incoming-demand
+        ShortageQty: shortageQty,    // display/alert qty (negative or 0)
+        SurplusQty: surplusQty,      // optional
 
         IncomingPoNumber: item.incomingPONumbers?.length ? item.incomingPONumbers.join(", ") : "",
         commitDate: item.earliestCommitDate ? new Date(item.earliestCommitDate).toLocaleDateString() : "",
 
-        Status: getInventoryStatusV2(balanceQty, incomingQty, demandQty),
+        Status: netQty < 0 ? "Out of Stock" : "Low Stock",
         purchaseData: item.purchaseData,
       };
     });
 
+
     // ✅ view filters
-    if (view === "shortage") transformedData = transformedData.filter((x) => x.ShortageQty < 0);
+    if (view === "shortage") transformedData = transformedData.filter((x) => x.NetQty < 0);   // negative only
     if (view === "incoming") transformedData = transformedData.filter((x) => x.IncomingQty > 0);
-    if (view === "low") transformedData = transformedData.filter((x) => x.ShortageQty >= 0 && x.ShortageQty < 10);
+    if (view === "low") transformedData = transformedData.filter((x) => x.NetQty >= 0);      // zero or positive
+
 
     // ✅ FIX: total should match returned data set
     if (isViewFiltered) {
@@ -916,15 +930,24 @@ export const getInventoryList = async (req, res) => {
 };
 
 
-const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) =>
-  Number(balanceQty || 0) + Number(incomingQty || 0) - Number(demandQty || 0);
+const toNum = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const calcNetQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) =>
+  toNum(balanceQty) + toNum(incomingQty) - toNum(demandQty);
+
+const calcShortageAlertQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
+  const net = calcNetQty(balanceQty, incomingQty, demandQty);
+  return net < 0 ? net : 0; // ✅ key fix
+};
 
 const getInventoryStatusV2 = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
-  const shortageQty = calcShortageQty(balanceQty, incomingQty, demandQty);
-  if (shortageQty < 0) return "Out of Stock";
-  if (shortageQty === 0 || shortageQty < 10) return "Low Stock";
-  return "In Stock";
+  const shortage = calcShortageAlertQty(balanceQty, incomingQty, demandQty);
+  return shortage < 0 ? "Out of Stock" : "Low Stock";
 };
+
 
 
 
@@ -1090,10 +1113,10 @@ export const getLowStockAlerts = async (req, res) => {
 
     // ✅ 0) Load system thresholds (fallback values)
     const settings = await SystemSettings.findOne({}).lean();
-    console.log('-----settings',settings?.inventoryAlerts)
+    console.log('-----settings', settings?.inventoryAlerts)
     const criticalWeeksLeft = settings?.inventoryAlerts?.criticalWeeksLeft ?? 2;
-    const urgentWeeksLeft   = settings?.inventoryAlerts?.urgentWeeksLeft ?? 3;
-    const normalWeeksLeft   = settings?.inventoryAlerts?.normalWeeksLeft ?? 6;
+    const urgentWeeksLeft = settings?.inventoryAlerts?.urgentWeeksLeft ?? 3;
+    const normalWeeksLeft = settings?.inventoryAlerts?.normalWeeksLeft ?? 6;
 
     // ✅ 1) MPN search filter
     const mpnFilter = {};
@@ -1153,7 +1176,7 @@ export const getLowStockAlerts = async (req, res) => {
         // earliest need date
         const earliestNeedDate = workOrders
           .map(w => new Date(w.needDate))
-          .sort((a,b) => a - b)[0];
+          .sort((a, b) => a - b)[0];
 
         const weeksLeft = weeksBetween(now, earliestNeedDate); // negative means already overdue
 
@@ -2184,7 +2207,7 @@ export const getCompleteDrawingsMTO = async (req, res) => {
           projects: new Set(),
           customers: new Set(),
           doNumbers: new Set(), // ✅ add
-          completeDates:[]
+          completeDates: []
         };
       }
 
@@ -2193,9 +2216,9 @@ export const getCompleteDrawingsMTO = async (req, res) => {
       agg.totalQty += qty;
       agg.workOrders.add(wo.workOrderNo);
 
-        if (wo.completeDate) {
-    agg.completeDates.push(new Date(wo.completeDate));
-  }
+      if (wo.completeDate) {
+        agg.completeDates.push(new Date(wo.completeDate));
+      }
 
 
       if (projInfo?.projectName) {
@@ -2231,10 +2254,10 @@ export const getCompleteDrawingsMTO = async (req, res) => {
           ? Number(((agg.completedQty / agg.totalQty) * 100).toFixed(1))
           : 0;
 
-           const completeDate =
-    agg.completeDates.length > 0
-      ? new Date(Math.max(...agg.completeDates.map(d => d.getTime())))
-      : null;
+      const completeDate =
+        agg.completeDates.length > 0
+          ? new Date(Math.max(...agg.completeDates.map(d => d.getTime())))
+          : null;
 
 
       return {

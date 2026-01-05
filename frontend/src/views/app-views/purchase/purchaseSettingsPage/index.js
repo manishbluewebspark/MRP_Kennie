@@ -9,6 +9,7 @@ import {
   Divider,
   message,
   Spin,
+  Select,
 } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -42,6 +43,8 @@ const SettingsPage = () => {
     defaultTerms:
       '',
     status: 'active',
+    paymentTerms: [""],   // ✅ new
+    incoterms: [""],
   };
 
   // 🔹 Fetch existing settings
@@ -59,13 +62,16 @@ const SettingsPage = () => {
           name: addr.name,
           fullAddress: addr.fullAddress,
         })),
-        defaultTerms: setting.defaultTerms || '',
-        status: setting.status || 'active',
+        defaultTerms: setting.defaultTerms || "",
+        paymentTerms: Array.isArray(setting.paymentTerms) && setting.paymentTerms.length ? setting.paymentTerms : [""], // ✅
+        incoterms: Array.isArray(setting.incoterms) && setting.incoterms.length ? setting.incoterms : [""],           // ✅
+        status: setting.status || "active",
       });
     } else {
       form.setFieldsValue(defaultValues);
     }
   }, [purchaseSettings, form]);
+
 
   // 🔹 Handle backend success/error
   useEffect(() => {
@@ -88,11 +94,14 @@ const SettingsPage = () => {
           ...addr,
           id: addr.id || Date.now() + index,
         })),
+        paymentTerms: (values.paymentTerms || []).map(s => String(s || "").trim()).filter(Boolean),
+        incoterms: (values.incoterms || []).map(s => String(s || "").trim()).filter(Boolean),
       };
+
       await dispatch(addOrUpdatePurchaseSetting(processedValues)).unwrap();
-      message.success('Settings saved successfully');
+      message.success("Settings saved successfully");
     } catch (err) {
-      console.error('Save failed:', err);
+      console.error("Save failed:", err);
     }
   };
 
@@ -324,26 +333,145 @@ const SettingsPage = () => {
               />
             </Form.Item>
 
-            <Divider />
 
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <Button size="small" onClick={onReset}>
-                Reset to Defaults
-              </Button>
+          </Card>
+
+         <Card
+  style={{ marginBottom: 24, borderRadius: 8, border: "1px solid #d9d9d9" }}
+  bodyStyle={{ padding: 20 }}
+>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+    <div>
+      <Title level={5} style={{ margin: 0 }}>Payment Terms</Title>
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        Type and press Enter (e.g., Net 30, Advance, COD).
+      </Text>
+    </div>
+    <Text type="secondary" style={{ fontSize: 12 }}>
+      Max 50
+    </Text>
+  </div>
+
+  <Form.Item
+    name="paymentTerms"
+    style={{ marginTop: 12, marginBottom: 0 }}
+    rules={[
+      {
+        validator: (_, v) => {
+          if (!v || v.length === 0) return Promise.reject(new Error("Add at least 1 payment term"));
+          if (v.length > 50) return Promise.reject(new Error("Max 50 terms allowed"));
+          return Promise.resolve();
+        },
+      },
+    ]}
+  >
+    <Select
+      mode="tags"
+      tokenSeparators={[","]}
+      placeholder="Type term and press Enter"
+      size="middle"
+      maxTagCount="responsive"
+      style={{ width: "100%" }}
+      onChange={(vals) => {
+        // ✅ keep clean + unique + limit
+        const cleaned = Array.from(
+          new Set((vals || []).map(x => String(x || "").trim()).filter(Boolean))
+        ).slice(0, 50);
+        form.setFieldsValue({ paymentTerms: cleaned });
+      }}
+      options={[
+        { value: "Advance" },
+        { value: "Net 15" },
+        { value: "Net 30" },
+        { value: "Net 45" },
+        { value: "Net 60" },
+        { value: "COD" },
+        { value: "CAD" },
+        { value: "LC" },
+        { value: "Open Account" },
+      ]}
+    />
+  </Form.Item>
+</Card>
+
+<Card
+  style={{ marginBottom: 24, borderRadius: 8, border: "1px solid #d9d9d9" }}
+  bodyStyle={{ padding: 20 }}
+>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+    <div>
+      <Title level={5} style={{ margin: 0 }}>Incoterms</Title>
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        Type and press Enter (e.g., EXW, FOB, CIF, DDP).
+      </Text>
+    </div>
+    <Text type="secondary" style={{ fontSize: 12 }}>
+      Max 30
+    </Text>
+  </div>
+
+  <Form.Item
+    name="incoterms"
+    style={{ marginTop: 12, marginBottom: 0 }}
+    rules={[
+      {
+        validator: (_, v) => {
+          if (!v || v.length === 0) return Promise.reject(new Error("Add at least 1 incoterm"));
+          if (v.length > 30) return Promise.reject(new Error("Max 30 incoterms allowed"));
+          return Promise.resolve();
+        },
+      },
+    ]}
+  >
+    <Select
+      mode="tags"
+      tokenSeparators={[",", " "]}
+      placeholder="Type incoterm and press Enter"
+      size="middle"
+      maxTagCount="responsive"
+      style={{ width: "100%" }}
+      onChange={(vals) => {
+        const cleaned = Array.from(
+          new Set((vals || []).map(x => String(x || "").trim().toUpperCase()).filter(Boolean))
+        ).slice(0, 30);
+        form.setFieldsValue({ incoterms: cleaned });
+      }}
+      options={[
+        { value: "EXW" },
+        { value: "FCA" },
+        { value: "CPT" },
+        { value: "CIP" },
+        { value: "DAP" },
+        { value: "DPU" },
+        { value: "DDP" },
+        { value: "FAS" },
+        { value: "FOB" },
+        { value: "CFR" },
+        { value: "CIF" },
+      ]}
+    />
+  </Form.Item>
+</Card>
+
+
+
+          <div
+            style={{
+              position: "sticky",
+              bottom: 0,
+              background: "#fff",
+              padding: "12px 0",
+              borderTop: "1px solid #f0f0f0",
+              marginTop: 16,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <Button onClick={onReset}>Reset to Defaults</Button>
 
               <Space>
-                <Button size="small" onClick={onCancel}>
-                  Cancel
-                </Button>
+                <Button onClick={onCancel}>Cancel</Button>
                 <Button
                   type="primary"
-                  size="small"
                   onClick={() => form.submit()}
                   loading={loading}
                 >
@@ -351,7 +479,11 @@ const SettingsPage = () => {
                 </Button>
               </Space>
             </div>
-          </Card>
+          </div>
+
+
+
+
         </Form>
       </Card>
     </div>

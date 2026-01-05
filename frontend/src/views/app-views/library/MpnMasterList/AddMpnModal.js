@@ -11,31 +11,63 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
     const [form] = Form.useForm();
     const [selectRFQUnitPriceCurrency, setSelectRFQUnitPriceCurrency] = useState()
     // Prefill form for Edit
+    // useEffect(() => {
+    //     if (formData) {
+    //         form.setFieldsValue({
+    //             mpn: formData.MPN,
+    //             manufacture: formData.Manufacturer,
+    //             uom: formData.UOM,
+    //             description: formData.Description,
+    //             storageLocation: formData.StorageLocation,
+    //             rfq: formData.RFQUnitPrice,
+    //             moq: formData.MOQ,
+    //             rfqDate: formData.RFQDate ? dayjs(formData.RFQDate) : null,
+    //             supplier: formData.Supplier,
+    //             leadTime: formData.LeadTime_WK,
+    //             category: formData.Category,
+    //             note: formData.note,
+    //             status: formData.Status,
+    //             currency: formData?.currency
+    //                 ? `${formData.currency.symbol} ${formData.currency.code} - ${formData.currency.name}`
+    //                 : ""
+    //         });
+    //         setSelectRFQUnitPriceCurrency(formData?.currency ? formData.currency?.symbol : "")
+    //     } else {
+    //         form.resetFields(); // Add case
+    //     }
+    // }, [formData, form]);
+
     useEffect(() => {
-        if (formData) {
-            form.setFieldsValue({
-                mpn: formData.MPN,
-                manufacture: formData.Manufacturer,
-                uom: formData.UOM,
-                description: formData.Description,
-                storageLocation: formData.StorageLocation,
-                rfq: formData.RFQUnitPrice,
-                moq: formData.MOQ,
-                rfqDate: formData.RFQDate ? dayjs(formData.RFQDate) : null,
-                supplier: formData.Supplier,
-                leadTime: formData.LeadTime_WK,
-                category: formData.Category,
-                note: formData.note,
-                status: formData.Status,
-                currency: formData?.currency
-                    ? `${formData.currency.symbol} ${formData.currency.code} - ${formData.currency.name}`
-                    : ""
-            });
-            setSelectRFQUnitPriceCurrency(formData?.currency ? formData.currency?.symbol : "")
-        } else {
-            form.resetFields(); // Add case
-        }
-    }, [formData, form]);
+  if (formData) {
+    form.setFieldsValue({
+      mpn: formData.MPN || "",
+      manufacture: formData.Manufacturer ? [formData.Manufacturer] : [], // ✅ array for tags
+      uom: formData?.UOM?._id || formData.UOM || null,                   // ✅ if populated
+      description: formData.Description || "",
+      storageLocation: formData.StorageLocation || "",
+      rfq: formData.RFQUnitPrice ?? "",
+      moq: formData.MOQ ?? null,
+      rfqDate: formData.RFQDate ? dayjs(formData.RFQDate) : null,
+      supplier: formData?.Supplier?._id || formData.Supplier || null,    // ✅ if populated
+      leadTime: formData.LeadTime_WK ?? null,
+      category: formData?.Category?._id || formData.Category || null,    // ✅ if populated
+
+      note: formData.note || "",
+      status: formData.Status || "Active",
+
+      // ✅ currency select expects _id
+      currency: formData?.currency?._id || formData?.currency || null,
+    });
+
+    // ✅ show symbol in addonAfter
+    const c = formData?.currency;
+    setSelectRFQUnitPriceCurrency(c?.symbol || "");
+  } else {
+    form.resetFields();
+    setSelectRFQUnitPriceCurrency("");
+  }
+}, [formData, form]);
+
 
     const handleOk = () => {
         form.validateFields().then(values => {

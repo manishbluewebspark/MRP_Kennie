@@ -6,17 +6,22 @@ import AddSupplierModal from "./AddSupplierModal";
 import { fetchSuppliers, addSupplier, updateSupplier, deleteSupplier } from "store/slices/supplierSlice";
 import { getAllCurrencies } from "store/slices/currencySlice";
 import ActionButtons from "components/ActionButtons";
+import { getAllPurchaseSettings } from "store/slices/purchaseSettingSlice";
 
 const PurchaseSupplierManagementPage = () => {
   const dispatch = useDispatch();
   const { suppliers, loading } = useSelector(state => state.suppliers);
+  const {purchaseSettings}  = useSelector(state => state.purchaseSettings)
   const { currencies } = useSelector((state) => state.currency);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [gstApplicable, setGstApplicable] = useState(false);
+
+
   useEffect(() => {
     dispatch(fetchSuppliers());
     dispatch(getAllCurrencies());
+    dispatch(getAllPurchaseSettings())
   }, [dispatch]);
 
   const handleCreate = async (data) => {
@@ -179,6 +184,7 @@ const PurchaseSupplierManagementPage = () => {
         currencies={currencies}
         setGstApplicable={setGstApplicable}
         gstApplicable={gstApplicable}
+        purchaseSettings={purchaseSettings}
       />
     </div>
   );

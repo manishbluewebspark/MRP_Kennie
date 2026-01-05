@@ -4,7 +4,7 @@ import { Modal, Form, Input, Select, Checkbox, Button, Row, Col, Space, message 
 const { Option } = Select;
 const { TextArea } = Input;
 
-const AddSupplierModal = ({ visible, onCancel, onCreate, onEdit, editData, isEdit, currencies = [],setGstApplicable, gstApplicable }) => {
+const AddSupplierModal = ({ visible, onCancel, onCreate, onEdit, editData, isEdit, currencies = [], setGstApplicable, gstApplicable, purchaseSettings = [] }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -150,32 +150,41 @@ const AddSupplierModal = ({ visible, onCancel, onCreate, onEdit, editData, isEdi
             <Form.Item
               label="Payment Terms"
               name="paymentTerms"
-              rules={[{ required: true, message: 'Please select payment terms' }]}
+              rules={[{ required: true, message: "Please select payment terms" }]}
             >
-              <Select placeholder="Select" size="large">
-                <Option value="COD">COD</Option>
-                <Option value="Net 30">Net 30</Option>
-                <Option value="Net 15">Net 15</Option>
-                <Option value="Net 45">Net 45</Option>
-                <Option value="Net 60">Net 60</Option>
-                <Option value="Due on receipt">Due on receipt</Option>
+              <Select
+                placeholder="Select payment terms"
+                size="large"
+                allowClear
+              >
+                {(purchaseSettings?.[0]?.paymentTerms || []).map((term) => (
+                  <Select.Option key={term} value={term}>
+                    {term}
+                  </Select.Option>
+                ))}
               </Select>
             </Form.Item>
+
           </Col>
           <Col span={12}>
             <Form.Item
               label="Incoterms"
               name="incoTerms"
-              rules={[{ required: true, message: 'Please select incoterms' }]}
+              rules={[{ required: true, message: "Please select incoterms" }]}
             >
-              <Select placeholder="Select" size="large">
-                <Option value="DAP">DAP (Delivered at Place)</Option>
-                <Option value="EXW">EXW (Ex Works)</Option>
-                <Option value="FOB">FOB (Free on Board)</Option>
-                <Option value="CIF">CIF (Cost, Insurance and Freight)</Option>
-                <Option value="DDP">DDP (Delivered Duty Paid)</Option>
+              <Select
+                placeholder="Select incoterms"
+                size="large"
+                allowClear
+              >
+                {(purchaseSettings?.[0]?.incoterms || []).map((term) => (
+                  <Select.Option key={term} value={term}>
+                    {term}
+                  </Select.Option>
+                ))}
               </Select>
             </Form.Item>
+
           </Col>
         </Row>
 
