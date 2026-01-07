@@ -557,12 +557,14 @@ const CreateQuote = () => {
 
 
   const handleCustomerSelect = async (customer) => {
+    console.log('--------cucc',customer)
     setShowAddModal(false);
     setSelectedCustomer(customer);
     setIsQuoteModalOpen(true);
 
     try {
       const res = await DrawingService.getAllDrawings({ customerId: customer._id });
+      console.log('------res',res)
       setCustomerDrawings(res.data);
     } catch (err) { console.error(err); }
   };

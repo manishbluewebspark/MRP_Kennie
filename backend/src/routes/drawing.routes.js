@@ -15,6 +15,7 @@ import {
   duplicateDrawing,
   importCostingItems,
   updateLatestPrice,
+  updateLatestPriceBulk,
 } from "../controllers/drawing.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { upload } from "..//middlewares/upload.js";
@@ -39,5 +40,5 @@ router.get("/:drawingId/costing",authenticate, getAllCostingItems);
 router.delete("/:drawingId/costing/:itemId",authenticate, deleteCostingItem);
 router.post("/:drawingId/costing/import",authenticate,upload.single("file"), importCostingItems);
 router.put("/costing/:id/latest-price", authenticate, updateLatestPrice);
-
+router.put("/costing/latest-price/bulk", authenticate, updateLatestPriceBulk);
 export default router;

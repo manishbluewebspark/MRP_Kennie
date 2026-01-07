@@ -13,6 +13,9 @@ LibraryService.addMpn = (data) =>
 LibraryService.updateMpn = (id, data) =>
   fetch({ url: `/library/mpn/${id}`, method: "put", data });
 
+LibraryService.deleteMPNsBulk = (data) =>
+  fetch({ url: `/library/mpn/bulk`, method: "delete",data });
+
 LibraryService.deleteMpn = (id) =>
   fetch({ url: `/library/mpn/${id}`, method: "delete" });
 
@@ -50,6 +53,9 @@ LibraryService.updateChild = (id, data) =>
 
 LibraryService.deleteChild = (id) =>
   fetch({ url: `/library/child/${id}`, method: "delete" });
+
+LibraryService.deleteChildPartsBulk = (data) =>
+  fetch({ url: `/library/child/bulk`, method: "delete",data });
 
 LibraryService.getChildById = (id) =>
   fetch({ url: `/library/child/${id}`, method: "get" });

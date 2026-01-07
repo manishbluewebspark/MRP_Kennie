@@ -844,6 +844,7 @@ const CreateWorkOrderModal = ({
       form.setFieldsValue({
         workOrderNo: editingWorkOrder.workOrderNo,
         poNumber: editingWorkOrder.poNumber,
+        projectNo : editingWorkOrder.projectNo,
         needDate: editingWorkOrder.needDate ? dayjs(editingWorkOrder.needDate) : null,
         commitDate: editingWorkOrder.commitDate ? dayjs(editingWorkOrder.commitDate) : null,
       });
@@ -894,6 +895,7 @@ const CreateWorkOrderModal = ({
         workOrderNo: values.workOrderNo,
         projectId: firstDrawing?.projectId || null,
         poNumber: values.poNumber,
+        projectNo: values.projectNo,
         needDate: values.needDate ? values.needDate.format("YYYY-MM-DD") : null,
         commitDate: values.commitDate ? values.commitDate.format("YYYY-MM-DD") : null,
         status: values.status || "on_hold",
@@ -992,6 +994,12 @@ const CreateWorkOrderModal = ({
 
             <Col xs={24} md={8}>
               <Form.Item name="poNumber" label="PO Number">
+                <Input />
+              </Form.Item>
+            </Col>
+
+             <Col xs={24} md={8}>
+              <Form.Item name="projectNo" label="Project No">
                 <Input />
               </Form.Item>
             </Col>

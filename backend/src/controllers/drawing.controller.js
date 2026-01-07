@@ -4400,5 +4400,198 @@ export const updateLatestPrice = async (req, res) => {
   }
 };
 
+export const updateLatestPriceBulk = async (req, res) => {
+  try {
+    const { ids = [] } = req.body;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ success: false, message: "ids[] required" });
+    }
+
+    const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (!validIds.length) {
+      return res.status(400).json({ success: false, message: "No valid ids" });
+    }
+
+    // helpers
+    const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+    const toNum = (v, d = 0) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : d;
+    };
+
+    // Load all items
+    const items = await CostingItems.find({ _id: { $in: validIds } })
+      .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK Supplier RFQDate Description Manufacturer UOM")
+      .lean(false);
+
+    if (!items.length) {
+      return res.status(404).json({ success: false, message: "No costing items found" });
+    }
+
+    // ✅ all should be same drawingId (as per your use-case)
+    const drawingId = items[0]?.drawingId;
+    if (!mongoose.Types.ObjectId.isValid(drawingId)) {
+      return res.status(400).json({ success: false, message: "Invalid drawingId" });
+    }
+
+    // Prepare bulk operations
+    const ops = [];
+    const failed = [];
+
+    for (const costingItem of items) {
+      try {
+        // only material
+        if ((costingItem.quoteType || "").toLowerCase() !== "material") continue;
+
+        if (!costingItem.mpn) {
+          failed.push({ id: costingItem._id, reason: "MPN not linked" });
+          continue;
+        }
+
+        const newUnitPrice = toNum(costingItem.mpn.RFQUnitPrice);
+        if (!(newUnitPrice > 0)) {
+          failed.push({ id: costingItem._id, reason: "MPN RFQUnitPrice missing/0" });
+          continue;
+        }
+
+        // sync fields from mpn
+        const moq = toNum(costingItem.mpn.MOQ, toNum(costingItem.moq));
+        const leadTime = toNum(costingItem.mpn.LeadTime_WK, toNum(costingItem.leadTime));
+        const supplier = costingItem.mpn.Supplier || costingItem.supplier || null;
+        const rfqDate = costingItem.mpn.RFQDate || costingItem.rfqDate || null;
+        const description = String(costingItem.mpn.Description || costingItem.description || "").trim();
+        const manufacturer = String(costingItem.mpn.Manufacturer || costingItem.manufacturer || "").trim();
+        const uom = costingItem.mpn.UOM || costingItem.uom || null;
+
+        // recalc
+        const quantity = toNum(costingItem.quantity);
+        const tolerance = toNum(costingItem.tolerance);
+        const sgaPercent = toNum(costingItem.sgaPercent);
+        const matBurden = toNum(costingItem.matBurden);
+        const freightPercent = toNum(costingItem.freightPercent);
+        const fixedFreightCost = toNum(costingItem.fixedFreightCost, toNum(costingItem.freightCost, 0));
+
+        const actualQty = quantity + (quantity * tolerance) / 100;
+        const extPrice = actualQty * newUnitPrice;
+
+        const upliftPct = (sgaPercent + matBurden + freightPercent) / 100;
+        const salesPrice = extPrice * (1 + upliftPct) + fixedFreightCost;
+
+        ops.push({
+          updateOne: {
+            filter: { _id: costingItem._id },
+            update: {
+              $set: {
+                unitPrice: newUnitPrice,
+                moq,
+                leadTime,
+                supplier,
+                rfqDate,
+                description,
+                manufacturer,
+                uom,
+                actualQty: round2(actualQty),
+                extPrice: round2(extPrice),
+                salesPrice: round2(salesPrice),
+                lastEditedBy: req.user?._id || costingItem.lastEditedBy,
+                updatedAt: new Date(),
+              },
+            },
+          },
+        });
+      } catch (e) {
+        failed.push({ id: costingItem._id, reason: e.message });
+      }
+    }
+
+    if (!ops.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No items eligible for update",
+        failed,
+      });
+    }
+
+    // ✅ bulk update
+    const bulkRes = await CostingItems.bulkWrite(ops, { ordered: false });
+
+    // ✅ recompute totals only once
+    const drawing = await Drawing.findById(drawingId);
+    if (!drawing) {
+      return res.status(404).json({ success: false, message: "Drawing not found" });
+    }
+
+    const oid = new mongoose.Types.ObjectId(drawingId);
+
+    const grouped = await CostingItems.aggregate([
+      { $match: { drawingId: oid } },
+      { $group: { _id: "$quoteType", bucketTotal: { $sum: { $toDouble: "$salesPrice" } } } },
+    ]);
+
+    let materialTotal = 0, manhourTotal = 0, packingTotal = 0;
+    for (const g of grouped) {
+      const t = toNum(g.bucketTotal);
+      switch ((g._id || "").toLowerCase()) {
+        case "material": materialTotal = t; break;
+        case "manhour": manhourTotal = t; break;
+        case "packing": packingTotal = t; break;
+        default: break;
+      }
+    }
+
+    const materialMarkup = toNum(drawing.materialMarkup);
+    const manhourMarkup = toNum(drawing.manhourMarkup);
+    const packingMarkup = toNum(drawing.packingMarkup);
+
+    const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
+    const manhourWithMarkup = round2(manhourTotal + (manhourTotal * manhourMarkup) / 100);
+    const packingWithMarkup = round2(packingTotal + (packingTotal * packingMarkup) / 100);
+
+    const totalPrice = round2(materialTotal + manhourTotal + packingTotal);
+    const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+
+    // lead time max
+    const leadAgg = await CostingItems.aggregate([
+      { $match: { drawingId: oid } },
+      { $group: { _id: null, maxLT: { $max: "$leadTime" } } },
+    ]);
+    const maxLeadTime = toNum(leadAgg?.[0]?.maxLT, 0);
+
+    drawing.materialTotal = round2(materialTotal);
+    drawing.manhourTotal = round2(manhourTotal);
+    drawing.packingTotal = round2(packingTotal);
+    drawing.totalPrice = totalPrice;
+    drawing.totalPriceWithMarkup = totalPriceWithMarkup;
+    drawing.leadTimeWeeks = Math.max(toNum(drawing.leadTimeWeeks), maxLeadTime);
+    drawing.lastEditedBy = req.user?._id || drawing.lastEditedBy;
+
+    await drawing.save();
+
+    return res.json({
+      success: true,
+      message: "✅ Bulk latest price update completed",
+      updatedCount: bulkRes.modifiedCount || 0,
+      failedCount: failed.length,
+      failed,
+      totals: {
+        materialTotal: round2(materialTotal),
+        manhourTotal: round2(manhourTotal),
+        packingTotal: round2(packingTotal),
+        totalPrice,
+        totalPriceWithMarkup,
+        leadTimeWeeks: drawing.leadTimeWeeks,
+      },
+    });
+  } catch (error) {
+    console.error("❌ updateLatestPriceBulk error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
 
 

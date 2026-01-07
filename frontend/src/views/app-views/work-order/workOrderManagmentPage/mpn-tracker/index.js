@@ -62,7 +62,7 @@ const MPNTrackerPage = () => {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [selectedProject, setSelectedProject] = useState(null);
     const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
-
+   const [importExcel, setImportExcel] = useState(false);
     // ✅ MPN selection
     const [selectedMpn, setSelectedMpn] = useState(null);
 
@@ -464,6 +464,29 @@ const MPNTrackerPage = () => {
         }
     }, 500);
 
+       const handleImportMpnNeeded = async (file) => {
+            setImportExcel(true);
+            if (!file) {
+                setImportExcel(true);
+                return
+            }
+            try {
+                const formData = new FormData();
+                formData.append("file", file);
+    
+                const res = await WorkOrderService.importTotalMpnNeeded(formData);
+                message.success("Mpn Needed imported successfully!");
+                fetchTotalMpnNeeded()
+                setImportExcel(false)
+                return res;
+            } catch (err) {
+                setImportExcel(false)
+                console.error("❌ Import failed:", err);
+                message.error(err?.response?.data?.message || "Import failed!");
+                throw err;
+            }
+        };
+
     const handleFilterSubmit = async (filters) => {
         try {
             setIsFilterModalOpen(false);
@@ -803,7 +826,8 @@ const MPNTrackerPage = () => {
                     setSearch(value);
                     handleSearch(value);
                 }}
-                showImport={false}
+                showImport={isTotalTab}
+                onImport={(file)=>handleImportMpnNeeded(file)}
                 showExport={true}
                 onExport={() => message.info("Export function same as your old one (call your export API here).")}
                 showFilter={isTotalTab}

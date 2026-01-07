@@ -125,5 +125,13 @@ DrawingService.updateLatestPrice = function (itemId) {
     });
   }
 
+  DrawingService.updateLatestPriceBulk = function (data) {
+    return fetch({
+      url: `/drawings/costing/latest-price/bulk`,
+      method: 'put',
+      data
+    });
+  }
+
 
 export default DrawingService;

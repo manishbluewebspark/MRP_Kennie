@@ -574,140 +574,287 @@ const PurchaseOrderPage = () => {
         </div>
     );
 
-    const PurchaseShortageCard = ({ record }) => {
-        return (
-            <div
+const PurchaseShortageCard = ({ record }) => {
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: 10,
+        padding: "8px 12px",
+        background: "#FFF7F7",
+        border: "1px solid #F5D0D0",
+        display: "flex",
+        gap: 10,
+        boxSizing: "border-box",
+      }}
+    >
+      {/* Icon */}
+      <div
+        style={{
+          width: 30,
+          height: 30,
+          borderRadius: 8,
+          background: "#FDE8E8",
+          display: "grid",
+          placeItems: "center",
+          color: "#DC2626",
+          flexShrink: 0,
+        }}
+      >
+        <ExclamationCircleFilled style={{ fontSize: 18 }} />
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Row 1 */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(180px, 1fr) minmax(220px, 2fr) auto",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 16,      // ⬅️ increased
+              fontWeight: 700,
+              color: "#111827",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {record.mpn}
+          </div>
+
+          <div
+            style={{
+              fontSize: 13,      // ⬅️ increased
+              color: "#6B7280",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {record.description}
+          </div>
+
+          <span
+            style={{
+              background: "#EF4444",
+              color: "white",
+              padding: "3px 10px",
+              borderRadius: 14,
+              fontSize: 12,      // ⬅️ increased
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              justifySelf: "end",
+            }}
+          >
+            Short: {record.shortage} PCS
+          </span>
+        </div>
+
+        {/* Row 2: 5 columns */}
+        <div
+          style={{
+            marginTop: 6,
+            display: "grid",
+            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            gap: 12,
+            fontSize: 13,        // ⬅️ increased
+            color: "#374151",
+          }}
+        >
+          <div><b>Mfg:</b> {record.manufacturer}</div>
+          <div><b>Supplier:</b> {record.supplier}</div>
+          <div><b>Stock:</b> {record.currentStock}</div>
+          <div>
+            <b>Req:</b>{" "}
+            <span style={{ color: "#DC2626", fontWeight: 700 }}>
+              {record.required}
+            </span>
+          </div>
+          <div>
+            <b>Short:</b>{" "}
+            <span style={{ color: "#DC2626", fontWeight: 700 }}>
+              {record.shortage}
+            </span>
+          </div>
+        </div>
+
+        {/* Row 3 */}
+        {record.requireByWorkOrders?.length > 0 && (
+          <div
+            style={{
+              marginTop: 6,
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+              fontSize: 13,     // ⬅️ increased
+            }}
+          >
+            {record.requireByWorkOrders.map((wo, idx) => (
+              <span
+                key={idx}
                 style={{
-                    width: "100%",
-                    borderRadius: 12,
-                    padding: "10px 16px",
-                    background: "#FFF7F7",
-                    border: "1px solid #F5D0D0",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 14,
+                  color: "#1D4ED8",
+                  fontWeight: 600,
                 }}
-            >
-                <div
-                    style={{
-                        minWidth: 36,
-                        height: 36,
-                        borderRadius: 10,
-                        background: "#FDE8E8",
-                        display: "grid",
-                        placeItems: "center",
-                        color: "#DC2626",
-                        flexShrink: 0,
-                        marginTop: 4,
-                    }}
-                >
-                    <ExclamationCircleFilled style={{ fontSize: 18 }} />
-                </div>
+              >
+                {wo}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
-                <div style={{ flex: 1 }}>
-                    <div
-                        style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            width: "100%",
-                        }}
-                    >
-                        <div style={{ flex: 1 }}>
-                            <div
-                                style={{
-                                    fontSize: 15,
-                                    fontWeight: 700,
-                                    color: "#111827",
-                                    lineHeight: 1.2,
-                                }}
-                            >
-                                {record.mpn}
-                            </div>
-                            <div
-                                style={{
-                                    fontSize: 12,
-                                    color: "#6B7280",
-                                    marginTop: 2,
-                                }}
-                            >
-                                {record.description}
-                            </div>
-                        </div>
 
-                        <span
-                            style={{
-                                background: "#EF4444",
-                                color: "white",
-                                padding: "2px 10px",
-                                borderRadius: 20,
-                                fontSize: 11,
-                                fontWeight: 600,
-                                whiteSpace: "nowrap",
-                            }}
-                        >
-                            Short: {record.shortage} PCS
-                        </span>
-                    </div>
 
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(4, 1fr)",
-                            gap: 18,
-                            marginTop: 5,
-                        }}
-                    >
-                        <InfoBlock label="Manufacturer" value={record.manufacturer} />
-                        <InfoBlock label="Supplier" value={record.supplier} />
-                        <InfoBlock
-                            label="Current Stock"
-                            value={`${record.currentStock} pc`}
-                        />
-                        <InfoBlock
-                            label="Required"
-                            value={
-                                <span style={{ color: "#DC2626", fontWeight: 700 }}>
-                                    {record.required}
-                                </span>
-                            }
-                        />
-                    </div>
 
-                    <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 12, color: "#6B7280" }}>
-                            Required by Work Orders:
-                        </div>
+    // const PurchaseShortageCard = ({ record }) => {
+    //     return (
+    //         <div
+    //             style={{
+    //                 width: "100%",
+    //                 borderRadius: 12,
+    //                 padding: "10px 16px",
+    //                 background: "#FFF7F7",
+    //                 border: "1px solid #F5D0D0",
+    //                 display: "flex",
+    //                 alignItems: "flex-start",
+    //                 gap: 14,
+    //             }}
+    //         >
+    //             <div
+    //                 style={{
+    //                     minWidth: 36,
+    //                     height: 36,
+    //                     borderRadius: 10,
+    //                     background: "#FDE8E8",
+    //                     display: "grid",
+    //                     placeItems: "center",
+    //                     color: "#DC2626",
+    //                     flexShrink: 0,
+    //                     marginTop: 4,
+    //                 }}
+    //             >
+    //                 <ExclamationCircleFilled style={{ fontSize: 18 }} />
+    //             </div>
 
-                        <div style={{ marginTop: 2 }}>
-                            {(record.requireByWorkOrders || []).map((wo, idx) => (
-                                <a
-                                    key={idx}
-                                    style={{
-                                        display: "inline-block",
-                                        color: "#1D4ED8",
-                                        fontWeight: 600,
-                                        fontSize: 12,
-                                        marginRight: 10,
-                                    }}
-                                >
-                                    {wo}
-                                </a>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    };
+    //             <div style={{ flex: 1 }}>
+    //                 <div
+    //                     style={{
+    //                         display: "flex",
+    //                         justifyContent: "space-between",
+    //                         alignItems: "center",
+    //                         width: "100%",
+    //                     }}
+    //                 >
+    //                     <div style={{ flex: 1 }}>
+    //                         <div
+    //                             style={{
+    //                                 fontSize: 15,
+    //                                 fontWeight: 700,
+    //                                 color: "#111827",
+    //                                 lineHeight: 1.2,
+    //                             }}
+    //                         >
+    //                             {record.mpn}
+    //                         </div>
+    //                         <div
+    //                             style={{
+    //                                 fontSize: 12,
+    //                                 color: "#6B7280",
+    //                                 marginTop: 2,
+    //                             }}
+    //                         >
+    //                             {record.description}
+    //                         </div>
+    //                     </div>
 
-    const mpnShortageColumns = [
-        {
-            title: "",
-            key: "shortageCard",
-            render: (_, record) => <PurchaseShortageCard record={record} />,
-        },
-    ];
+    //                     <span
+    //                         style={{
+    //                             background: "#EF4444",
+    //                             color: "white",
+    //                             padding: "2px 10px",
+    //                             borderRadius: 20,
+    //                             fontSize: 11,
+    //                             fontWeight: 600,
+    //                             whiteSpace: "nowrap",
+    //                         }}
+    //                     >
+    //                         Short: {record.shortage} PCS
+    //                     </span>
+    //                 </div>
+
+    //                 <div
+    //                     style={{
+    //                         display: "grid",
+    //                         gridTemplateColumns: "repeat(4, 1fr)",
+    //                         gap: 18,
+    //                         marginTop: 5,
+    //                     }}
+    //                 >
+    //                     <InfoBlock label="Manufacturer" value={record.manufacturer} />
+    //                     <InfoBlock label="Supplier" value={record.supplier} />
+    //                     <InfoBlock
+    //                         label="Current Stock"
+    //                         value={`${record.currentStock} pc`}
+    //                     />
+    //                     <InfoBlock
+    //                         label="Required"
+    //                         value={
+    //                             <span style={{ color: "#DC2626", fontWeight: 700 }}>
+    //                                 {record.required}
+    //                             </span>
+    //                         }
+    //                     />
+    //                 </div>
+
+    //                 <div style={{ marginTop: 12 }}>
+    //                     <div style={{ fontSize: 12, color: "#6B7280" }}>
+    //                         Required by Work Orders:
+    //                     </div>
+
+    //                     <div style={{ marginTop: 2 }}>
+    //                         {(record.requireByWorkOrders || []).map((wo, idx) => (
+    //                             <a
+    //                                 key={idx}
+    //                                 style={{
+    //                                     display: "inline-block",
+    //                                     color: "#1D4ED8",
+    //                                     fontWeight: 600,
+    //                                     fontSize: 12,
+    //                                     marginRight: 10,
+    //                                 }}
+    //                             >
+    //                                 {wo}
+    //                             </a>
+    //                         ))}
+    //                     </div>
+    //                 </div>
+    //             </div>
+    //         </div>
+    //     );
+    // };
+
+  const mpnShortageColumns = [
+  {
+    title: "",
+    key: "shortageCard",
+    width: "100%",              // ✅ IMPORTANT
+    render: (_, record) => (
+      <div style={{ width: "100%" }}>
+        <PurchaseShortageCard record={record} />
+      </div>
+    ),
+  },
+];
 
     // ---- CURRENT COLUMNS/DATA ----
 

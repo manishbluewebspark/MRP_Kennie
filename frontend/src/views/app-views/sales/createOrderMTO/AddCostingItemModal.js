@@ -1594,8 +1594,8 @@ const AddCostingItemModal = ({
   const [childPartOptions, setChildPartOptions] = useState([]);
   const [childPartData, setChildPartData] = useState(null);
   const [loadingChild, setLoadingChild] = useState(false);
-const [childSearch, setChildSearch] = useState("");
-
+  const [childSearch, setChildSearch] = useState("");
+  const [childOpen, setChildOpen] = useState(false);
   const [skillLevelOptions, setSkillLevelOptions] = useState([]); // [{value, label, data}]
   const [loadingSkill, setLoadingSkill] = useState(false);
 
@@ -1620,37 +1620,53 @@ const [childSearch, setChildSearch] = useState("");
   }, [costingMaterialData, selectedQuoteType]);
 
 
-const loadChildParts = async (searchText = "") => {
-  setLoadingChild(true);
-  try {
-    const res = await LibraryService.getAllChild({
-      search: searchText,
-      limit: searchText ? 50 : 10,
-    });
+  const loadChildParts = async (searchText = "") => {
+    setLoadingChild(true);
+    try {
+      const res = await LibraryService.getAllChild({
+        search: searchText,
+        page: 1,
+        limit: searchText ? 50 : 10,
+      });
 
-    const opts = (res?.data || []).map((item) => ({
-      value: item._id,
-      label: item.ChildPartNo,
-      data: item,
-    }));
+      const opts = (res?.data || []).map((item) => ({
+        value: item._id,
+        label: item.ChildPartNo,
+        data: item,
+      }));
 
-    setChildPartOptions(opts);
-  } catch (err) {
-    console.error(err);
-    setChildPartOptions([]);
-  } finally {
-    setLoadingChild(false);
-  }
-};
+      setChildPartOptions(opts);
+    
+
+    } catch (err) {
+      console.error(err);
+      setChildPartOptions([]);
+    } finally {
+      // setChildOpen(true);
+      setLoadingChild(false);
+    }
+  };
 
 
 
   // ---------- load child parts (for material) ----------
   useEffect(() => {
-    if (visible && selectedQuoteType === 'material') {
-      loadChildParts();
+    if (visible && selectedQuoteType === "material") {
+      setChildSearch("");        // reset typed text
+      loadChildParts("");        // load first 10
     }
   }, [visible, selectedQuoteType]);
+
+  const handleChildSearch = (val) => {
+    setChildSearch(val);         // ✅ typed text keep
+    debouncedSearch(val);        // ✅ API search
+  };
+
+  const handleChildClear = () => {
+    setChildSearch("");
+    loadChildParts("");          // back to first 10
+  };
+
 
   // ---------- load skill levels (for manhour) ----------
   useEffect(() => {
@@ -1864,7 +1880,9 @@ const loadChildParts = async (searchText = "") => {
     }
   }, [visible, selectedQuoteType, editData, skillLevelOptions, form]);
 
-  const debouncedSearch = useDebounce(loadChildParts, 300);
+  const debouncedSearch = useDebounce((val) => {
+    loadChildParts(val);
+  }, 500);
 
 
   // ---------- EFFECT: if UOM list arrives later, try to map by code for edit (packing/material) ----------
@@ -1968,24 +1986,38 @@ const loadChildParts = async (searchText = "") => {
         </Col>
 
         <Col span={12}>
-          <Form.Item
-            label={<Text strong>Child Part</Text>}
-            name="childPart"
-          >
+          <Form.Item label={<Text strong>Child Part</Text>} name="childPart">
             <Select
-              showSearch
-              placeholder="Select child part"
-              loading={loadingChild}
-              options={childPartOptions}
-              onChange={handleChildPartChange}
-              onSearch={(value) => debouncedSearch(value)}
-              filterOption={false}
-              allowClear
-              notFoundContent="No matching child part"
-            />
+  showSearch
+  placeholder="Select child part"
+  loading={loadingChild}
+  options={childPartOptions}
+  onChange={handleChildPartChange}
+  onSearch={(val) => {
+    setChildSearch(val);
+    setChildOpen(true);          // ✅ typing start => open
+    debouncedSearch(val);
+  }}
+  searchValue={childSearch}
+  filterOption={false}
+  allowClear
+  onClear={() => {
+    setChildSearch("");
+    loadChildParts("");
+  }}
+  open={childOpen} // ✅ controlled
+  onDropdownVisibleChange={(open) => {
+    setChildOpen(open);          // ✅ click open/close
+    if (open && !childSearch && childPartOptions.length === 0) {
+      loadChildParts("");        // ✅ first open pe 10 load
+    }
+  }}
+  notFoundContent={loadingChild ? "Searching..." : "No matching child part"}
+/>
 
           </Form.Item>
         </Col>
+
       </Row>
 
       <Form.Item
@@ -2221,13 +2253,27 @@ const loadChildParts = async (searchText = "") => {
         </Col>
         <Col span={12}>
           <Form.Item label={<Text strong>MPN</Text>} name="mpn">
-            <Select placeholder="Select" onChange={handleMpnChange}>
+            <Select
+              placeholder="Select MPN"
+              showSearch
+              optionFilterProp="children"
+              onChange={handleMpnChange}
+              filterOption={(input, option) =>
+                option.children
+                  ?.toString()
+                  .toLowerCase()
+                  .includes(input.toLowerCase())
+              }
+            >
               {mpnList.map((m) => (
-                <Option key={m._id} value={m._id}>{m.MPN}</Option>
+                <Option key={m._id} value={m._id}>
+                  {m.MPN}
+                </Option>
               ))}
             </Select>
           </Form.Item>
         </Col>
+
       </Row>
 
       <Form.Item

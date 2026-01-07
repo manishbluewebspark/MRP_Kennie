@@ -176,6 +176,7 @@ export const createQuote = async (req, res) => {
         quantity: qty,
         currency: currencyFromProject,            // 👈 set item currency from drawing->project
         totalPrice: lineTotal,
+        leadTime: d.leadTimeWeeks
       });
 
       totalQuantity += qty;
@@ -534,7 +535,8 @@ const T = (text, extra = {}) => new TextRun({ text: S(text), ...extra });
 /* =========================================================
    EXCEL (ExcelJS) — styled, aligned, widths, totals
    ========================================================= */
-export const exportQuoteToExcel = async (req, res) => {
+
+   export const exportQuoteToExcel = async (req, res) => {
   try {
     const quoteId = req.params.quoteId;
 
@@ -544,21 +546,14 @@ export const exportQuoteToExcel = async (req, res) => {
       .populate("currency", "code")
       .lean();
 
-
-
     if (!quote) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Quote not found" });
+      return res.status(404).json({ success: false, message: "Quote not found" });
     }
 
     // Normalize fields
     const customerName = S(quote.contactPerson || quote.customerId?.contactPerson);
-    const customerCompany = S(
-      quote.customerCompany || quote.customerId?.companyName
-    );
-    const companyAdd = S(quote?.customerId?.address)
-    const customerEmail = S(quote.customerEmail || quote.customerId?.email);
+    const customerCompany = S(quote.customerCompany || quote.customerId?.companyName);
+    const companyAdd = S(quote?.customerId?.address);
     const quoteDate = D(quote.quoteDate);
     const validUntil = D(quote.validUntil);
     const paymentTerms = S(quote?.customerId?.paymentTerms);
@@ -569,47 +564,57 @@ export const exportQuoteToExcel = async (req, res) => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Quote Details", {
       properties: { defaultRowHeight: 18 },
+      pageSetup: { fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
 
-    // Title (merge A1:F1)
-    // ws.mergeCells("A1:F1");
-    // ws.getCell("A1").value = `Quote #${S(quote.quoteNumber)}`;
-    // ws.getCell("A1").font = { bold: true, size: 16 };
-    // ws.getCell("A1").alignment = { horizontal: "center" };
-
-    // Customer block (exact labels as you wrote)
-    ws.addRow([]);
-    ws.addRow(["Date", quoteDate]);
-    ws.addRow([]);
-    ws.addRow(["Customer Name", customerCompany]);
-    ws.addRow(["Address", companyAdd]);
-    ws.addRow(["Contact Person", customerName]);
-    ws.addRow([]);
-    ws.addRow(["Payment Terms:", paymentTerms]);
-    ws.addRow(["Incoterms:", incoterms || validUntil]); // kept your earlier ‘validUntil’ fallback
-    ws.addRow(["Currency:", currency]);
-    ws.addRow([]);
-
-    // Header
-    const header = [
-      "No",
-      "Drawing No.",
-      "Description",
-      "Qty",
-      "Unit Price",
-      "Total Price",
+    // ✅ Column widths (7 cols)
+    ws.columns = [
+      { key: "no", width: 8 },
+      { key: "drawingNo", width: 22 },
+      { key: "desc", width: 40 },
+      { key: "qty", width: 10 },
+      { key: "unitPrice", width: 14 },
+      { key: "totalPrice", width: 16 },
+      { key: "leadTime", width: 14 },
     ];
+
+    // ✅ Title (A1:G1)
+    ws.mergeCells("A1:G1");
+    ws.getCell("A1").value = `Quote #${S(quote.quoteNumber)}`;
+    ws.getCell("A1").font = { bold: true, size: 16 };
+    ws.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+
+    // ✅ Customer block (2 column layout) - keep it clean
+    const addKV = (label, value) => {
+      const r = ws.addRow([label, value]);
+      r.getCell(1).font = { bold: true };
+      r.getCell(1).alignment = { horizontal: "left" };
+      r.getCell(2).alignment = { horizontal: "left" };
+      // span value across B:G so it looks aligned
+      ws.mergeCells(`B${r.number}:G${r.number}`);
+      return r;
+    };
+
+    ws.addRow([]);
+    addKV("Date", quoteDate);
+    addKV("Customer Name", customerCompany);
+    addKV("Address", companyAdd);
+    addKV("Contact Person", customerName);
+    ws.addRow([]);
+    addKV("Payment Terms", paymentTerms);
+    addKV("Incoterms", incoterms || validUntil);
+    addKV("Currency", currency);
+    ws.addRow([]);
+
+    // ✅ Table header always starts after customer block
+    const header = ["No", "Drawing No.", "Description", "Qty", "Unit Price", "Total Price", "Lead Time"];
     const headerRow = ws.addRow(header);
 
+    headerRow.height = 20;
     headerRow.eachCell((cell) => {
       cell.font = { bold: true };
       cell.alignment = { horizontal: "center", vertical: "middle" };
-      // optional background for clarity
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFECECEC" }, // light grey
-      };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECECEC" } };
       cell.border = {
         top: { style: "thin" },
         left: { style: "thin" },
@@ -618,117 +623,290 @@ export const exportQuoteToExcel = async (req, res) => {
       };
     });
 
-    headerRow.font = { bold: true };
-    headerRow.alignment = { horizontal: "center", vertical: "middle" };
-
-    // Freeze on header row
+    // ✅ Freeze header row
     ws.views = [{ state: "frozen", ySplit: headerRow.number }];
 
-    // Filter for header row
+    // ✅ AutoFilter only over header columns
     ws.autoFilter = {
       from: { row: headerRow.number, column: 1 },
-      to: { row: headerRow.number, column: header.length },
+      to: { row: headerRow.number, column: 7 },
     };
 
-    // Column widths: exactly 6 columns
-    ws.columns = [
-      { key: "no", width: 20 },
-      { key: "drawingNo", width: 22 },
-      { key: "desc", width: 36 },
-      { key: "qty", width: 12 },
-      { key: "unitPrice", width: 14 },
-      { key: "totalPrice", width: 16 },
-    ];
+    const startDataRow = headerRow.number + 1;
 
-    const startDataRow = ws.lastRow.number + 1;
-
-    // Rows
+    // ✅ Data rows
     items.forEach((it, idx) => {
       const drawingNo = S(it?.drawingNumber || it?.drawingId?.drawingNumber);
-      const description =
-        S(it?.description) || S(it?.tool) || S(it?.remarks) || "";
+      const description = S(it?.description) || S(it?.tool) || S(it?.remarks) || "";
       const qty = N(it?.quantity, 0);
       const unit = N(it?.unitPrice);
-      const totalCalc = Number.isFinite(Number(it?.totalPrice))
-        ? N(it.totalPrice)
-        : N(unit * qty);
+      const totalCalc = Number.isFinite(Number(it?.totalPrice)) ? N(it.totalPrice) : N(unit * qty);
+      const leadTime = N(it?.leadTime);
 
-      const r = ws.addRow([
-        idx + 1,
-        drawingNo,
-        description,
-        qty,
-        unit,
-        totalCalc,
-      ]);
+      const r = ws.addRow([idx + 1, drawingNo, description, qty, unit, totalCalc, leadTime]);
 
-      // align numeric columns (Qty=4, Unit=5, Total=6)
+      // borders
+      r.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+        cell.alignment = { vertical: "middle" };
+      });
+
+      // numeric align + formats
       r.getCell(4).alignment = { horizontal: "right" };
       r.getCell(5).alignment = { horizontal: "right" };
       r.getCell(6).alignment = { horizontal: "right" };
+      r.getCell(7).alignment = { horizontal: "right" };
 
-      // number formats
       r.getCell(4).numFmt = "#,##0";
       r.getCell(5).numFmt = "#,##0.00";
       r.getCell(6).numFmt = "#,##0.00";
+      r.getCell(7).numFmt = "#,##0";
     });
 
-    // Totals
     const endDataRow = ws.lastRow.number;
 
+    // ✅ Totals row MUST have 7 columns (same as table)
     const totals = ws.addRow([
       "Totals",
       "",
       "",
-      { formula: `SUM(D${startDataRow}:D${endDataRow})` }, // Qty sum
-      "", // Unit Price sum generally not required
-      { formula: `SUM(F${startDataRow}:F${endDataRow})` }, // Total Price sum
+      { formula: `SUM(D${startDataRow}:D${endDataRow})` },
+      "",
+      { formula: `SUM(F${startDataRow}:F${endDataRow})` },
+      "",
     ]);
 
     totals.eachCell((cell, col) => {
       cell.font = { bold: true };
-      // Right align numeric columns (Qty col 4, Total col 6)
-      cell.alignment = {
-        horizontal: col === 4 || col === 6 ? "right" : "left",
-      };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDF2CC" } };
+      cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      cell.alignment = { horizontal: col === 4 || col === 6 ? "right" : "left", vertical: "middle" };
       if (col === 4) cell.numFmt = "#,##0";
       if (col === 6) cell.numFmt = "#,##0.00";
-      // top border
-      cell.border = { top: { style: "thin" } };
-      // soft highlight
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFFDF2CC" },
-      };
     });
 
-    // (Optional) update status like your previous code
+    // Optional status update
     await Quote.updateOne(
       { _id: quoteId },
       { $set: { status: "quoted", isPendingQuote: false } }
     );
 
-    // Send file
     const buf = await wb.xlsx.writeBuffer();
     res.status(200);
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="quote-${S(quote.quoteNumber)}.xlsx"`
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="quote-${S(quote.quoteNumber)}.xlsx"`);
     res.setHeader("Content-Length", buf.byteLength);
     return res.end(Buffer.from(buf));
   } catch (err) {
     console.error("ExportQuoteToExcel Error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Error exporting quote to Excel" });
+    return res.status(500).json({ success: false, message: "Error exporting quote to Excel" });
   }
 };
+
+// export const exportQuoteToExcel = async (req, res) => {
+//   try {
+//     const quoteId = req.params.quoteId;
+
+//     const quote = await Quote.findById(quoteId)
+//       .populate("customerId")
+//       .populate("items.drawingId")
+//       .populate("currency", "code")
+//       .lean();
+
+
+
+//     if (!quote) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Quote not found" });
+//     }
+
+//     // Normalize fields
+//     const customerName = S(quote.contactPerson || quote.customerId?.contactPerson);
+//     const customerCompany = S(
+//       quote.customerCompany || quote.customerId?.companyName
+//     );
+//     const companyAdd = S(quote?.customerId?.address)
+//     const customerEmail = S(quote.customerEmail || quote.customerId?.email);
+//     const quoteDate = D(quote.quoteDate);
+//     const validUntil = D(quote.validUntil);
+//     const paymentTerms = S(quote?.customerId?.paymentTerms);
+//     const incoterms = S(quote?.customerId?.incoterms);
+//     const currency = S(quote.currency?.code || "USD");
+//     const items = Array.isArray(quote.items) ? quote.items : [];
+
+//     const wb = new ExcelJS.Workbook();
+//     const ws = wb.addWorksheet("Quote Details", {
+//       properties: { defaultRowHeight: 18 },
+//     });
+
+//     // Title (merge A1:F1)
+//     // ws.mergeCells("A1:F1");
+//     // ws.getCell("A1").value = `Quote #${S(quote.quoteNumber)}`;
+//     // ws.getCell("A1").font = { bold: true, size: 16 };
+//     // ws.getCell("A1").alignment = { horizontal: "center" };
+
+//     // Customer block (exact labels as you wrote)
+//     ws.addRow([]);
+//     ws.addRow(["Date", quoteDate]);
+//     ws.addRow([]);
+//     ws.addRow(["Customer Name", customerCompany]);
+//     ws.addRow(["Address", companyAdd]);
+//     ws.addRow(["Contact Person", customerName]);
+//     ws.addRow([]);
+//     ws.addRow(["Payment Terms:", paymentTerms]);
+//     ws.addRow(["Incoterms:", incoterms || validUntil]); // kept your earlier ‘validUntil’ fallback
+//     ws.addRow(["Currency:", currency]);
+//     ws.addRow([]);
+
+//     // Header
+//     const header = [
+//       "No",
+//       "Drawing No.",
+//       "Description",
+//       "Qty",
+//       "Unit Price",
+//       "Total Price",
+//       "Lead Time"
+//     ];
+//     const headerRow = ws.addRow(header);
+
+//     headerRow.eachCell((cell) => {
+//       cell.font = { bold: true };
+//       cell.alignment = { horizontal: "center", vertical: "middle" };
+//       // optional background for clarity
+//       cell.fill = {
+//         type: "pattern",
+//         pattern: "solid",
+//         fgColor: { argb: "FFECECEC" }, // light grey
+//       };
+//       cell.border = {
+//         top: { style: "thin" },
+//         left: { style: "thin" },
+//         bottom: { style: "thin" },
+//         right: { style: "thin" },
+//       };
+//     });
+
+//     headerRow.font = { bold: true };
+//     headerRow.alignment = { horizontal: "center", vertical: "middle" };
+
+//     // Freeze on header row
+//     ws.views = [{ state: "frozen", ySplit: headerRow.number }];
+
+//     // Filter for header row
+//     ws.autoFilter = {
+//       from: { row: headerRow.number, column: 1 },
+//       to: { row: headerRow.number, column: header.length },
+//     };
+
+//     // Column widths: exactly 6 columns
+//     ws.columns = [
+//       { key: "no", width: 20 },
+//       { key: "drawingNo", width: 22 },
+//       { key: "desc", width: 36 },
+//       { key: "qty", width: 12 },
+//       { key: "unitPrice", width: 14 },
+//       { key: "totalPrice", width: 16 },
+//       { key: "leadTime", width: 16 },
+//     ];
+
+//     const startDataRow = ws.lastRow.number + 1;
+
+//     // Rows
+//     items.forEach((it, idx) => {
+//       const drawingNo = S(it?.drawingNumber || it?.drawingId?.drawingNumber);
+//       const description =
+//         S(it?.description) || S(it?.tool) || S(it?.remarks) || "";
+//       const qty = N(it?.quantity, 0);
+//       const unit = N(it?.unitPrice);
+//       const totalCalc = Number.isFinite(Number(it?.totalPrice))
+//         ? N(it.totalPrice)
+//         : N(unit * qty);
+//       const leadTime = N(it?.leadTime)
+//       const r = ws.addRow([
+//         idx + 1,
+//         drawingNo,
+//         description,
+//         qty,
+//         unit,
+//         totalCalc,
+//         leadTime
+//       ]);
+
+//       // align numeric columns (Qty=4, Unit=5, Total=6)
+//       r.getCell(4).alignment = { horizontal: "right" };
+//       r.getCell(5).alignment = { horizontal: "right" };
+//       r.getCell(6).alignment = { horizontal: "right" };
+//       r.getCell(7).alignment = { horizontal: "right" };
+//       // number formats
+//       r.getCell(4).numFmt = "#,##0";
+//       r.getCell(5).numFmt = "#,##0.00";
+//       r.getCell(6).numFmt = "#,##0.00";
+//       r.getCell(7).numFmt = "#,##0.00";
+//     });
+
+//     // Totals
+//     const endDataRow = ws.lastRow.number;
+
+//     const totals = ws.addRow([
+//       "Totals",
+//       "",
+//       "",
+//       { formula: `SUM(D${startDataRow}:D${endDataRow})` }, // Qty sum
+//       "", // Unit Price sum generally not required
+//       { formula: `SUM(F${startDataRow}:F${endDataRow})` }, // Total Price sum
+//     ]);
+
+//     totals.eachCell((cell, col) => {
+//       cell.font = { bold: true };
+//       // Right align numeric columns (Qty col 4, Total col 6)
+//       cell.alignment = {
+//         horizontal: col === 4 || col === 6 ? "right" : "left",
+//       };
+//       if (col === 4) cell.numFmt = "#,##0";
+//       if (col === 6) cell.numFmt = "#,##0.00";
+//       // top border
+//       cell.border = { top: { style: "thin" } };
+//       // soft highlight
+//       cell.fill = {
+//         type: "pattern",
+//         pattern: "solid",
+//         fgColor: { argb: "FFFDF2CC" },
+//       };
+//     });
+
+//     // (Optional) update status like your previous code
+//     await Quote.updateOne(
+//       { _id: quoteId },
+//       { $set: { status: "quoted", isPendingQuote: false } }
+//     );
+
+//     // Send file
+//     const buf = await wb.xlsx.writeBuffer();
+//     res.status(200);
+//     res.setHeader(
+//       "Content-Type",
+//       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+//     );
+//     res.setHeader(
+//       "Content-Disposition",
+//       `attachment; filename="quote-${S(quote.quoteNumber)}.xlsx"`
+//     );
+//     res.setHeader("Content-Length", buf.byteLength);
+//     return res.end(Buffer.from(buf));
+//   } catch (err) {
+//     console.error("ExportQuoteToExcel Error:", err);
+//     return res
+//       .status(500)
+//       .json({ success: false, message: "Error exporting quote to Excel" });
+//   }
+// };
 
 export const exportQuoteToWord = async (req, res) => {
   try {

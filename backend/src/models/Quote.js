@@ -8,6 +8,7 @@ const quoteItemSchema = new mongoose.Schema({
   quantity: { type: Number, required: true, min: 1, default: 1 },
   totalPrice: { type: Number, required: true, min: 0 },
   currency: { type: mongoose.Schema.Types.ObjectId, ref: "Currency" },
+  leadTime : {type: Number, default:0}
 });
 
 const quoteSchema = new mongoose.Schema({

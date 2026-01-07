@@ -17,7 +17,7 @@ export const createCustomer = async (req, res) => {
         return res.status(400).json({
           success: false,
           code: "EMAIL_EXISTS",
-          message: "A customer with this email already exists.",
+          message: "Email already exists.",
         });
       }
     }
@@ -32,7 +32,7 @@ export const createCustomer = async (req, res) => {
         return res.status(400).json({
           success: false,
           code: "COMPANY_EXISTS",
-          message: "A customer with this company name already exists.",
+          message: "Company name already exists.",
         });
       }
     }
@@ -44,7 +44,7 @@ export const createCustomer = async (req, res) => {
         return res.status(400).json({
           success: false,
           code: "PHONE_EXISTS",
-          message: "A customer with this phone number already exists.",
+          message: "Phone number already exists.",
         });
       }
     }

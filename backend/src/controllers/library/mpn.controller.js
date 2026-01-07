@@ -87,6 +87,50 @@ export const deleteMpn = async (req, res) => {
   }
 };
 
+export const deleteMPNsBulk = async (req, res) => {
+  try {
+    const { ids = [] } = req.body;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ success: false, message: "ids array is required" });
+    }
+
+    // ✅ keep only valid ObjectIds
+    const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (!validIds.length) {
+      return res.status(400).json({ success: false, message: "No valid ids provided" });
+    }
+
+    // ✅ fetch mpns first (so we know which actually exist)
+    const mpns = await MPN.find({ _id: { $in: validIds } }).select("_id").lean();
+    if (!mpns.length) {
+      return res.status(404).json({ success: false, message: "No MPNs found" });
+    }
+
+    const mpnIds = mpns.map((m) => m._id);
+
+    // ✅ delete mpns
+    const delRes = await MPN.deleteMany({ _id: { $in: mpnIds } });
+
+    // ✅ remove inventory entries
+    await Inventory.deleteMany({ mpnId: { $in: mpnIds } });
+
+    // ✅ soft delete children linked to these mpns
+    await Child.updateMany(
+      { mpn: { $in: mpnIds } },
+      { $set: { isDeleted: true } }
+    );
+
+    return res.json({
+      success: true,
+      message: "Selected MPNs deleted",
+      deletedCount: delRes.deletedCount || mpnIds.length,
+    });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
 /**
  * Get MPN by ID
  */

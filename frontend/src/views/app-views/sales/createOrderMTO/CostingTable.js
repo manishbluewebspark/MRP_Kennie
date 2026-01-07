@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Table, Typography, Tag, InputNumber, Spin, message } from 'antd';
+import { Table, Typography, Tag, InputNumber, Spin, message, Button } from 'antd';
 import ActionButtons from 'components/ActionButtons';
 import { hasPermission } from 'utils/auth';
 
@@ -16,7 +16,8 @@ const CostingTable = ({
   currentMarkups,   // { material, manhour, packing }
   baseMarkups,      // { material, manhour, packing } baseline
   onMarkupChange,
-  handleUpdateLatestPrice   // (tab, value) => persist to DB
+  handleUpdateLatestPrice,   // (tab, value) => persist to DB
+  handleUpdateAll
 }) => {
   const [localMarkup, setLocalMarkup] = useState(0);
 
@@ -36,10 +37,34 @@ const CostingTable = ({
     onMarkupChange?.(activeTab, clamped);
   };
 
+const handleUpdateAllLatestPrice = async () => {
+  if (!filteredItems || !filteredItems.length) return;
+
+  const ids = filteredItems.map(item => item._id);
+    await handleUpdateAll(
+      ids, // ✅ saari ids ek sath
+    );
+};
+
+
 
 
   const actionColumn = {
-    title: 'Actions',
+     title: (
+    <div style={{ display: "flex", alignItems: "center", gap: 48 }}>
+      <span>Actions</span>
+
+      {hasPermission('sales.mto:create_edit_delete_costingmaterial') && (
+        <Button
+          size="small"
+          type="primary"
+          onClick={handleUpdateAllLatestPrice}
+        >
+          Update All
+        </Button>
+      )}
+    </div>
+  ),
     key: 'actions',
     width: 160,
     fixed: 'right',

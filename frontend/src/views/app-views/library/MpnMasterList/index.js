@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Table, Button, Tag, message } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { Table, Button, Tag, message, Space } from "antd";
+import { DeleteFilled, PlusOutlined } from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
 import AddMpnModal from "./AddMpnModal";
@@ -14,6 +14,7 @@ import { fetchSuppliers } from "store/slices/supplierSlice";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import { formatDate } from "utils/formatDate";
 import { getAllCurrencies } from "store/slices/currencySlice";
+import ConfirmDeleteModal from "components/ConfirmDeleteModal";
 
 // 🔹 Fix: hum hamesha max 4 purchase history columns dikhayenge
 const MAX_PURCHASE_HISTORY = 3;
@@ -100,6 +101,56 @@ const MpnMasterList = () => {
     const { suppliers } = useSelector((state) => state.suppliers);
     const { categories } = useSelector((state) => state.categories);
     const { currencies } = useSelector((state) => state.currency);
+const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+
+
+const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+const [deleteMode, setDeleteMode] = useState("single"); // "single" | "bulk"
+const [deleteId, setDeleteId] = useState(null);
+
+
+const rowSelection = {
+  selectedRowKeys,
+  preserveSelectedRowKeys: true,
+  onChange: (keys) => setSelectedRowKeys(keys),
+};
+
+const handleDeleteSelected = () => {
+  if (!selectedRowKeys.length) {
+    message.warning("Please select at least one item");
+    return;
+  }
+  setDeleteMode("bulk");
+  setDeleteModalVisible(true);
+};
+
+      const handleConfirmDelete = async () => {
+  try {
+    setLoading(true);
+    message.loading({ content: "Deleting...", key: "bulkDel" });
+
+    if (deleteMode === "bulk") {
+      await LibraryService.deleteMPNsBulk({ ids: selectedRowKeys });
+      message.success({ content: "Selected items deleted", key: "bulkDel" });
+      setSelectedRowKeys([]);
+    } else {
+      await LibraryService.deleteMpn(deleteId);
+      message.success({ content: "Item deleted", key: "bulkDel" });
+    }
+
+    setDeleteModalVisible(false);
+    setDeleteId(null);
+    fetchMpn();
+  } catch (err) {
+    console.error(err);
+    message.error({ content: "Failed to delete", key: "bulkDel" });
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
     // 🔹 Base columns (without dynamic purchase history)
     const columns = [
         {
@@ -202,7 +253,23 @@ const MpnMasterList = () => {
             render: (text) => renderBadge(text, "status"),
         },
         {
-            title: "Actions",
+            title: (
+          <Space>
+            Actions
+            {hasPermission("library.child:create_edit_delete") && (
+              <Button
+                danger
+                size="small"
+                icon={<DeleteFilled style={{ color: "#FF4D4F" }} />}
+                // disabled={selectedRowKeys?.length == 0}
+                onClick={handleDeleteSelected}
+              >
+              </Button>
+
+
+            )}
+          </Space>
+        ),
             key: "actions",
             // fixed: "right",
             render: (_, record) => (
@@ -483,6 +550,7 @@ const MpnMasterList = () => {
                 dataSource={data}
                 rowKey="_id" // 🔹 important: backend se _id aa raha hoga
                 loading={loading}
+                rowSelection={rowSelection}
                 pagination={{
                     current: page,
                     pageSize: limit,
@@ -519,6 +587,17 @@ const MpnMasterList = () => {
                 filters={filterConfig}
                 title="Filters"
             />
+
+     <ConfirmDeleteModal
+  open={deleteModalVisible}
+  loading={loading}
+  mode={deleteMode}
+  count={selectedRowKeys.length}
+  onCancel={() => !loading && setDeleteModalVisible(false)}
+  onConfirm={handleConfirmDelete}
+/>
+
+
         </div>
     );
 };

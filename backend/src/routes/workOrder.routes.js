@@ -1,5 +1,5 @@
 import express from "express";
-import { createWorkOrder, deleteWorkOrder, exportDeliveryWorkOrdersPDF, exportDeliveryWorkOrdersWord, exportDeliveryWorkOrdersXlsx, exportWorkOrders, getAllChilPartByDrawingId, getAllProductionWordOrders, getAllWorkOrders, getCompleteWorkOrders, getDeliveryOrders, getEachMPNUsage, getTotalMPNNeeded, getWorkOrderById, importWorkOrders, moveToProduction, saveWorkOrderStage, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
+import { createWorkOrder, deleteWorkOrder, exportDeliveryWorkOrdersPDF, exportDeliveryWorkOrdersWord, exportDeliveryWorkOrdersXlsx, exportWorkOrders, getAllChilPartByDrawingId, getAllProductionWordOrders, getAllWorkOrders, getCompleteWorkOrders, getDeliveryOrders, getEachMPNUsage, getTotalMPNNeeded, getWorkOrderById, importTotalMpnNeeded, importWorkOrders, moveToProduction, saveWorkOrderStage, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { upload } from "..//middlewares/upload.js";
 
@@ -8,6 +8,8 @@ const router = express.Router();
 // Import / Export
 router.post("/workOrder/import", authenticate,upload.single("file"), importWorkOrders);
 router.get("/workOrder/export", authenticate, exportWorkOrders);
+
+router.post("/workOrder/total-mpn-needed/import", authenticate,upload.single("file"), importTotalMpnNeeded);
 
 router.post("/workOrder/export/delivery/excel", authenticate, exportDeliveryWorkOrdersXlsx);
 router.post("/workOrder/export/delivery/pdf", authenticate, exportDeliveryWorkOrdersPDF);

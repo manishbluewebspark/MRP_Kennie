@@ -368,6 +368,7 @@ export const createWorkOrder = async (req, res) => {
     const {
       workOrderNo,      // base WO no, e.g. "2405-18-20"
       poNumber,
+      projectNo,
       needDate,
       commitDate,
       status,
@@ -474,6 +475,7 @@ export const createWorkOrder = async (req, res) => {
       const docData = {
         workOrderNo,                         // ❗ yahi diya gaya base no use karega
         poNumber: poNumber || "",
+        projectNo,
         drawingId: it.drawingId,
         projectId,
         projectType,
@@ -3854,7 +3856,7 @@ export const getDeliveryOrders = async (req, res) => {
     const filterProject = parsedFilters?.project || project || null;
 
     const match = { isDeleted: { $ne: true } };
-const andConditions = [];
+    const andConditions = [];
 
 
 
@@ -3870,29 +3872,29 @@ const andConditions = [];
 
 
     // ✅ status logic
-   if (status) {
-  const s = String(status).trim().toLowerCase();  // ✅ trim IMPORTANT
+    if (status) {
+      const s = String(status).trim().toLowerCase();  // ✅ trim IMPORTANT
 
-  if (s === "completed") {
-    andConditions.push({
-      $or: [
-        { status: { $in: ["completed", "Completed"] } },
-        { delivered: true },
-        { completeDate: { $ne: null } },
-        { completedDate: { $ne: null } },
-        { isProductionComplete: true }, // ✅
-        // optional safe if stored as string/number:
-        // { isProductionComplete: { $in: [true, "true", 1] } },
-      ],
-    });
-  } else {
-    andConditions.push({ status }); // other statuses
-  }
-}
+      if (s === "completed") {
+        andConditions.push({
+          $or: [
+            { status: { $in: ["completed", "Completed"] } },
+            { delivered: true },
+            { completeDate: { $ne: null } },
+            { completedDate: { $ne: null } },
+            { isProductionComplete: true }, // ✅
+            // optional safe if stored as string/number:
+            // { isProductionComplete: { $in: [true, "true", 1] } },
+          ],
+        });
+      } else {
+        andConditions.push({ status }); // other statuses
+      }
+    }
 
-if (andConditions.length) {
-  match.$and = andConditions;
-}
+    if (andConditions.length) {
+      match.$and = andConditions;
+    }
 
 
     // 📅 filter by workorder createdAt range
@@ -3993,19 +3995,19 @@ if (andConditions.length) {
 
       {
         $addFields: {
-        displayStatus: {
-  $cond: [
-    {
-      $or: [
-        { $ne: ["$completeDate", null] },
-        { $eq: ["$delivered", true] },
-        { $in: ["$status", ["completed", "Completed"]] },
-      ]
-    },
-    "Completed",
-    { $ifNull: ["$status", "Pending"] }
-  ]
-}
+          displayStatus: {
+            $cond: [
+              {
+                $or: [
+                  { $ne: ["$completeDate", null] },
+                  { $eq: ["$delivered", true] },
+                  { $in: ["$status", ["completed", "Completed"]] },
+                ]
+              },
+              "Completed",
+              { $ifNull: ["$status", "Pending"] }
+            ]
+          }
 
         },
       },
@@ -5480,6 +5482,131 @@ export const saveWorkOrderStage = async (req, res) => {
     });
   } catch (err) {
     console.error("Error saving stage:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+const toNum = (v) => {
+  const n = Number(String(v ?? "").trim());
+  return Number.isFinite(n) ? n : null;
+};
+
+const norm = (v) => String(v ?? "").trim();
+
+export const importTotalMpnNeeded = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+    }
+
+    const fileName = (req.file.originalname || "").toLowerCase();
+    if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+      return res.status(400).json({
+        success: false,
+        message: "Only .xlsx / .xls files allowed",
+      });
+    }
+
+    // ✅ Read excel
+    const buffer = req.file.buffer || fs.readFileSync(req.file.path);
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames?.[0]];
+    if (!sheet) {
+      return res.status(400).json({ success: false, message: "Excel has no sheets" });
+    }
+
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    if (!rows.length) {
+      return res.status(400).json({ success: false, message: "File is empty" });
+    }
+
+    // ✅ flexible headers
+    const pickDrawingNo = (r) =>
+      r["Drawing No"] ?? r["DrawingNo"] ?? r["drawingNo"] ?? r["Drawing"] ?? r["drawing"] ?? "";
+    const pickQty = (r) =>
+      r["Qty"] ?? r["QTY"] ?? r["qty"] ?? r["Quantity"] ?? r["quantity"] ?? "";
+
+    // ✅ aggregate same DrawingNo (important)
+    const qtyByDrawingNo = new Map(); // drawingNo -> totalQty
+    const invalidRows = [];
+
+    rows.forEach((r, idx) => {
+      const drawingNo = norm(pickDrawingNo(r));
+      const qty = toNum(pickQty(r));
+
+      if (!drawingNo || qty === null) {
+        invalidRows.push({
+          row: idx + 2,
+          drawingNo,
+          qty: pickQty(r),
+          reason: "Missing/invalid Drawing No or Qty",
+        });
+        return;
+      }
+
+      qtyByDrawingNo.set(drawingNo, (qtyByDrawingNo.get(drawingNo) || 0) + qty);
+    });
+
+    if (!qtyByDrawingNo.size) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid rows found",
+        invalidRows,
+      });
+    }
+
+    const drawingNos = [...qtyByDrawingNo.keys()];
+
+    // ✅ Step-1: DrawingNo -> DrawingId
+    const drawings = await Drawing.find(
+      { drawingNo: { $in: drawingNos } },
+      { _id: 1, drawingNo: 1 }
+    ).lean();
+
+    const drawingIdByNo = new Map(drawings.map((d) => [String(d.drawingNo), String(d._id)]));
+
+    const notFoundDrawings = drawingNos.filter((dn) => !drawingIdByNo.has(dn));
+
+    // ✅ Step-2: WorkOrder update using drawingId
+    const bulkOps = [];
+    for (const [drawingNo, qty] of qtyByDrawingNo.entries()) {
+      const drawingId = drawingIdByNo.get(drawingNo);
+      if (!drawingId) continue;
+
+      bulkOps.push({
+        updateMany: {
+          filter: { drawingId: new mongoose.Types.ObjectId(drawingId) },
+          update: {
+            $inc: { quantity: qty }, // ✅ change field name if your WO uses different one
+            $set: { updatedAt: new Date() },
+          },
+        },
+      });
+    }
+
+    let bulkResult = null;
+    if (bulkOps.length) {
+      bulkResult = await WorkOrder.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    return res.json({
+      success: true,
+      message: "Import completed",
+      summary: {
+        totalRows: rows.length,
+        validDrawingNos: qtyByDrawingNo.size,
+        drawingsMatched: drawings.length,
+        workOrdersMatched: bulkResult?.matchedCount || 0,
+        workOrdersModified: bulkResult?.modifiedCount || 0,
+        notFoundDrawingCount: notFoundDrawings.length,
+        invalidCount: invalidRows.length,
+      },
+      notFoundDrawings: [...new Set(notFoundDrawings)],
+      invalidRows,
+    });
+  } catch (err) {
+    console.error("importTotalMpnNeeded error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };

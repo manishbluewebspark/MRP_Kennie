@@ -1,6 +1,6 @@
 import express from "express";
-import { addMpn, deleteMpn, exportMpn, getAllMpn, getMpnById, importMpn, updateMpn } from "../controllers/library/mpn.controller.js";
-import { addChild, deleteChild, exportChild, getAllChild, getChildById, importChild, updateChild } from "../controllers/library/child.controller.js";
+import { addMpn, deleteMpn, deleteMPNsBulk, exportMpn, getAllMpn, getMpnById, importMpn, updateMpn } from "../controllers/library/mpn.controller.js";
+import { addChild, deleteChild, deleteChildBulk, exportChild, getAllChild, getChildById, importChild, updateChild } from "../controllers/library/child.controller.js";
 import { upload } from "../middlewares/upload.js";
 const router = express.Router();
 
@@ -15,6 +15,8 @@ router.post("/mpn",addMpn);
 
 // Update MPM
 router.put("/mpn/:id",updateMpn);
+
+router.delete("/mpn/bulk", deleteMPNsBulk);
 
 // Delete MPM
 router.delete("/mpn/:id",deleteMpn);
@@ -44,8 +46,12 @@ router.post("/child", addChild);
 // Update Child
 router.put("/child/:id",updateChild);
 
+router.delete("/child/bulk", deleteChildBulk);
+
 // Delete Child
 router.delete("/child/:id", deleteChild);
+
+
 
 // Get Child by ID
 router.get("/child/:id", getChildById);

@@ -384,6 +384,42 @@ const DrawingDetails = () => {
         }
     };
 
+const handleUpdateAll = async (ids = []) => {
+  try {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      message.warning("No items to update");
+      return;
+    }
+
+    // single loading message
+    message.loading({
+      content: "Updating latest prices for all items...",
+      key: "bulkUpdate",
+    });
+
+    await DrawingService.updateLatestPriceBulk({ ids });
+
+    // success (replace loading)
+    message.success({
+      content: "All latest prices updated successfully!",
+      key: "bulkUpdate",
+    });
+
+    // ✅ fetch only once
+    fetchCostingItems();
+  } catch (error) {
+    console.error("Bulk update error:", error);
+
+    message.error({
+      content:
+        error.response?.data?.message ||
+        "Failed to update latest prices",
+      key: "bulkUpdate",
+    });
+  }
+};
+
+
     const menu = (
         <Menu
             items={[
@@ -509,6 +545,7 @@ const DrawingDetails = () => {
                         baseMarkups={baseMarkups}
                         onMarkupChange={handleMarkupChange}
                         handleUpdateLatestPrice={handleUpdateLatestPrice}
+                        handleUpdateAll={handleUpdateAll}
                     />
                 </Card>
             </Card>

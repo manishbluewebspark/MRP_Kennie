@@ -197,6 +197,46 @@ export const deleteChild = async (req, res) => {
   }
 };
 
+export const deleteChildBulk = async (req, res) => {
+  try {
+    const { ids = [] } = req.body;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ success: false, message: "ids array is required" });
+    }
+
+    // 1) find all childs first (to know mpn relation)
+    const children = await Child.find({ _id: { $in: ids } }).select("_id mpn").lean();
+
+    if (!children.length) {
+      return res.status(404).json({ success: false, message: "No child parts found" });
+    }
+
+    const childIds = children.map(c => c._id);
+    const mpnIds = [...new Set(children.map(c => String(c.mpn)).filter(Boolean))];
+
+    // 2) delete child docs
+    await Child.deleteMany({ _id: { $in: childIds } });
+
+    // 3) remove references from all MPNs in one go
+    if (mpnIds.length) {
+      await MPN.updateMany(
+        { _id: { $in: mpnIds } },
+        { $pull: { children: { $in: childIds } } }
+      );
+    }
+
+    return res.json({
+      success: true,
+      message: "Selected child parts deleted",
+      deletedCount: childIds.length,
+    });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+
 /**
  * Get Child by ID
  */

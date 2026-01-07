@@ -596,8 +596,8 @@ const DeliveryOrderPage = () => {
                 exportText="Export"
                 // onImport={(file) => handleImport(file)}
                 showExport={hasPermission("work_order.work_order_managment:export")}
-                // onExport={() => { setExportModalOpen(true) }}
-                onExport={() => handleExport()}
+                onExport={() => { setExportModalOpen(true) }}
+                // onExport={() => handleExport()}
                 showFilter={false}
                 onFilter={() => console.log("Filter clicked")}
                 showProductSetting={hasPermission("work_order.work_order_managment:setting")}
