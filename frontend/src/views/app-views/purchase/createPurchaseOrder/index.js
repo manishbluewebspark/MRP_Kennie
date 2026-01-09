@@ -600,7 +600,7 @@ const PurchaseOrderForm = () => {
                 PO Date
               </Title>
               <Form.Item name="poDate" rules={[{ required: true }]}>
-                <DatePicker size="large" style={{ width: '100%' }} />
+                <DatePicker format="DD/MM/YYYY" size="large" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
             <Col span={8}>
@@ -635,7 +635,7 @@ const PurchaseOrderForm = () => {
             <Col span={8}>
               <Text type="secondary">Need Date</Text>
               <Form.Item name="needDate">
-                <DatePicker size="large" style={{ width: '100%' }} />
+                <DatePicker format="DD/MM/YYYY" size="large" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
             <Col span={8}>

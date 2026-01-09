@@ -17,6 +17,8 @@ import ProjectService from "services/ProjectService";
 import MoveToProductionModal from "./MoveToProductionModal";
 import SystemSettingsService from "services/SystemSettingsService";
 import WorkOrderExportModal from "./WorkOrderExportModal";
+import GlobalFilterModal from "components/GlobalFilterModal";
+import { fetchCustomers } from "store/slices/customerSlice";
 const { confirm } = Modal;
 
 const fmt = (d) => (d ? dayjs(d).format("DD/MM/YYYY") : "-");
@@ -138,20 +140,33 @@ const DeliveryOrderPage = () => {
     const [isProductSettingmodalVisible, setIsProductSettingmodalVisible] = useState(false);
     const [importWorkOrderModalVisible, setImportWorkOrderModalVisible] = useState(false);
     const [exportModalOpen, setExportModalOpen] = useState(false);
+    const [filterVisible, setFilterVisible] = useState(false)
+
+
+    const [posOptions, setPosOptions] = useState([]);
+    const [projectOptions, setProjectOptions] = useState([]);
+    const [drawingOptions, setDrawingOptions] = useState([]);
+    const [workOrderOptions, setWorkOrderOptions] = useState([]);
+    const [filters, setFilters] = useState({});
+
+
 
     const { workOrderSettings } = useSelector(
         (state) => state.systemSettings
     );
 
+    const { list } = useSelector(
+        (state) => state.customers
+    );
+
+
     const [selectedRecord, setSelectedRecord] = useState(null);
     const [isDrawerVisible, setIsDrawerVisible] = useState(false);
-    const { projects } = useSelector(
-        (state) => state
-    );
+
     const [isProductionvisible, setisProductionvisible] = useState(false);
     const [projectData, setProjectData] = useState([])
     const [moveToProdId, setMoveToProdId] = useState(null)
-    console.log('---workOrderSettings', workOrderSettings)
+
     const [moving, setMoving] = useState(false);
     const [lastWorkOrderNo, setLastOrderNumber] = useState('')
 
@@ -161,6 +176,40 @@ const DeliveryOrderPage = () => {
         setMoveToProdId(record?._id)
     }
 
+    const filterConfig = [
+        {
+            type: "select",
+            name: "projectNo",
+            label: "Project No",
+            placeholder: "Select Project No",
+            options: projectOptions.map((cat) => ({
+                label: cat.label,
+                value: cat.value,
+            })),
+        },
+        {
+            type: "select",
+            name: "posNo",
+            label: "POS No",
+            placeholder: "Select POS No",
+            options: posOptions.map((cat) => ({
+                label: cat.label,
+                value: cat.value,
+            })),
+        },
+        {
+            type: "select",
+            name: "drawingNo",
+            label: "Drawing No",
+            placeholder: "Select Drawing No",
+            options: drawingOptions.map((cat) => ({
+                label: cat.label,
+                value: cat.value,
+            })),
+        }
+
+    ];
+
 
     const columns = [
         {
@@ -168,6 +217,13 @@ const DeliveryOrderPage = () => {
             dataIndex: "workOrderNo",
             key: "workOrderNo",
             sorter: (a, b) => a.workOrderNo.localeCompare(b.workOrderNo),
+            render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+        },
+        {
+            title: "Project No",
+            dataIndex: "projectNo",
+            key: "projectNo",
+            sorter: (a, b) => a.projectNo.localeCompare(b.projectNo),
             render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
         },
         // {
@@ -189,9 +245,21 @@ const DeliveryOrderPage = () => {
         //     render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text || 'N/A'}</span>
         // },
         {
-            title: "PO Number",
+            title: "PO No",
             dataIndex: "poNumber",
             key: "poNumber",
+            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
+        },
+        {
+            title: "POS No",
+            dataIndex: "posNo",
+            key: "posNo",
+            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
+        },
+        {
+            title: "Drawing No",
+            dataIndex: "drawingNo",
+            key: "drawingNo",
             render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
         },
         // {
@@ -342,13 +410,16 @@ const DeliveryOrderPage = () => {
     const fetchWorkOrders = async (params = {}) => {
         setLoading(true);
         try {
-            const { page = 1, limit = 10, search = "" } = params;
+            const { page = 1, limit = 10, search = "", filters: f = filters, } = params;
             const response = await WorkOrderService.getAllWorkOrders({
                 page,
                 limit,
                 search,
                 sortBy: 'createdAt',
-                sortOrder: 'desc'
+                sortOrder: 'desc',
+                projectId: f?.projectNo || undefined,
+                posNo: f?.posNo || undefined,
+                drawingId: f?.drawingNo || undefined,
             });
 
             if (response.success) {
@@ -370,47 +441,49 @@ const DeliveryOrderPage = () => {
         }
     };
 
-    const handleExport = async () => {
-        try {
-            const resp = await WorkOrderService.exportWorkOrders();
+ const handleExport = async (filter) => {
+  console.log("-------filter", filter);
 
-            let arrayBuffer;
-            let mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  try {
+    const resp = await WorkOrderService.exportWorkOrders({
+      customerMode: filter.customerMode,
+      customerId: filter.customerId,
+      filterMode: filter.filterMode,
+      projectIds: filter.projectNames, // array
+      posNos: filter.posNos,
+      drawingIds: filter.drawingNos,
+      workOrderNos: filter.workOrderNos,
+    });
 
-            // Axios instance returns { data: ArrayBuffer, headers: {...} }
-            if (resp?.data instanceof ArrayBuffer) {
-                arrayBuffer = resp.data;
-                mime = resp?.headers?.['content-type'] || mime;
+    let arrayBuffer;
+    let mime =
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-                // Some Axios wrappers return ArrayBuffer directly
-            } else if (resp instanceof ArrayBuffer) {
-                arrayBuffer = resp;
+    if (resp?.data instanceof ArrayBuffer) {
+      arrayBuffer = resp.data;
+      mime = resp?.headers?.["content-type"] || mime;
+    } else {
+      throw new Error("Invalid export response");
+    }
 
-                // Native fetch path we returned { blob, contentType }
-            } else if (resp?.blob instanceof Blob) {
-                mime = resp.contentType || mime;
-                arrayBuffer = await resp.blob.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: mime });
+    const url = window.URL.createObjectURL(blob);
 
-            } else {
-                throw new Error("Unknown response shape from exportWorkOrders()");
-            }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "work_orders_export.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 
-            const blob = new Blob([arrayBuffer], { type: mime });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "work_orders_export.xlsx";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+    window.URL.revokeObjectURL(url);
+    message.success("Work orders exported successfully");
+  } catch (err) {
+    console.error("Export error:", err);
+    message.error("Failed to export work orders");
+  }
+};
 
-            message.success("Work orders exported successfully");
-        } catch (err) {
-            console.error("Error exporting work orders:", err);
-            message.error("Failed to export work orders");
-        }
-    };
 
 
     const handleImport = async (file) => {
@@ -436,8 +509,36 @@ const DeliveryOrderPage = () => {
 
     useEffect(() => {
         dispatch(fetchSystemSettings())
-        fetchProjects()
+        dispatch(fetchCustomers())
     }, [dispatch])
+
+
+    const fetchFilterData = async () => {
+        try {
+            const res = await WorkOrderService.getFilterData();
+
+            if (res?.status) {
+                const data = res?.data || {};
+
+                setPosOptions(data.posNos || []);
+                setProjectOptions(data.projects || []);
+                setDrawingOptions(data.drawings || []);
+                setWorkOrderOptions(data.workOrders || [])
+            } else {
+                message.error(res?.message || "Failed to load filter data");
+            }
+        } catch (error) {
+            console.error("fetchFilterData error:", error);
+            message.error("Error loading filter data");
+        } finally {
+            // setLoadingFilters(false);
+        }
+    };
+
+
+    useEffect(() => {
+        fetchFilterData()
+    }, [])
 
     const handleSearch = useDebounce((value) => {
         setPage(1);
@@ -556,6 +657,20 @@ const DeliveryOrderPage = () => {
         }
     };
 
+    const handleFilterSubmit = async (filterData) => {
+        console.log("---------filterData", filterData);
+
+        // ✅ save filters in state
+        setFilters(filterData);
+        setFilterVisible(false)
+        // ✅ reset to first page & fetch
+        fetchWorkOrders({
+            page: 1,
+            limit: limit,
+            filters: filterData,
+        });
+    };
+
     return (
         <div>
             {/* Header Section */}
@@ -598,8 +713,8 @@ const DeliveryOrderPage = () => {
                 showExport={hasPermission("work_order.work_order_managment:export")}
                 onExport={() => { setExportModalOpen(true) }}
                 // onExport={() => handleExport()}
-                showFilter={false}
-                onFilter={() => console.log("Filter clicked")}
+                showFilter={true}
+                onFilter={() => setFilterVisible(true)}
                 showProductSetting={hasPermission("work_order.work_order_managment:setting")}
                 onProductSetting={() => { setIsProductSettingmodalVisible(true) }}
                 showMPNTracker={hasPermission("work_order.work_order_managment:mpn_tracker")}
@@ -649,6 +764,14 @@ const DeliveryOrderPage = () => {
                 loading={moving}
             />
 
+            <GlobalFilterModal
+                visible={filterVisible}
+                onClose={() => setFilterVisible(false)}
+                onSubmit={handleFilterSubmit}
+                filters={filterConfig}
+                title="Filters"
+            />
+
             <WorkOrderSettingsModal
                 visible={isProductSettingmodalVisible}
                 onCancel={() => setIsProductSettingmodalVisible(false)}
@@ -666,9 +789,10 @@ const DeliveryOrderPage = () => {
                 open={exportModalOpen}
                 onCancel={() => setExportModalOpen(false)}
                 onExport={(filters) => handleExport(filters)}
-                poOptions={[]}
-                projectOptions={[]}
-                workOrderOptions={[]}
+                poOptions={posOptions}
+                projectOptions={projectOptions}
+                workOrderOptions={workOrderOptions}
+                customerOptions={list}
             />
 
 

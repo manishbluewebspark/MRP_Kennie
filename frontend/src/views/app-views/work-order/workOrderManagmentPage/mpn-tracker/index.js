@@ -34,6 +34,15 @@ const chipStyle = {
     gap: 6,
 };
 
+const getStatusColor = (status = "") => {
+  const s = status.toLowerCase();
+  if (s.includes("hold")) return "orange";
+  if (s.includes("complete")) return "green";
+  if (s.includes("progress")) return "blue";
+  return "default";
+};
+
+
 const MPNTrackerPage = () => {
     const dispatch = useDispatch();
 
@@ -263,24 +272,54 @@ const MPNTrackerPage = () => {
                 key: "projectName",
                 render: (text) => <span style={{ fontSize: 13 }}>{text}</span>,
             },
-            {
-                title: "Work Order No",
-                dataIndex: "workOrderNo",
-                key: "workOrderNo",
-                render: (text) => (
-                    <Tag
-                        style={{
-                            borderRadius: 12,
-                            background: "#1890ff",
-                            color: "white",
-                            border: "none",
-                            padding: "2px 10px",
-                        }}
-                    >
-                        {text}
-                    </Tag>
-                ),
-            },
+           {
+  title: "Work Orders",
+  dataIndex: "workOrders",
+  key: "workOrders",
+  render: (workOrders = []) => {
+    if (!workOrders.length) return "-";
+
+    return (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {workOrders.map((wo) => (
+          <div
+            key={wo.workOrderId}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 10px",
+              borderRadius: 14,
+              border: "1px solid #d9d9d9",
+              background: "#fafafa",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {/* Work Order No */}
+            <span style={{ color: "#1890ff" }}>
+              {wo.workOrderNo}
+            </span>
+
+            {/* Status Tag */}
+            <Tag
+              color={getStatusColor(wo.status)}
+              style={{
+                margin: 0,
+                borderRadius: 10,
+                fontSize: 11,
+                padding: "0 8px",
+                fontWeight: 600,
+              }}
+            >
+              {wo.status}
+            </Tag>
+          </div>
+        ))}
+      </div>
+    );
+  },
+},
             {
                 title: "Quantity Used",
                 dataIndex: "quantityUsed",
@@ -293,19 +332,19 @@ const MPNTrackerPage = () => {
                 key: "needDate",
                 render: (text) => (text ? <span style={{ fontSize: 13 }}>{dayjs(text).format("YYYY-MM-DD")}</span> : "-"),
             },
-            {
-                title: "Status",
-                dataIndex: "status",
-                key: "status",
-                render: (text) => {
-                    const color = text === "on_hold" ? "orange" : text === "completed" ? "green" : "blue";
-                    return (
-                        <Tag color={color} style={{ borderRadius: 12, padding: "2px 10px" }}>
-                            {text}
-                        </Tag>
-                    );
-                },
-            },
+            // {
+            //     title: "Status",
+            //     dataIndex: "status",
+            //     key: "status",
+            //     render: (text) => {
+            //         const color = text === "on_hold" ? "orange" : text === "completed" ? "green" : "blue";
+            //         return (
+            //             <Tag color={color} style={{ borderRadius: 12, padding: "2px 10px" }}>
+            //                 {text}
+            //             </Tag>
+            //         );
+            //     },
+            // },
         ];
     }, []);
 

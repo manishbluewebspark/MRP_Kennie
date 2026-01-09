@@ -237,7 +237,7 @@ export const getAllDrawings = async (req, res) => {
   try {
     let {
       page = 1, limit = 10, search = "", sortBy = "createdAt", sortOrder = "desc",
-      quoteStatus, quoteType, projectId, customerId, drawingDate, drawingRange,showOnlyQuoted
+      quoteStatus, quoteType, projectId, customerId, drawingDate, drawingRange, showOnlyQuoted
     } = req.query;
 
     console.log('-------drawingDate', drawingDate)
@@ -254,7 +254,7 @@ export const getAllDrawings = async (req, res) => {
         { description: { $regex: search, $options: "i" } },
       ];
     }
-    if(showOnlyQuoted){
+    if (showOnlyQuoted) {
       matchStage.quotedDate = { $ne: null };
     }
     if (quoteStatus) matchStage.quoteStatus = quoteStatus;
@@ -1742,9 +1742,9 @@ export const getAllCostingItems = async (req, res) => {
           { path: "currencyType", select: "name symbol" }, // populate currency type details
         ],
       })
-       .populate({
+      .populate({
         path: "mpn", // parent reference
-        select:"MPN RFQUnitPrice",
+        select: "MPN RFQUnitPrice",
         populate: [
           { path: "currency", select: "name symbol" }, // populate currency type details
         ],
@@ -3463,17 +3463,17 @@ export const importDrawings = async (req, res) => {
           }
 
           const unitPrice = toNum(childPart?.mpn?.RFQUnitPrice);
-          if (!materialHasError && !(unitPrice > 0)) {
-            results.errors.push({
-              drawingNo,
-              row: rowIndex,
-              type: "material",
-              field: "RFQUnitPrice",
-              value: unitPrice,
-              message: `RFQUnitPrice for MPN of Child Part ${childParts} is missing or 0`,
-            });
-            materialHasError = true;
-          }
+          // if (!materialHasError && !(unitPrice > 0)) {
+          //   results.errors.push({
+          //     drawingNo,
+          //     row: rowIndex,
+          //     type: "material",
+          //     field: "RFQUnitPrice",
+          //     value: unitPrice,
+          //     message: `RFQUnitPrice for MPN of Child Part ${childParts} is missing or 0`,
+          //   });
+          //   materialHasError = true;
+          // }
 
           if (!materialHasError) {
             const childDesc = toStr(pick(r, "Description", "Child Description", "Part Description"));
@@ -3722,23 +3722,25 @@ export const importDrawings = async (req, res) => {
       });
     }
 
-    function formatImportErrors(errors = []) {
+    function formatImportErrors(errors = [], opts = {}) {
+      const {
+        maxDrawings = 8,      // kitne drawings show kare
+        maxLinesPerDrawing = 3, // per drawing max bullets
+      } = opts;
+
       if (!Array.isArray(errors) || errors.length === 0) return "";
 
-      // 1) Normalize each error into a stable key so duplicates merge
+      const clean = (v) => (v == null ? "" : String(v).trim());
+
+      // 1) Normalize
       const normalized = errors.map((e) => {
-        const drawingNo = e?.drawingNo || "UNKNOWN";
+        const drawingNo = clean(e?.drawingNo) || "UNKNOWN";
         const row = e?.row != null ? Number(e.row) : null;
-        const message = String(e?.message || "").trim();
-        const field = e?.field ? String(e.field).trim() : "";
-        const value =
-          e?.value === 0 || e?.value
-            ? String(e.value).trim()
-            : "";
+        const message = clean(e?.message) || "Unknown error";
+        const field = clean(e?.field);
+        const value = e?.value === 0 || e?.value ? clean(e.value) : "";
 
-        // Key for de-duplication
         const key = `${drawingNo}||${message}||${field}||${value}`;
-
         return { drawingNo, row, message, field, value, key };
       });
 
@@ -3749,11 +3751,20 @@ export const importDrawings = async (req, res) => {
         byDrawing.get(e.drawingNo).push(e);
       }
 
-      // 3) Build readable output
-      const lines = [];
+      // 3) Build output
+      const drawingEntries = Array.from(byDrawing.entries()).sort(([a], [b]) =>
+        a.localeCompare(b)
+      );
 
-      for (const [drawingNo, list] of byDrawing.entries()) {
-        // Deduplicate same error (same message/field/value) but keep all rows
+      const shownDrawings = drawingEntries.slice(0, maxDrawings);
+      const remainingDrawings = drawingEntries.length - shownDrawings.length;
+
+      const lines = [];
+      lines.push(`Import completed with issues (${errors.length} issues):`);
+      lines.push("");
+
+      for (const [drawingNo, list] of shownDrawings) {
+        // Merge duplicates by same message/field/value (keep rows)
         const merged = new Map(); // key -> { rows:Set, message, field, value }
         for (const e of list) {
           if (!merged.has(e.key)) {
@@ -3764,31 +3775,52 @@ export const importDrawings = async (req, res) => {
               value: e.value,
             });
           }
-          if (e.row != null) merged.get(e.key).rows.add(e.row);
+          if (e.row != null && !Number.isNaN(e.row)) merged.get(e.key).rows.add(e.row);
         }
 
-        lines.push(`Drawing ${drawingNo}:`);
-
+        const bullets = [];
         for (const m of merged.values()) {
           const rowList = [...m.rows].sort((a, b) => a - b);
-          const rowText = rowList.length ? `Rows ${rowList.join(", ")}` : `Row -`;
 
-          // show field/value only if useful
+          // ✅ If rows exist → "Row 2" or "Rows 2, 3"
+          const rowText =
+            rowList.length === 0
+              ? "" // ✅ no "Row -"
+              : rowList.length === 1
+                ? `Row ${rowList[0]}: `
+                : `Rows ${rowList.join(", ")}: `;
+
           const fieldText =
             m.field
               ? m.value !== ""
-                ? ` [${m.field}: ${m.value}]`
-                : ` [${m.field}]`
+                ? ` (${m.field}: ${m.value})`
+                : ` (${m.field})`
               : "";
 
-          lines.push(`  • ${rowText} → ${m.message}${fieldText}`);
+          bullets.push(`- ${rowText}${m.message}${fieldText}`);
         }
 
-        lines.push(""); // blank line between drawings
+        // limit bullets per drawing (optional)
+        const shownBullets = bullets.slice(0, maxLinesPerDrawing);
+        const remainingBullets = bullets.length - shownBullets.length;
+
+        lines.push(`• Drawing ${drawingNo}`);
+        lines.push(...shownBullets.map((b) => `  ${b}`));
+
+        if (remainingBullets > 0) {
+          lines.push(`  - (+${remainingBullets} more issues)`);
+        }
+
+        lines.push(""); // space between drawings
+      }
+
+      if (remainingDrawings > 0) {
+        lines.push(`(+${remainingDrawings} more drawings with issues)`);
       }
 
       return lines.join("\n").trim();
     }
+
 
 
 
@@ -4216,18 +4248,18 @@ export const importDrawings = async (req, res) => {
 
 export const updateLatestPrice = async (req, res) => {
   try {
-    const {id } = req.params; // ✅ same pattern as updateCostingItem
+    const { id } = req.params; // ✅ same pattern as updateCostingItem
 
-   
+
 
     // 1) Load costing item + MPN
     const costingItem = await CostingItems.findById(id)
       .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK Supplier RFQDate Description Manufacturer UOM")
       .lean(false); // must be mongoose doc (save)
 
-      console.log('------costingItem',costingItem)
+    console.log('------costingItem', costingItem)
 
-       // ✅ validate ids
+    // ✅ validate ids
     if (!mongoose.Types.ObjectId.isValid(costingItem?.drawingId)) {
       return res.status(400).json({ success: false, message: "Invalid drawingId" });
     }

@@ -81,12 +81,12 @@ WorkOrderService.getDeliveryOrders = (params) => {
 };
 
 // Export work orders
-WorkOrderService.exportWorkOrders = (payload) => {
+WorkOrderService.exportWorkOrders = (params) => {
   return fetch({
     url: "/work-orders/workOrder/export",
     method: "get",
-    responseType: 'arraybuffer',
-    data: payload,
+    responseType: "arraybuffer",
+    params, // ✅ THIS IS IMPORTANT
   });
 };
 
@@ -148,10 +148,11 @@ WorkOrderService.moveToProduction = (id) => {
   });
 };
 
-WorkOrderService.getAllProductionWorkOrders = () => {
+WorkOrderService.getAllProductionWorkOrders = (params) => {
   return fetch({
     url: `/work-orders/workOrder/production`,
-    method: "get"
+    method: "get",
+    params
   });
 };
 
@@ -211,6 +212,14 @@ WorkOrderService.importTotalMpnNeeded = (formData) => {
     headers: {
       "Content-Type": "multipart/form-data",
     },
+  });
+};
+
+WorkOrderService.getFilterData = (params) => {
+  return fetch({
+    url: `/work-orders/workOrder/getFilterData`,
+    method: "get",
+    params
   });
 };
 

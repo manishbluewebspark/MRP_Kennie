@@ -214,20 +214,33 @@ const DrawingDetails = () => {
         }
     };
 
+    const round2 = (n) =>
+  Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
     // GRAND total across all tabs with their markups
-    const grandTotalWithMarkup = useMemo(() => {
+   const grandTotalWithMarkup = useMemo(() => {
+  // ✅ 1. Backend value ko priority do
+  if (drawing?.totalPriceWithMarkup != null) {
+    return round2(drawing.totalPriceWithMarkup);
+  }
 
-        // if (drawing?.totalPrice != null) return Number(drawing.totalPrice);
+  // ❌ 2. Sirf fallback ke liye frontend calculation
+  const m = Number(drawing?.materialMarkup || 0);
+  const h = Number(drawing?.manhourMarkup || 0);
+  const p = Number(drawing?.packingMarkup || 0);
 
-        const m = Number(drawing?.materialMarkup || 0);
-        const h = Number(drawing?.manhourMarkup || 0);
-        const p = Number(drawing?.packingMarkup || 0);
-        const materialTotal = rawTotals.material + (rawTotals.material * m) / 100;
-        const manhourTotal = rawTotals.manhour + (rawTotals.manhour * h) / 100;
-        const packingTotal = rawTotals.packing + (rawTotals.packing * p) / 100;
+  const materialTotal =
+    rawTotals.material + (rawTotals.material * m) / 100;
 
-        return materialTotal + manhourTotal + packingTotal;
-    }, [drawing, rawTotals, markups]);
+  const manhourTotal =
+    rawTotals.manhour + (rawTotals.manhour * h) / 100;
+
+  const packingTotal =
+    rawTotals.packing + (rawTotals.packing * p) / 100;
+
+  return round2(materialTotal + manhourTotal + packingTotal);
+}, [drawing, rawTotals]);
+
 
     const triggerFileInput = () => fileInputRef.current && fileInputRef.current.click();
 
@@ -434,7 +447,7 @@ const handleUpdateAll = async (ids = []) => {
         { key: 'project', label: 'Project', value: drawing?.projectId?.projectName || "-", bold: true },
         { key: 'customer', label: 'Customer', value: drawing?.customerId?.companyName || "-", bold: true },
         { key: 'currency', label: 'Currency', value: drawing?.currency?.code || drawing?.projectId?.currency || "-", bold: true, fontSize: 20 },
-        { key: 'unitPrice', label: 'Unit Price', value: `${drawing?.currency?.symbol} ${grandTotalWithMarkup.toFixed(2)}`, bold: true, fontSize: 20 },
+        { key: 'unitPrice', label: 'Unit Price', value: `${drawing?.currency?.symbol || ""} ${grandTotalWithMarkup.toFixed(2)}`, bold: true, fontSize: 20 },
         { key: 'leadTime', label: 'Lead Time', value: drawing?.leadTimeWeeks ? `${drawing.leadTimeWeeks} week(s)` : "TBD", bold: true },
         { key: 'createdAt', label: 'Quoted Date', value: drawing?.createdAt ? new Date(drawing.createdAt).toLocaleDateString() : "Not Quoted", bold: true },
         { key: 'lastEditedBy', label: 'Last Edited User', value: drawing?.lastEditedBy?.name || "No User", bold: true },

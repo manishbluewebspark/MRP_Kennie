@@ -26,8 +26,9 @@ import {
   EyeOutlined,
   SearchOutlined,
   SettingOutlined,
+  FilterOutlined,
 } from "@ant-design/icons";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import useDebounce from "utils/debouce";
 import {
   addSkillLevelCosting,
@@ -39,6 +40,8 @@ import SkillLevelCostingService from "services/SkillLevelCostingService";
 import PickingDetailModal from "../PickingDetailModal";
 import WorkOrderService from "services/WorkOrderService";
 import InventoryService from "services/InventoryService";
+import GlobalFilterModal from "components/GlobalFilterModal";
+import { fetchCustomers } from "store/slices/customerSlice";
 
 const { Title, Text } = Typography;
 
@@ -109,6 +112,13 @@ const CableAssemblyCard = ({
       return [
         { label: "Picking", key: "picking" },
         { label: "Assembly", key: "assembly" },
+        { label: "Quality Check", key: "quality_check" },
+      ];
+    }
+
+    if (formatted === "Others") {
+      return [
+        { label: "Picking/Assembly", key: "picking_assembly" },
         { label: "Quality Check", key: "quality_check" },
       ];
     }
@@ -523,6 +533,17 @@ const SkillLevelCostingList = () => {
   const [materialShortages, setMaterialShortages] = useState([]);
   const [activeStage, setActiveStage] = useState("picking");
   const [selectWorkOrderData, setSelectWorkOrderData] = useState();
+  const [filterVisible, setFilterVisible] = useState(false)
+  const [filters, setFilters] = useState({});
+  const [posOptions, setPosOptions] = useState([]);
+  const [projectOptions, setProjectOptions] = useState([]);
+  const [drawingOptions, setDrawingOptions] = useState([]);
+  const [workOrderOptions, setWorkOrderOptions] = useState([]);
+
+     const { list } = useSelector(
+          (state) => state.customers
+      );
+  
 
   useEffect(() => {
     fetchData();
@@ -530,6 +551,37 @@ const SkillLevelCostingList = () => {
     fetchCompleteWorkOrdersData();
     fetchMaterialShortagesData()
   }, [page, limit]);
+
+
+  const fetchFilterData = async () => {
+    try {
+      const res = await WorkOrderService.getFilterData();
+
+      if (res?.status) {
+        const data = res?.data || {};
+
+        setPosOptions(data.posNos || []);
+        setProjectOptions(data.projects || []);
+        setDrawingOptions(data.drawings || []);
+        setWorkOrderOptions(data.workOrders || [])
+      } else {
+        message.error(res?.message || "Failed to load filter data");
+      }
+    } catch (error) {
+      console.error("fetchFilterData error:", error);
+      message.error("Error loading filter data");
+    } finally {
+      // setLoadingFilters(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFilterData()
+  }, [])
+
+    useEffect(() => {
+          dispatch(fetchCustomers({limit:3000}))
+      }, [dispatch])
 
   const fetchCompleteWorkOrdersData = async () => {
     try {
@@ -544,6 +596,62 @@ const SkillLevelCostingList = () => {
       console.error(err);
     }
   };
+
+  const filterConfig = [
+    {
+      type: "select",
+      name: "projectNo",
+      label: "Project No",
+      placeholder: "Select Project No",
+      options: projectOptions.map((cat) => ({
+        label: cat.label,
+        value: cat.value,
+      })),
+    },
+    {
+      type: "select",
+      name: "posNo",
+      label: "POS No",
+      placeholder: "Select POS No",
+      options: posOptions.map((cat) => ({
+        label: cat.label,
+        value: cat.value,
+      })),
+    },
+    {
+      type: "select",
+      name: "drawingNo",
+      label: "Drawing No",
+      placeholder: "Select Drawing No",
+      options: drawingOptions.map((cat) => ({
+        label: cat.label,
+        value: cat.value,
+      })),
+    },
+    {
+      type: "select",
+      name: "customerId",
+      label: "Customer",
+      placeholder: "Select Customer",
+      options: list.map((cat) => ({
+        label: cat.companyName,
+        value: cat._id,
+      })),
+    }
+
+  ];
+
+  const handleFilterSubmit = async (filterData) => {
+    console.log("---------filterData", filterData);
+
+    setFilters(filterData);
+    setFilterVisible(false);
+
+    // ✅ Reset page to 1 and fetch with new filters
+    setPage(1);
+    fetchWorkOrdersData({ page: 1, limit, filters: filterData });
+  };
+
 
   const fetchData = async () => {
     try {
@@ -562,15 +670,49 @@ const SkillLevelCostingList = () => {
     }
   };
 
-  const fetchWorkOrdersData = async () => {
+  // const fetchWorkOrdersData = async () => {
+  //   try {
+  //     setLoading(true);
+  //     const res = await WorkOrderService.getAllProductionWorkOrders({
+  //       page,
+  //       limit,
+  //     });
+  //     console.log("-------active res", res);
+  //     setAllWordOrders(res.data || []);
+  //   } catch (err) {
+  //     message.error("Failed to fetch work orders");
+  //     console.error(err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+
+  const fetchWorkOrdersData = async (params = {}) => {
     try {
       setLoading(true);
-      const res = await WorkOrderService.getAllProductionWorkOrders({
-        page,
-        limit,
-      });
-      console.log("-------active res", res);
-      setAllWordOrders(res.data || []);
+
+      const payload = {
+        page: params.page ?? page,
+        limit: params.limit ?? limit,
+
+        // ✅ filters (map names correctly)
+        projectId: (params.filters ?? filters)?.projectNo || undefined,   // actually projectId
+        customerId: (params.filters ?? filters)?.customerId || undefined,   // actually projectId
+        drawingId: (params.filters ?? filters)?.drawingNo || undefined,   // actually drawingId
+        posNo: (params.filters ?? filters)?.posNo || undefined,
+        status: (params.filters ?? filters)?.status || undefined,
+        search: params.search || "", // optional
+      };
+
+      const res = await WorkOrderService.getAllProductionWorkOrders(payload);
+
+      console.log("-------production res", res);
+
+      setAllWordOrders(res?.data || []);
+      // if pagination comes from backend, store it too
+      // setTotal(res?.pagination?.totalItems || 0);
+
     } catch (err) {
       message.error("Failed to fetch work orders");
       console.error(err);
@@ -578,6 +720,7 @@ const SkillLevelCostingList = () => {
       setLoading(false);
     }
   };
+
 
   const fetchMaterialShortagesData = async () => {
     try {
@@ -692,6 +835,8 @@ const SkillLevelCostingList = () => {
     },
   ];
 
+
+
   const handleSave = async (data) => {
     try {
       console.log("Saved data:", data);
@@ -799,9 +944,9 @@ const SkillLevelCostingList = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
         </Col>
-        {/* <Button type="primary" icon={<SettingOutlined />}>
-          Update Progress
-        </Button> */}
+        <Button icon={<FilterOutlined />} type="default" onClick={() => setFilterVisible(true)}>
+          Filter
+        </Button>
       </Row>
 
       {/* Table */}
@@ -811,6 +956,14 @@ const SkillLevelCostingList = () => {
         loading={loading}
         rowKey={(record) => record.workOrderId || record._id}
         pagination={false}
+      />
+
+      <GlobalFilterModal
+        visible={filterVisible}
+        onClose={() => setFilterVisible(false)}
+        onSubmit={handleFilterSubmit}
+        filters={filterConfig}
+        title="Filters"
       />
 
       <PickingDetailModal

@@ -1,5 +1,5 @@
 import express from "express";
-import { createWorkOrder, deleteWorkOrder, exportDeliveryWorkOrdersPDF, exportDeliveryWorkOrdersWord, exportDeliveryWorkOrdersXlsx, exportWorkOrders, getAllChilPartByDrawingId, getAllProductionWordOrders, getAllWorkOrders, getCompleteWorkOrders, getDeliveryOrders, getEachMPNUsage, getTotalMPNNeeded, getWorkOrderById, importTotalMpnNeeded, importWorkOrders, moveToProduction, saveWorkOrderStage, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
+import { createWorkOrder, deleteWorkOrder, exportDeliveryWorkOrdersPDF, exportDeliveryWorkOrdersWord, exportDeliveryWorkOrdersXlsx, exportWorkOrders, getAllChilPartByDrawingId, getAllProductionWordOrders, getAllWorkOrders, getCompleteWorkOrders, getDeliveryOrders, getEachMPNUsage, getFilterData, getTotalMPNNeeded, getWorkOrderById, importTotalMpnNeeded, importWorkOrders, moveToProduction, saveWorkOrderStage, updateDeliveryInfo, updateWorkOrder } from "../controllers/workOrder.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { upload } from "..//middlewares/upload.js";
 
@@ -35,6 +35,8 @@ router.get("/workOrder/getEachMPNUsage",authenticate,getEachMPNUsage)
 
 router.get("/workOrder/getCompleteWorkOrders",authenticate,getCompleteWorkOrders)
 router.get('/workOrder/deliveryOrders',authenticate, getDeliveryOrders)
+
+router.get("/workOrder/getFilterData", authenticate, getFilterData);
 // CRUD routes
 router.get("/", authenticate, getAllWorkOrders);
 router.get("/:id", authenticate, getWorkOrderById);

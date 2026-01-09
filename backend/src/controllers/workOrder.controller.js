@@ -120,6 +120,109 @@ function generateWorkOrderNumber(lastWorkOrderNo) {
 //   }
 // };
 
+// export const getAllWorkOrders = async (req, res) => {
+//   try {
+//     let {
+//       page = 1,
+//       limit = 10,
+//       search = "",
+//       sortBy = "createdAt",
+//       sortOrder = "desc",
+//       projectId,
+//       drawingId,
+//       status,
+//     } = req.query;
+
+//     const query = {};
+
+//     // Search
+//     if (search) {
+//       query.$or = [
+//         { workOrderNo: { $regex: search, $options: "i" } },
+//         { poNumber: { $regex: search, $options: "i" } },
+//         { projectNo: { $regex: search, $options: "i" } },
+//       ];
+//     }
+
+//     if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
+//       query.projectId = projectId;
+//     }
+
+//     if (drawingId && mongoose.Types.ObjectId.isValid(drawingId)) {
+//       query.drawingId = drawingId;
+//     }
+
+//     if (status) query.status = status;
+
+//     const sortOptions = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+
+//     const total = await WorkOrder.countDocuments(query);
+
+//     let workOrders = await WorkOrder.find(query)
+//       .sort(sortOptions)
+//       .skip((page - 1) * limit)
+//       .limit(parseInt(limit))
+//       .lean();
+
+//     // ***************************************
+//     // ⭐ DIRECT drawingId → drawingNo resolve
+//     // ***************************************
+//     const drawingIds = workOrders
+//       .filter((wo) => wo.drawingId)
+//       .map((wo) => String(wo.drawingId));
+
+//     const uniqueDrawingIds = [...new Set(drawingIds)];
+
+//     let drawingMap = new Map();
+
+//     if (uniqueDrawingIds.length) {
+//       const drawingDocs = await Drawing.find({
+//         _id: { $in: uniqueDrawingIds },
+//       })
+//         .select("drawingNo projectType quoteType")
+//         .lean();
+
+//       drawingMap = new Map(
+//         drawingDocs.map((d) => [String(d._id), d])
+//       );
+//     }
+
+//     // ⭐ Inject drawingNo + projectType into each WorkOrder
+//     workOrders = workOrders.map((wo) => {
+//       const d = drawingMap.get(String(wo.drawingId));
+
+//       return {
+//         ...wo,
+//         drawingNo: d?.drawingNo || null,
+//         projectType: d?.projectType || d?.quoteType || null,
+//       };
+//     });
+
+//     // ⭐ Last WorkOrderNo
+//     const lastWorkOrder = await WorkOrder.findOne()
+//       .sort({ createdAt: -1 })
+//       .select("workOrderNo")
+//       .lean();
+
+//     const lastWorkOrderNo = lastWorkOrder?.workOrderNo || null;
+
+//     return res.status(200).json({
+//       success: true,
+//       data: workOrders,
+//       lastWorkOrderNo,
+//       pagination: {
+//         currentPage: parseInt(page),
+//         totalPages: Math.ceil(total / limit),
+//         totalItems: total,
+//         itemsPerPage: parseInt(limit),
+//       },
+//     });
+//   } catch (error) {
+//     console.error("getAllWorkOrders error:", error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
 export const getAllWorkOrders = async (req, res) => {
   try {
     let {
@@ -130,67 +233,81 @@ export const getAllWorkOrders = async (req, res) => {
       sortOrder = "desc",
       projectId,
       drawingId,
+      posNo,        // ✅ NEW
       status,
     } = req.query;
 
+    page = parseInt(page, 10) || 1;
+    limit = parseInt(limit, 10) || 10;
+
     const query = {};
 
-    // Search
-    if (search) {
-      query.$or = [
-        { workOrderNo: { $regex: search, $options: "i" } },
-        { poNumber: { $regex: search, $options: "i" } },
-        { projectNo: { $regex: search, $options: "i" } },
-      ];
-    }
-
+    // ✅ Filters
     if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
-      query.projectId = projectId;
+      query.projectId = new mongoose.Types.ObjectId(projectId);
     }
 
     if (drawingId && mongoose.Types.ObjectId.isValid(drawingId)) {
-      query.drawingId = drawingId;
+      query.drawingId = new mongoose.Types.ObjectId(drawingId);
+    }
+
+    if (posNo !== undefined && posNo !== null && String(posNo).trim() !== "") {
+      // posNo number bhi ho sakta hai, string bhi
+      query.posNo = String(posNo).trim();
     }
 
     if (status) query.status = status;
 
+    // ✅ Search (text fields only)
+    if (search && String(search).trim()) {
+      const s = String(search).trim();
+      query.$or = [
+        { workOrderNo: { $regex: s, $options: "i" } },
+        { poNumber: { $regex: s, $options: "i" } },
+        { posNo: { $regex: s, $options: "i" } }, // ✅ helpful
+      ];
+      // NOTE: projectId/drawingId ObjectId pe regex mat lagao
+    }
+
+    // ✅ Sort
     const sortOptions = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
+    // ✅ Total count
     const total = await WorkOrder.countDocuments(query);
 
+    // ✅ Fetch workOrders
     let workOrders = await WorkOrder.find(query)
       .sort(sortOptions)
       .skip((page - 1) * limit)
-      .limit(parseInt(limit))
+      .limit(limit)
       .lean();
 
     // ***************************************
-    // ⭐ DIRECT drawingId → drawingNo resolve
+    // ⭐ drawingId → drawingNo resolve
     // ***************************************
-    const drawingIds = workOrders
-      .filter((wo) => wo.drawingId)
-      .map((wo) => String(wo.drawingId));
-
-    const uniqueDrawingIds = [...new Set(drawingIds)];
+    const uniqueDrawingIds = [
+      ...new Set(
+        workOrders
+          .filter((wo) => wo.drawingId)
+          .map((wo) => String(wo.drawingId))
+      ),
+    ];
 
     let drawingMap = new Map();
 
     if (uniqueDrawingIds.length) {
       const drawingDocs = await Drawing.find({
-        _id: { $in: uniqueDrawingIds },
+        _id: { $in: uniqueDrawingIds.map((id) => new mongoose.Types.ObjectId(id)) },
       })
         .select("drawingNo projectType quoteType")
         .lean();
 
-      drawingMap = new Map(
-        drawingDocs.map((d) => [String(d._id), d])
-      );
+      drawingMap = new Map(drawingDocs.map((d) => [String(d._id), d]));
     }
 
-    // ⭐ Inject drawingNo + projectType into each WorkOrder
+    // ⭐ Inject drawingNo + projectType
     workOrders = workOrders.map((wo) => {
       const d = drawingMap.get(String(wo.drawingId));
-
       return {
         ...wo,
         drawingNo: d?.drawingNo || null,
@@ -198,7 +315,7 @@ export const getAllWorkOrders = async (req, res) => {
       };
     });
 
-    // ⭐ Last WorkOrderNo
+    // ⭐ Last WorkOrderNo (same as your code)
     const lastWorkOrder = await WorkOrder.findOne()
       .sort({ createdAt: -1 })
       .select("workOrderNo")
@@ -211,10 +328,10 @@ export const getAllWorkOrders = async (req, res) => {
       data: workOrders,
       lastWorkOrderNo,
       pagination: {
-        currentPage: parseInt(page),
+        currentPage: page,
         totalPages: Math.ceil(total / limit),
         totalItems: total,
-        itemsPerPage: parseInt(limit),
+        itemsPerPage: limit,
       },
     });
   } catch (error) {
@@ -900,6 +1017,38 @@ const parseExcelDate = (raw) => {
   return isValidDate(d) ? d : null;
 };
 
+// ✅ Build a clean final message for skipped rows (grouped)
+const buildSkippedSummary = (skippedRows = []) => {
+  if (!skippedRows.length) return "";
+
+  // group by reason
+  const reasonMap = new Map(); // reason -> Set(drawingNo)
+  for (const r of skippedRows) {
+    const reason = r.reason || "Skipped";
+    const d = (r.drawingNo || "").toString().trim();
+    if (!reasonMap.has(reason)) reasonMap.set(reason, new Set());
+    if (d) reasonMap.get(reason).add(d);
+  }
+
+  const parts = [];
+  for (const [reason, set] of reasonMap.entries()) {
+    const arr = Array.from(set);
+
+    // limit long list (optional)
+    const maxShow = 12;
+    const shown = arr.slice(0, maxShow).join(" | ");
+    const moreCount = arr.length - Math.min(arr.length, maxShow);
+
+    const text = moreCount > 0
+      ? `${shown} (+${moreCount} more) (${reason})`
+      : `${shown} (${reason})`;
+
+    parts.push(text);
+  }
+
+  return parts.join(" , ");
+};
+
 export const importWorkOrders = async (req, res) => {
   try {
     // ✅ 1) File validation
@@ -1122,7 +1271,7 @@ export const importWorkOrders = async (req, res) => {
         projectId: drawing?.projectId || null,
         projectType,
         posNo: Number(row["POSNO"]) || 0,
-        quantity: Number(row["Actual_Qty"]) || 1,
+        quantity: Number(row["Order_Qty"]) || 1,
         uom,
         remarks: row["Description"]?.toString().trim() || "",
         needDate,
@@ -1145,10 +1294,10 @@ export const importWorkOrders = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Imported ${inserted.length} Work Orders. Skipped ${skippedRows.length} rows.`,
+      message: buildSkippedSummary(skippedRows),
       importedCount: inserted.length,
       skippedCount: skippedRows.length,
-      skippedRows,
+      skippedRows:skippedRows,
       data: inserted.map((x) => ({
         workOrderNo: x.workOrderNo,
         drawingId: x.drawingId,
@@ -1168,7 +1317,66 @@ export const importWorkOrders = async (req, res) => {
 
 export const exportWorkOrders = async (req, res) => {
   try {
-    const workOrders = await WorkOrder.find()
+    const {
+      customerMode,
+      customerId,
+      filterMode,
+      projectIds,
+      drawingIds,
+      posNos,
+      workOrderNos,
+    } = req.query;
+
+    const query = {};
+
+    // 🔹 Customer filter
+   if (customerMode === "customer" && customerId) {
+      // 1️⃣ Find projects for customer
+      const projectDocs = await Project.find(
+        { customerId: customerId },
+        { _id: 1 }
+      ).lean();
+
+      const customerProjectIds = projectDocs.map((p) => p._id);
+
+      if (!customerProjectIds.length) {
+        return res.status(404).json({
+          success: false,
+          message: "No projects found for selected customer",
+        });
+      }
+
+      // 2️⃣ Apply projectId filter to WorkOrder
+      query.projectId = { $in: customerProjectIds };
+    }
+
+    // 🔹 Filter modes
+    if (filterMode === "project" && projectIds) {
+      query.projectId = {
+        $in: Array.isArray(projectIds) ? projectIds : [projectIds],
+      };
+    }
+
+    if (filterMode === "drawing" && drawingIds) {
+      query.drawingId = {
+        $in: Array.isArray(drawingIds) ? drawingIds : [drawingIds],
+      };
+    }
+
+    if (filterMode === "po" && posNos) {
+      query.posNo = {
+        $in: Array.isArray(posNos) ? posNos : [posNos],
+      };
+    }
+
+    if (filterMode === "wo" && workOrderNos) {
+      query.workOrderNo = {
+        $in: Array.isArray(workOrderNos) ? workOrderNos : [workOrderNos],
+      };
+    }
+
+    // 🔹 FETCH FILTERED WORK ORDERS
+    const workOrders = await WorkOrder.find(query)
       .populate("drawingId", "drawingNo")
       .populate("projectId", "projectName")
       .lean();
@@ -1176,7 +1384,7 @@ export const exportWorkOrders = async (req, res) => {
     if (!workOrders.length) {
       return res.status(404).json({
         success: false,
-        message: "No work orders found to export",
+        message: "No work orders found for export",
       });
     }
 
@@ -1184,101 +1392,36 @@ export const exportWorkOrders = async (req, res) => {
       d ? new Date(d).toLocaleDateString("en-GB") : "";
 
     const rows = workOrders.map((wo) => ({
-      Imported_Date: "",
-
-      "Project No": wo.projectNo || wo.projectId?.projectName || "",
+      "Project No": wo.projectId?.projectName || "",
       "WorkOrder No": wo.workOrderNo || "",
       "PO NO": wo.poNumber || "",
       "POS NO": wo.posNo || "",
       Drawingno: wo.drawingId?.drawingNo || "",
       Description: wo.remarks || "",
-      Actual_Qty: wo.quantity || "",
-      Prod_Qty: wo.quantity || "",
+      Order_Qty: wo.quantity || "",
       "Commit Date": formatDate(wo.commitDate),
       "Need Date": formatDate(wo.needDate),
       Status: wo.status || "",
       Remark: wo.remarks || "",
-
-      // Picking stage
-      PickerName: wo.pickerName || "",
-      PickStartdate: formatDate(wo.pickStartdate),
-      PickEnddate: formatDate(wo.pickEnddate),
-      ProduceQty: wo.pickProduceQty || "",
-
-      // Harness stage
-      HarnessName: wo.harnessName || "",
-      "Harness Startdate": formatDate(wo.harnessStartdate),
-      "Harness Enddate": formatDate(wo.harnessEnddate),
-      "ProduceQty#2": wo.harnessProduceQty || "",
-
-      // Labelling stage
-      "Labeller Name": wo.labellerName || "",
-      "Labelling Startdate": formatDate(wo.labellingStartdate),
-      "Labelling Enddate": formatDate(wo.labellingEnddate),
-      "Produce Qty#3": wo.labellingProduceQty || "",
-
-      // QC stage
-      QcName: wo.qcName || "",
-      QcStartdate: formatDate(wo.qcStartdate),
-      QcEtartdate: formatDate(wo.qcEnddate),
-      "Produce Qty#4": wo.qcProduceQty || "",
-
-      // Shortage 1–12 (Each 3 columns)
-      Shortage1: wo.shortage1 || "",
-      "MPN No._1": wo.mpn1 || "",
-      Manufacturer_1: wo.mfg1 || "",
-
-      Shortage2: wo.shortage2 || "",
-      "MPN No._2": wo.mpn2 || "",
-      Manufacturer_2: wo.mfg2 || "",
-
-      Shortage3: wo.shortage3 || "",
-      "MPN No._3": wo.mpn3 || "",
-      Manufacturer_3: wo.mfg3 || "",
-
-      Shortage4: wo.shortage4 || "",
-      "MPN No._4": wo.mpn4 || "",
-      Manufacturer_4: wo.mfg4 || "",
-
-      Shortage5: wo.shortage5 || "",
-      "MPN No._5": wo.mpn5 || "",
-      Manufacturer_5: wo.mfg5 || "",
-
-      Shortage6: wo.shortage6 || "",
-      "MPN No._6": wo.mpn6 || "",
-      Manufacturer_6: wo.mfg6 || "",
-
-      Shortage7: wo.shortage7 || "",
-      "MPN No._7": wo.mpn7 || "",
-      Manufacturer_7: wo.mfg7 || "",
-
-      Shortage8: wo.shortage8 || "",
-      "MPN No._8": wo.mpn8 || "",
-      Manufacturer_8: wo.mfg8 || "",
-
-      Shortage9: wo.shortage9 || "",
-      "MPN No._9": wo.mpn9 || "",
-      Manufacturer_9: wo.mfg9 || "",
-
-      Shortage10: wo.shortage10 || "",
-      "MPN No._10": wo.mpn10 || "",
-      Manufacturer_10: wo.mfg10 || "",
-
-      Shortage11: wo.shortage11 || "",
-      "MPN No._11": wo.mpn11 || "",
-      Manufacturer_11: wo.mfg11 || "",
-
-      Shortage12: wo.shortage12 || "",
-      "MPN No._12": wo.mpn12 || "",
-      Manufacturer_12: wo.mfg12 || "",
     }));
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
 
-    ws["!cols"] = Object.keys(rows[0]).map((h) => ({
-      wch: Math.max(12, h.length + 2),
-    }));
+ ws["!cols"] = [
+  { wch: 22 }, // Project No
+  { wch: 20 }, // WorkOrder No
+  { wch: 16 }, // PO NO
+  { wch: 10 }, // POS NO
+  { wch: 26 }, // Drawing No  🔥 wider
+  { wch: 35 }, // Description 🔥 widest
+  { wch: 12 }, // Order_Qty
+  { wch: 12 }, // Prod_Qty
+  { wch: 16 }, // Commit Date
+  { wch: 16 }, // Need Date
+  { wch: 14 }, // Status 🔥 medium
+  { wch: 30 }, // Remark
+ ]
 
     XLSX.utils.book_append_sheet(wb, ws, "WorkOrders");
 
@@ -1303,6 +1446,145 @@ export const exportWorkOrders = async (req, res) => {
     });
   }
 };
+
+
+// export const exportWorkOrders = async (req, res) => {
+//   try {
+//     const workOrders = await WorkOrder.find()
+//       .populate("drawingId", "drawingNo")
+//       .populate("projectId", "projectName")
+//       .lean();
+
+//     if (!workOrders.length) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "No work orders found to export",
+//       });
+//     }
+
+//     const formatDate = (d) =>
+//       d ? new Date(d).toLocaleDateString("en-GB") : "";
+
+//     const rows = workOrders.map((wo) => ({
+//       Imported_Date: "",
+
+//       "Project No": wo.projectNo || wo.projectId?.projectName || "",
+//       "WorkOrder No": wo.workOrderNo || "",
+//       "PO NO": wo.poNumber || "",
+//       "POS NO": wo.posNo || "",
+//       Drawingno: wo.drawingId?.drawingNo || "",
+//       Description: wo.remarks || "",
+//       Order_Qty: wo.quantity || "",
+//       Prod_Qty: wo.quantity || "",
+//       "Commit Date": formatDate(wo.commitDate),
+//       "Need Date": formatDate(wo.needDate),
+//       Status: wo.status || "",
+//       Remark: wo.remarks || "",
+
+//       // Picking stage
+//       PickerName: wo.pickerName || "",
+//       PickStartdate: formatDate(wo.pickStartdate),
+//       PickEnddate: formatDate(wo.pickEnddate),
+//       ProduceQty: wo.pickProduceQty || "",
+
+//       // Harness stage
+//       HarnessName: wo.harnessName || "",
+//       "Harness Startdate": formatDate(wo.harnessStartdate),
+//       "Harness Enddate": formatDate(wo.harnessEnddate),
+//       "ProduceQty#2": wo.harnessProduceQty || "",
+
+//       // Labelling stage
+//       "Labeller Name": wo.labellerName || "",
+//       "Labelling Startdate": formatDate(wo.labellingStartdate),
+//       "Labelling Enddate": formatDate(wo.labellingEnddate),
+//       "Produce Qty#3": wo.labellingProduceQty || "",
+
+//       // QC stage
+//       QcName: wo.qcName || "",
+//       QcStartdate: formatDate(wo.qcStartdate),
+//       QcEtartdate: formatDate(wo.qcEnddate),
+//       "Produce Qty#4": wo.qcProduceQty || "",
+
+//       // Shortage 1–12 (Each 3 columns)
+//       Shortage1: wo.shortage1 || "",
+//       "MPN No._1": wo.mpn1 || "",
+//       Manufacturer_1: wo.mfg1 || "",
+
+//       Shortage2: wo.shortage2 || "",
+//       "MPN No._2": wo.mpn2 || "",
+//       Manufacturer_2: wo.mfg2 || "",
+
+//       Shortage3: wo.shortage3 || "",
+//       "MPN No._3": wo.mpn3 || "",
+//       Manufacturer_3: wo.mfg3 || "",
+
+//       Shortage4: wo.shortage4 || "",
+//       "MPN No._4": wo.mpn4 || "",
+//       Manufacturer_4: wo.mfg4 || "",
+
+//       Shortage5: wo.shortage5 || "",
+//       "MPN No._5": wo.mpn5 || "",
+//       Manufacturer_5: wo.mfg5 || "",
+
+//       Shortage6: wo.shortage6 || "",
+//       "MPN No._6": wo.mpn6 || "",
+//       Manufacturer_6: wo.mfg6 || "",
+
+//       Shortage7: wo.shortage7 || "",
+//       "MPN No._7": wo.mpn7 || "",
+//       Manufacturer_7: wo.mfg7 || "",
+
+//       Shortage8: wo.shortage8 || "",
+//       "MPN No._8": wo.mpn8 || "",
+//       Manufacturer_8: wo.mfg8 || "",
+
+//       Shortage9: wo.shortage9 || "",
+//       "MPN No._9": wo.mpn9 || "",
+//       Manufacturer_9: wo.mfg9 || "",
+
+//       Shortage10: wo.shortage10 || "",
+//       "MPN No._10": wo.mpn10 || "",
+//       Manufacturer_10: wo.mfg10 || "",
+
+//       Shortage11: wo.shortage11 || "",
+//       "MPN No._11": wo.mpn11 || "",
+//       Manufacturer_11: wo.mfg11 || "",
+
+//       Shortage12: wo.shortage12 || "",
+//       "MPN No._12": wo.mpn12 || "",
+//       Manufacturer_12: wo.mfg12 || "",
+//     }));
+
+//     const wb = XLSX.utils.book_new();
+//     const ws = XLSX.utils.json_to_sheet(rows);
+
+//     ws["!cols"] = Object.keys(rows[0]).map((h) => ({
+//       wch: Math.max(12, h.length + 2),
+//     }));
+
+//     XLSX.utils.book_append_sheet(wb, ws, "WorkOrders");
+
+//     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+//     res.setHeader(
+//       "Content-Type",
+//       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+//     );
+//     res.setHeader(
+//       "Content-Disposition",
+//       'attachment; filename="work_orders_export.xlsx"'
+//     );
+
+//     return res.end(buf);
+//   } catch (error) {
+//     console.error("Export Work Orders Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to export work orders",
+//       error: error.message,
+//     });
+//   }
+// };
 
 
 // export const importWorkOrders = async (req, res) => {
@@ -2672,16 +2954,16 @@ export const moveToProduction = async (req, res) => {
     // Update only the required fields
     wo.isInProduction = true;
     wo.isTriggered = true;
-    wo.status = "Picking In Progress";
+    wo.status = "In Production";
 
-    wo.processHistory.push({
-      process: "picking",
-      qty: 0,                     // start with zero qty → process started
-      notes: "Picking started",   // helpful info
-      completedBy: null,
-      completedAt: new Date(),
-      createdAt: new Date(),
-    });
+    // wo.processHistory.push({
+    //   process: "picking",
+    //   qty: 0,                     // start with zero qty → process started
+    //   notes: "Picking started",   // helpful info
+    //   completedBy: null,
+    //   completedAt: new Date(),
+    //   createdAt: new Date(),
+    // });
 
 
     await wo.save();
@@ -2707,18 +2989,85 @@ const indexToLetter = (index) => {
 
 export const getAllProductionWordOrders = async (req, res) => {
   try {
-    let { page = 1, limit = 20, search } = req.query;
+    let {
+      page = 1,
+      limit = 20,
+      search = "",
+      projectId,
+      drawingId,
+      posNo,
+      status,
+      customerId, // ✅ optional (customer via project)
+    } = req.query;
 
     page = Number(page) || 1;
     limit = Number(limit) || 20;
 
     const query = { isInProduction: true };
 
-    if (search) {
+    // ✅ Filters
+    if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
+      query.projectId = new mongoose.Types.ObjectId(projectId);
+    }
+
+    if (drawingId && mongoose.Types.ObjectId.isValid(drawingId)) {
+      query.drawingId = new mongoose.Types.ObjectId(drawingId);
+    }
+
+    if (posNo !== undefined && posNo !== null && String(posNo).trim() !== "") {
+      query.posNo = String(posNo).trim();
+    }
+
+    if (status) query.status = status;
+
+    // ✅ Search
+    if (search && String(search).trim()) {
+      const s = String(search).trim();
       query.$or = [
-        { workOrderNo: { $regex: search, $options: "i" } },
-        { poNumber: { $regex: search, $options: "i" } },
+        { workOrderNo: { $regex: s, $options: "i" } },
+        { poNumber: { $regex: s, $options: "i" } },
+        { posNo: { $regex: s, $options: "i" } },
       ];
+    }
+
+    // ✅ CUSTOMER FILTER (via Project)
+    // NOTE: customerId directly WorkOrder me nahi hai, so via Project
+    // If customerId present, intersect with existing projectId filter (if any)
+    let customerProjectIds = null;
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      const projectsForCustomer = await Project.find(
+        { customerId: new mongoose.Types.ObjectId(customerId) },
+        { _id: 1 }
+      ).lean();
+
+      customerProjectIds = projectsForCustomer.map((p) => p._id);
+
+      if (!customerProjectIds.length) {
+        return res.json({
+          success: true,
+          message: "No projects found for this customer",
+          data: [],
+          pagination: { total: 0, page, limit, pages: 0 },
+        });
+      }
+
+      // If already query.projectId exists (single id), check it is allowed
+      if (query.projectId) {
+        const ok = customerProjectIds.some(
+          (id) => String(id) === String(query.projectId)
+        );
+        if (!ok) {
+          return res.json({
+            success: true,
+            message: "No production work orders found for given customer + project filter",
+            data: [],
+            pagination: { total: 0, page, limit, pages: 0 },
+          });
+        }
+      } else {
+        // otherwise apply customer projects as projectId filter
+        query.projectId = { $in: customerProjectIds };
+      }
     }
 
     const skip = (page - 1) * limit;
@@ -2730,8 +3079,7 @@ export const getAllProductionWordOrders = async (req, res) => {
         .skip(skip)
         .limit(limit)
         .lean(),
-
-      WorkOrder.countDocuments(query)
+      WorkOrder.countDocuments(query),
     ]);
 
     if (!workOrders.length) {
@@ -2739,34 +3087,39 @@ export const getAllProductionWordOrders = async (req, res) => {
         success: true,
         message: "No production work orders found",
         data: [],
-        pagination: { total: 0, page, limit, pages: 0 }
+        pagination: { total: 0, page, limit, pages: 0 },
       });
     }
 
     // ---- Collect required IDs ----
     const drawingIds = [
-      ...new Set(workOrders.map(wo => String(wo.drawingId)))
+      ...new Set(
+        workOrders
+          .map((wo) => wo.drawingId)
+          .filter(Boolean)
+          .map((id) => String(id))
+      ),
     ];
 
     const projectIds = [
       ...new Set(
         workOrders
-          .map(wo => wo.projectId)
+          .map((wo) => wo.projectId)
           .filter(Boolean)
-          .map(id => String(id))
-      )
+          .map((id) => String(id))
+      ),
     ];
 
     // ---- Lookup Drawing ----
     const drawingMap = new Map();
     if (drawingIds.length) {
-      const drawingDocs = await Drawing.find({ _id: { $in: drawingIds } })
+      const drawingDocs = await Drawing.find({
+        _id: { $in: drawingIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      })
         .select("drawingNo")
         .lean();
 
-      drawingDocs.forEach(d =>
-        drawingMap.set(String(d._id), d.drawingNo)
-      );
+      drawingDocs.forEach((d) => drawingMap.set(String(d._id), d.drawingNo));
     }
 
     // ---- Lookup Project + Customer ----
@@ -2774,44 +3127,40 @@ export const getAllProductionWordOrders = async (req, res) => {
     const customerMap = new Map();
 
     if (projectIds.length) {
-      // 1️⃣ Project ke saath customerId bhi lao
-      const projectDocs = await Project.find({ _id: { $in: projectIds } })
+      const projectDocs = await Project.find({
+        _id: { $in: projectIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      })
         .select("projectName customerId")
         .lean();
 
-      projectDocs.forEach(p => {
-        projectMap.set(String(p._id), p); // pura project doc store kar rahe
-      });
+      projectDocs.forEach((p) => projectMap.set(String(p._id), p));
 
-      // 2️⃣ Ab in projects se unique customerIds nikalo
-      const customerIds = [
+      const custIds = [
         ...new Set(
           projectDocs
-            .map(p => p.customerId)
+            .map((p) => p.customerId)
             .filter(Boolean)
-            .map(id => String(id))
-        )
+            .map((id) => String(id))
+        ),
       ];
 
-      // 3️⃣ Customer fetch karo
-      if (customerIds.length) {
-        const customerDocs = await Customer.find({ _id: { $in: customerIds } })
-          .select("companyName contactPerson")   // yaha apne fields ke hisaab se change karna
+      if (custIds.length) {
+        const customerDocs = await Customer.find({
+          _id: { $in: custIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        })
+          .select("companyName contactPerson")
           .lean();
 
-        customerDocs.forEach(c => {
-          customerMap.set(String(c._id), c);
-        });
+        customerDocs.forEach((c) => customerMap.set(String(c._id), c));
       }
     }
 
     // ---- Final Flat Output ----
-    const finalList = workOrders.map(wo => {
+    const finalList = workOrders.map((wo) => {
       const drawingNo = wo.drawingId
         ? drawingMap.get(String(wo.drawingId)) || null
         : null;
 
-      // Project + Customer resolve
       const project = wo.projectId
         ? projectMap.get(String(wo.projectId)) || null
         : null;
@@ -2825,7 +3174,6 @@ export const getAllProductionWordOrders = async (req, res) => {
       const companyName = customer?.companyName || null;
       const contactPerson = customer?.contactPerson || null;
 
-      // ProjectType formatting
       let projectTypeFormatted = "";
       if (wo.projectType === "cable_harness") projectTypeFormatted = "Cable Harness";
       else if (wo.projectType === "box_build") projectTypeFormatted = "Box Build";
@@ -2851,7 +3199,6 @@ export const getAllProductionWordOrders = async (req, res) => {
         isInProduction: wo.isInProduction,
         processHistory: wo.processHistory,
 
-        // 🆕 customer info added
         customerId: project?.customerId || null,
         companyName,
         contactPerson,
@@ -2869,7 +3216,6 @@ export const getAllProductionWordOrders = async (req, res) => {
         pages: Math.ceil(total / limit),
       },
     });
-
   } catch (err) {
     console.error("Error fetching production work orders:", err);
     return res.status(500).json({
@@ -2878,6 +3224,181 @@ export const getAllProductionWordOrders = async (req, res) => {
     });
   }
 };
+
+
+// export const getAllProductionWordOrders = async (req, res) => {
+//   try {
+//     let { page = 1, limit = 20, search } = req.query;
+
+//     page = Number(page) || 1;
+//     limit = Number(limit) || 20;
+
+//     const query = { isInProduction: true };
+
+//     if (search) {
+//       query.$or = [
+//         { workOrderNo: { $regex: search, $options: "i" } },
+//         { poNumber: { $regex: search, $options: "i" } },
+//       ];
+//     }
+
+//     const skip = (page - 1) * limit;
+
+//     // Fetch flat WorkOrders
+//     const [workOrders, total] = await Promise.all([
+//       WorkOrder.find(query)
+//         .sort({ updatedAt: -1 })
+//         .skip(skip)
+//         .limit(limit)
+//         .lean(),
+
+//       WorkOrder.countDocuments(query)
+//     ]);
+
+//     if (!workOrders.length) {
+//       return res.json({
+//         success: true,
+//         message: "No production work orders found",
+//         data: [],
+//         pagination: { total: 0, page, limit, pages: 0 }
+//       });
+//     }
+
+//     // ---- Collect required IDs ----
+//     const drawingIds = [
+//       ...new Set(workOrders.map(wo => String(wo.drawingId)))
+//     ];
+
+//     const projectIds = [
+//       ...new Set(
+//         workOrders
+//           .map(wo => wo.projectId)
+//           .filter(Boolean)
+//           .map(id => String(id))
+//       )
+//     ];
+
+//     // ---- Lookup Drawing ----
+//     const drawingMap = new Map();
+//     if (drawingIds.length) {
+//       const drawingDocs = await Drawing.find({ _id: { $in: drawingIds } })
+//         .select("drawingNo")
+//         .lean();
+
+//       drawingDocs.forEach(d =>
+//         drawingMap.set(String(d._id), d.drawingNo)
+//       );
+//     }
+
+//     // ---- Lookup Project + Customer ----
+//     const projectMap = new Map();
+//     const customerMap = new Map();
+
+//     if (projectIds.length) {
+//       // 1️⃣ Project ke saath customerId bhi lao
+//       const projectDocs = await Project.find({ _id: { $in: projectIds } })
+//         .select("projectName customerId")
+//         .lean();
+
+//       projectDocs.forEach(p => {
+//         projectMap.set(String(p._id), p); // pura project doc store kar rahe
+//       });
+
+//       // 2️⃣ Ab in projects se unique customerIds nikalo
+//       const customerIds = [
+//         ...new Set(
+//           projectDocs
+//             .map(p => p.customerId)
+//             .filter(Boolean)
+//             .map(id => String(id))
+//         )
+//       ];
+
+//       // 3️⃣ Customer fetch karo
+//       if (customerIds.length) {
+//         const customerDocs = await Customer.find({ _id: { $in: customerIds } })
+//           .select("companyName contactPerson")   // yaha apne fields ke hisaab se change karna
+//           .lean();
+
+//         customerDocs.forEach(c => {
+//           customerMap.set(String(c._id), c);
+//         });
+//       }
+//     }
+
+//     // ---- Final Flat Output ----
+//     const finalList = workOrders.map(wo => {
+//       const drawingNo = wo.drawingId
+//         ? drawingMap.get(String(wo.drawingId)) || null
+//         : null;
+
+//       // Project + Customer resolve
+//       const project = wo.projectId
+//         ? projectMap.get(String(wo.projectId)) || null
+//         : null;
+
+//       const projectName = project?.projectName || null;
+
+//       const customer = project?.customerId
+//         ? customerMap.get(String(project.customerId)) || null
+//         : null;
+
+//       const companyName = customer?.companyName || null;
+//       const contactPerson = customer?.contactPerson || null;
+
+//       // ProjectType formatting
+//       let projectTypeFormatted = "";
+//       if (wo.projectType === "cable_harness") projectTypeFormatted = "Cable Harness";
+//       else if (wo.projectType === "box_build") projectTypeFormatted = "Box Build";
+//       else projectTypeFormatted = "Others";
+
+//       return {
+//         workOrderId: wo._id,
+//         workOrderNo: wo.workOrderNo,
+//         poNumber: wo.poNumber,
+//         drawingId: wo.drawingId,
+//         drawingNo,
+//         projectId: wo.projectId,
+//         projectName,
+//         projectType: projectTypeFormatted,
+//         posNo: wo.posNo,
+//         quantity: wo.quantity,
+//         uom: wo.uom,
+//         remarks: wo.remarks,
+//         status: wo.status,
+//         needDate: wo.needDate,
+//         commitDate: wo.commitDate,
+//         isTriggered: wo.isTriggered,
+//         isInProduction: wo.isInProduction,
+//         processHistory: wo.processHistory,
+
+//         // 🆕 customer info added
+//         customerId: project?.customerId || null,
+//         companyName,
+//         contactPerson,
+//       };
+//     });
+
+//     return res.json({
+//       success: true,
+//       message: "Production work orders fetched",
+//       data: finalList,
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         pages: Math.ceil(total / limit),
+//       },
+//     });
+
+//   } catch (err) {
+//     console.error("Error fetching production work orders:", err);
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
 
 
 // export const getAllProductionWordOrders = async (req, res) => {
@@ -4090,6 +4611,191 @@ export const getDeliveryOrders = async (req, res) => {
   }
 };
 
+export const getEachMPNUsage = async (req, res) => {
+  try {
+    const {
+      mpnId,
+      customer,
+      project,
+      workOrderNo,
+      workOrderId,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    if (!mpnId) {
+      return res.status(400).json({
+        status: false,
+        statusCode: 400,
+        message: "mpnId is required",
+        data: [],
+      });
+    }
+
+    const mpnObjectId = new mongoose.Types.ObjectId(mpnId);
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 10;
+
+    // 1) CostingItems for this mpn (material)
+    const costingItems = await CostingItems.find({
+      mpn: mpnObjectId,
+      quoteType: "material",
+    }).lean();
+
+    if (!costingItems.length) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No costing items found for this MPN (material)",
+        data: [],
+        pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 },
+      });
+    }
+
+    // ✅ Unique drawingIds where this mpn is used
+    const drawingIdStrs = [
+      ...new Set(costingItems.map((ci) => String(ci.drawingId)).filter(Boolean)),
+    ];
+    const drawingObjectIds = drawingIdStrs.map((id) => new mongoose.Types.ObjectId(id));
+
+    // 2) Drawings filter (customer/project optional)
+    const drawingQuery = { _id: { $in: drawingObjectIds } };
+    if (customer) drawingQuery.customerId = new mongoose.Types.ObjectId(customer);
+    if (project) drawingQuery.projectId = new mongoose.Types.ObjectId(project);
+
+    const drawingDocs = await Drawing.find(drawingQuery).lean();
+
+    if (!drawingDocs.length) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No drawings match selected filters for this MPN",
+        data: [],
+        pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 },
+      });
+    }
+
+    const filteredDrawingIds = drawingDocs.map((d) => d._id);
+    const filteredDrawingIdStrSet = new Set(drawingDocs.map((d) => String(d._id)));
+
+    // 3) WorkOrders for those drawings (optional filters)
+    const workOrderQuery = { drawingId: { $in: filteredDrawingIds } };
+    if (workOrderNo) workOrderQuery.workOrderNo = String(workOrderNo).trim();
+    if (workOrderId) workOrderQuery._id = new mongoose.Types.ObjectId(workOrderId);
+
+    const workOrders = await WorkOrder.find(workOrderQuery).lean();
+    // NOTE: drawings still should return even if no work orders? (Usually WO exists)
+    // If you want drawings even without WO, we keep list; usage qty will be 0.
+
+    // 4) Project map (for UI)
+    const projectIds = [
+      ...new Set(
+        drawingDocs
+          .map((d) => d.projectId)
+          .filter(Boolean)
+          .map((p) => String(p))
+      ),
+    ];
+
+    const projectDocs = projectIds.length
+      ? await Project.find({ _id: { $in: projectIds } }).lean()
+      : [];
+
+    const projectMap = new Map(
+      projectDocs.map((p) => [String(p._id), p.name || p.projectName || null])
+    );
+
+    // 5) Costing per drawing (ONLY filtered drawings)
+    // qtyPer = sum(ci.quantity) for this mpn within that drawing
+    const qtyPerByDrawing = new Map(); // drawingIdStr -> qtyPerSum
+    for (const ci of costingItems) {
+      const dIdStr = String(ci.drawingId);
+      if (!filteredDrawingIdStrSet.has(dIdStr)) continue;
+
+      const prev = qtyPerByDrawing.get(dIdStr) || 0;
+      qtyPerByDrawing.set(dIdStr, prev + Number(ci.quantity || 0));
+    }
+
+    // 6) WorkOrders group by drawingId
+    const woByDrawing = new Map(); // drawingIdStr -> workOrders[]
+    for (const wo of workOrders || []) {
+      const dIdStr = String(wo.drawingId);
+      if (!filteredDrawingIdStrSet.has(dIdStr)) continue;
+
+      const arr = woByDrawing.get(dIdStr) || [];
+      arr.push(wo);
+      woByDrawing.set(dIdStr, arr);
+    }
+
+    // 7) Build DRAWING-wise rows (this is the update you asked)
+    const rows = drawingDocs.map((d) => {
+      const dIdStr = String(d._id);
+      const qtyPer = qtyPerByDrawing.get(dIdStr) || 0;
+
+      const wos = woByDrawing.get(dIdStr) || [];
+      const workOrderCount = wos.length;
+
+      // totalUsed = sum(wo.quantity) * qtyPer
+      const totalWoQty = wos.reduce((sum, wo) => sum + Number(wo.quantity || 0), 0);
+      const quantityUsed = qtyPer * totalWoQty;
+
+      // Need date: earliest among workOrders (optional)
+      const needDate = wos
+        .map((x) => x.needDate)
+        .filter(Boolean)
+        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] || null;
+
+      const projectName = d.projectId ? projectMap.get(String(d.projectId)) || null : null;
+
+      return {
+        drawingId: dIdStr,
+        drawingNo: d.drawingNo || d.drawing || null,
+        projectId: d.projectId ? String(d.projectId) : null,
+        projectName,
+        customerId: d.customerId ? String(d.customerId) : null,
+
+        qtyPerDrawing: qtyPer,           // ✅ per unit requirement inside drawing (for this mpn)
+        workOrderCount,
+        totalWorkOrderQty: totalWoQty,   // ✅ sum of WO quantities
+        quantityUsed,                    // ✅ total usage across WOs
+        needDate,                        // ✅ earliest needDate
+        workOrders: wos.map((wo) => ({
+          workOrderId: String(wo._id),
+          workOrderNo: wo.workOrderNo,
+          quantity: Number(wo.quantity || 0),
+          needDate: wo.needDate || null,
+          status: wo.status || null,
+        })),
+      };
+    });
+
+    // Optional: sort by quantityUsed desc
+    rows.sort((a, b) => Number(b.quantityUsed || 0) - Number(a.quantityUsed || 0));
+
+    // Pagination (drawings level)
+    const total = rows.length;
+    const totalPages = Math.ceil(total / limitNum);
+    const start = (pageNum - 1) * limitNum;
+    const paginatedRows = rows.slice(start, start + limitNum);
+
+    return res.json({
+      status: true,
+      statusCode: 200,
+      message: "MPN usage (drawings) fetched successfully",
+      data: paginatedRows,
+      pagination: { page: pageNum, limit: limitNum, total, totalPages },
+    });
+  } catch (error) {
+    console.error("getEachMPNUsage error:", error);
+    return res.status(500).json({
+      status: false,
+      statusCode: 500,
+      message: error.message,
+      data: [],
+    });
+  }
+};
+
 
 // export const getDeliveryOrders = async (req, res) => {
 //   try {
@@ -4401,195 +5107,195 @@ export const getDeliveryOrders = async (req, res) => {
 //   }
 // };
 
-export const getEachMPNUsage = async (req, res) => {
-  try {
-    const {
-      mpnId,
-      customer,
-      project,
-      workOrderNo,
-      workOrderId,
-      page = 1,
-      limit = 10,
-    } = req.query;
+// export const getEachMPNUsage = async (req, res) => {
+//   try {
+//     const {
+//       mpnId,
+//       customer,
+//       project,
+//       workOrderNo,
+//       workOrderId,
+//       page = 1,
+//       limit = 10,
+//     } = req.query;
 
-    if (!mpnId) {
-      return res.status(400).json({
-        status: false,
-        statusCode: 400,
-        message: "mpnId is required",
-        data: [],
-      });
-    }
+//     if (!mpnId) {
+//       return res.status(400).json({
+//         status: false,
+//         statusCode: 400,
+//         message: "mpnId is required",
+//         data: [],
+//       });
+//     }
 
-    const mpnObjectId = new mongoose.Types.ObjectId(mpnId);
-    const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 10;
+//     const mpnObjectId = new mongoose.Types.ObjectId(mpnId);
+//     const pageNum = Number(page) || 1;
+//     const limitNum = Number(limit) || 10;
 
-    // 1) CostingItems filter (material + this MPN)
-    const costingItems = await CostingItems.find({
-      mpn: mpnObjectId,
-      quoteType: "material",
-    }).lean();
+//     // 1) CostingItems filter (material + this MPN)
+//     const costingItems = await CostingItems.find({
+//       mpn: mpnObjectId,
+//       quoteType: "material",
+//     }).lean();
 
-    if (!costingItems.length) {
-      return res.json({
-        status: true,
-        statusCode: 200,
-        message: "No costing items found for this MPN (material)",
-        data: [],
-      });
-    }
+//     if (!costingItems.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No costing items found for this MPN (material)",
+//         data: [],
+//       });
+//     }
 
-    // Unique drawingIds from costing
-    const drawingIdsFromCosting = [
-      ...new Set(costingItems.map((ci) => String(ci.drawingId)).filter(Boolean)),
-    ];
+//     // Unique drawingIds from costing
+//     const drawingIdsFromCosting = [
+//       ...new Set(costingItems.map((ci) => String(ci.drawingId)).filter(Boolean)),
+//     ];
 
-    const drawingObjectIdsFromCosting = drawingIdsFromCosting.map(
-      (id) => new mongoose.Types.ObjectId(id)
-    );
+//     const drawingObjectIdsFromCosting = drawingIdsFromCosting.map(
+//       (id) => new mongoose.Types.ObjectId(id)
+//     );
 
-    // 2) Drawing Query (customer + project filters)
-    const drawingQuery = { _id: { $in: drawingObjectIdsFromCosting } };
+//     // 2) Drawing Query (customer + project filters)
+//     const drawingQuery = { _id: { $in: drawingObjectIdsFromCosting } };
 
-    if (customer) drawingQuery.customerId = new mongoose.Types.ObjectId(customer);
-    if (project) drawingQuery.projectId = new mongoose.Types.ObjectId(project);
+//     if (customer) drawingQuery.customerId = new mongoose.Types.ObjectId(customer);
+//     if (project) drawingQuery.projectId = new mongoose.Types.ObjectId(project);
 
-    const drawingDocs = await Drawing.find(drawingQuery).lean();
+//     const drawingDocs = await Drawing.find(drawingQuery).lean();
 
-    if (!drawingDocs.length) {
-      return res.json({
-        status: true,
-        statusCode: 200,
-        message: "No drawings match selected filters for this MPN",
-        data: [],
-      });
-    }
+//     if (!drawingDocs.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No drawings match selected filters for this MPN",
+//         data: [],
+//       });
+//     }
 
-    const filteredDrawingIds = drawingDocs.map((d) => d._id);
-    const filteredDrawingIdStrs = drawingDocs.map((d) => String(d._id));
+//     const filteredDrawingIds = drawingDocs.map((d) => d._id);
+//     const filteredDrawingIdStrs = drawingDocs.map((d) => String(d._id));
 
-    // 3) WorkOrder Query (drawingId + workOrderNo/workOrderId filters)
-    const workOrderQuery = {
-      drawingId: { $in: filteredDrawingIds },
-    };
+//     // 3) WorkOrder Query (drawingId + workOrderNo/workOrderId filters)
+//     const workOrderQuery = {
+//       drawingId: { $in: filteredDrawingIds },
+//     };
 
-    if (workOrderNo) workOrderQuery.workOrderNo = String(workOrderNo).trim();
-    if (workOrderId) workOrderQuery._id = new mongoose.Types.ObjectId(workOrderId);
+//     if (workOrderNo) workOrderQuery.workOrderNo = String(workOrderNo).trim();
+//     if (workOrderId) workOrderQuery._id = new mongoose.Types.ObjectId(workOrderId);
 
-    const workOrders = await WorkOrder.find(workOrderQuery).lean();
+//     const workOrders = await WorkOrder.find(workOrderQuery).lean();
 
-    if (!workOrders.length) {
-      return res.json({
-        status: true,
-        statusCode: 200,
-        message: "No work orders found using this MPN for selected filters",
-        data: [],
-      });
-    }
+//     if (!workOrders.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No work orders found using this MPN for selected filters",
+//         data: [],
+//       });
+//     }
 
-    // 4) Project map (optional for UI)
-    const projectIds = [
-      ...new Set(
-        drawingDocs
-          .map((d) => d.projectId)
-          .filter(Boolean)
-          .map((p) => String(p))
-      ),
-    ];
+//     // 4) Project map (optional for UI)
+//     const projectIds = [
+//       ...new Set(
+//         drawingDocs
+//           .map((d) => d.projectId)
+//           .filter(Boolean)
+//           .map((p) => String(p))
+//       ),
+//     ];
 
-    const projectDocs = await Project.find({ _id: { $in: projectIds } }).lean();
-    const projectMap = new Map(projectDocs.map((p) => [String(p._id), p.name || p.projectName || null]));
+//     const projectDocs = await Project.find({ _id: { $in: projectIds } }).lean();
+//     const projectMap = new Map(projectDocs.map((p) => [String(p._id), p.name || p.projectName || null]));
 
-    // Drawing map
-    const drawingMap = new Map();
-    for (const d of drawingDocs) {
-      drawingMap.set(String(d._id), {
-        drawingNo: d.drawingNo || d.drawing || null,
-        projectId: d.projectId ? String(d.projectId) : null,
-      });
-    }
+//     // Drawing map
+//     const drawingMap = new Map();
+//     for (const d of drawingDocs) {
+//       drawingMap.set(String(d._id), {
+//         drawingNo: d.drawingNo || d.drawing || null,
+//         projectId: d.projectId ? String(d.projectId) : null,
+//       });
+//     }
 
-    // 5) Costing map only for filtered drawings
-    const costingMap = new Map();
-    for (const ci of costingItems) {
-      const dId = String(ci.drawingId);
-      if (!filteredDrawingIdStrs.includes(dId)) continue;
-      const arr = costingMap.get(dId) || [];
-      arr.push(ci);
-      costingMap.set(dId, arr);
-    }
+//     // 5) Costing map only for filtered drawings
+//     const costingMap = new Map();
+//     for (const ci of costingItems) {
+//       const dId = String(ci.drawingId);
+//       if (!filteredDrawingIdStrs.includes(dId)) continue;
+//       const arr = costingMap.get(dId) || [];
+//       arr.push(ci);
+//       costingMap.set(dId, arr);
+//     }
 
-    // 6) Build usage rows
-    const grouped = new Map(); // key = `${workOrderId}_${drawingId}`
+//     // 6) Build usage rows
+//     const grouped = new Map(); // key = `${workOrderId}_${drawingId}`
 
-    for (const wo of workOrders) {
-      const dKey = String(wo.drawingId);
-      const costArr = costingMap.get(dKey);
-      if (!costArr?.length) continue;
+//     for (const wo of workOrders) {
+//       const dKey = String(wo.drawingId);
+//       const costArr = costingMap.get(dKey);
+//       if (!costArr?.length) continue;
 
-      const woQty = Number(wo.quantity || 1);
-      const dInfo = drawingMap.get(dKey) || {};
+//       const woQty = Number(wo.quantity || 1);
+//       const dInfo = drawingMap.get(dKey) || {};
 
-      const projectName = dInfo.projectId ? projectMap.get(dInfo.projectId) || null : null;
+//       const projectName = dInfo.projectId ? projectMap.get(dInfo.projectId) || null : null;
 
-      const qtyPerTotal = costArr.reduce((sum, ci) => sum + Number(ci.quantity || 0), 0);
-      const qtyUsed = qtyPerTotal * woQty;
+//       const qtyPerTotal = costArr.reduce((sum, ci) => sum + Number(ci.quantity || 0), 0);
+//       const qtyUsed = qtyPerTotal * woQty;
 
-      const key = `${String(wo._id)}_${dKey}`;
-      const prev = grouped.get(key);
+//       const key = `${String(wo._id)}_${dKey}`;
+//       const prev = grouped.get(key);
 
-      if (!prev) {
-        grouped.set(key, {
-          workOrderId: String(wo._id),        // ✅ send _id to frontend
-          drawingNo: dInfo.drawingNo,
-          projectName,
-          workOrderNo: wo.workOrderNo,
-          quantityUsed: qtyUsed,
-          needDate: wo.needDate,
-          status: wo.status,
-        });
-      } else {
-        prev.quantityUsed += qtyUsed;
-        grouped.set(key, prev);
-      }
-    }
+//       if (!prev) {
+//         grouped.set(key, {
+//           workOrderId: String(wo._id),        // ✅ send _id to frontend
+//           drawingNo: dInfo.drawingNo,
+//           projectName,
+//           workOrderNo: wo.workOrderNo,
+//           quantityUsed: qtyUsed,
+//           needDate: wo.needDate,
+//           status: wo.status,
+//         });
+//       } else {
+//         prev.quantityUsed += qtyUsed;
+//         grouped.set(key, prev);
+//       }
+//     }
 
-    const rows = Array.from(grouped.values());
+//     const rows = Array.from(grouped.values());
 
-    if (!rows.length) {
-      return res.json({
-        status: true,
-        statusCode: 200,
-        message: "No MPN usage found after filters",
-        data: [],
-      });
-    }
+//     if (!rows.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No MPN usage found after filters",
+//         data: [],
+//       });
+//     }
 
-    // Pagination
-    const total = rows.length;
-    const totalPages = Math.ceil(total / limitNum);
-    const start = (pageNum - 1) * limitNum;
-    const paginatedRows = rows.slice(start, start + limitNum);
+//     // Pagination
+//     const total = rows.length;
+//     const totalPages = Math.ceil(total / limitNum);
+//     const start = (pageNum - 1) * limitNum;
+//     const paginatedRows = rows.slice(start, start + limitNum);
 
-    return res.json({
-      status: true,
-      statusCode: 200,
-      message: "MPN usage records fetched",
-      data: paginatedRows,
-      pagination: { page: pageNum, limit: limitNum, total, totalPages },
-    });
-  } catch (error) {
-    console.error("getEachMPNUsage error:", error);
-    return res.status(500).json({
-      status: false,
-      statusCode: 500,
-      message: error.message,
-      data: [],
-    });
-  }
-};
+//     return res.json({
+//       status: true,
+//       statusCode: 200,
+//       message: "MPN usage records fetched",
+//       data: paginatedRows,
+//       pagination: { page: pageNum, limit: limitNum, total, totalPages },
+//     });
+//   } catch (error) {
+//     console.error("getEachMPNUsage error:", error);
+//     return res.status(500).json({
+//       status: false,
+//       statusCode: 500,
+//       message: error.message,
+//       data: [],
+//     });
+//   }
+// };
 
 
 // export const getEachMPNUsage = async (req, res) => {
@@ -5611,5 +6317,112 @@ export const importTotalMpnNeeded = async (req, res) => {
   }
 };
 
+
+export const getFilterData = async (req, res) => {
+  try {
+    // 1) WorkOrders se unique posNo, projectId, drawingId, workOrderNo nikaalo
+    const workOrders = await WorkOrder.find({})
+      .select("posNo projectId drawingId workOrderNo")
+      .lean();
+
+    if (!workOrders.length) {
+      return res.json({
+        status: true,
+        statusCode: 200,
+        message: "No work orders found",
+        data: {
+          posNos: [],
+          projects: [],
+          drawings: [],
+          workOrders: [], // ✅
+        },
+      });
+    }
+
+    const posSet = new Set();
+    const projectIdSet = new Set();
+    const drawingIdSet = new Set();
+    const workOrderSet = new Set(); // ✅
+
+    for (const wo of workOrders) {
+      if (wo.posNo !== undefined && wo.posNo !== null && String(wo.posNo).trim() !== "") {
+        posSet.add(String(wo.posNo));
+      }
+      if (wo.projectId) projectIdSet.add(String(wo.projectId));
+      if (wo.drawingId) drawingIdSet.add(String(wo.drawingId));
+
+      // ✅ Work Order No
+      if (wo.workOrderNo && String(wo.workOrderNo).trim() !== "") {
+        workOrderSet.add(String(wo.workOrderNo).trim());
+      }
+    }
+
+    const projectIds = Array.from(projectIdSet).map((id) => new mongoose.Types.ObjectId(id));
+    const drawingIds = Array.from(drawingIdSet).map((id) => new mongoose.Types.ObjectId(id));
+
+    // 2) ProjectId -> ProjectName
+    const projectDocs = projectIds.length
+      ? await Project.find({ _id: { $in: projectIds } })
+          .select("name projectName")
+          .lean()
+      : [];
+
+    const projects = projectDocs.map((p) => ({
+      label: p.name || p.projectName || String(p._id),
+      value: String(p._id),
+    }));
+
+    // 3) DrawingId -> DrawingNo
+    const drawingDocs = drawingIds.length
+      ? await Drawing.find({ _id: { $in: drawingIds } })
+          .select("drawingNo drawing drawingNumber")
+          .lean()
+      : [];
+
+    const drawings = drawingDocs.map((d) => ({
+      label: d.drawingNo || d.drawing || d.drawingNumber || String(d._id),
+      value: String(d._id),
+    }));
+
+    // 4) posNo -> direct
+    const posNos = Array.from(posSet)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .map((v) => ({ label: v, value: v }));
+
+    // ✅ 5) workOrderNo -> direct
+    const workOrdersList = Array.from(workOrderSet)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .map((v) => ({ label: v, value: v }));
+
+    // Optional: sort project/drawing by label
+    projects.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+    drawings.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+
+    return res.json({
+      status: true,
+      statusCode: 200,
+      message: "Filter data fetched successfully",
+      data: {
+        posNos,
+        projects,
+        drawings,
+        workOrders: workOrdersList, // ✅
+      },
+    });
+  } catch (error) {
+    console.error("getFilterData error:", error);
+    return res.status(500).json({
+      status: false,
+      statusCode: 500,
+      message: error.message,
+      data: {
+        posNos: [],
+        projects: [],
+        drawings: [],
+        workOrders: [],
+      },
+    });
+  }
+};
 
 

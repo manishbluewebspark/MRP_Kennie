@@ -42,6 +42,8 @@ const PickingDetailModal = ({
     materials = [], // agar backend se aayega to yaha pass kar dena
 }) => {
 
+    console.log('-------stage',stage)
+
     const normalize = (str = "") =>
         str.toLowerCase().replace(/[\s_]+/g, "");
 
@@ -233,6 +235,31 @@ const PickingDetailModal = ({
                         "Materials extracted from drawing - enter picked quantities and shortage information.",
                     titleIcon: <ShoppingCartOutlined />,
                 };
+
+                case "Picking/Assembly":
+  return {
+    // ...base,
+    modalTitle: `Assembly Process - ${wo.projectName || ""}`,
+    mainCardTitle: "Assembly Production Details",   // ✅ title change
+    rightBtnText: "Save Assembly",
+    typeKey: "Picking/Assembly",
+    layout: "triple",
+    labels: {
+      left: "Work Order Quantity",
+      middle: `Assembly Qty * (Max: ${wo.remainingAssemblyQty ?? workQty} remaining)`,
+      right: "Balance Qty:",
+    },
+    helpers: {
+      left: "Original work order quantity",
+      middle: "Enter assembly quantity for this batch",
+      right: "Remaining after this entry",
+    },
+    infoText: "Assembly can be done in batches. Qty must not exceed remaining.",
+    titleIcon: <ToolOutlined />,
+    // ✅ max limit for assembly qty
+    maxQty: Number(wo.remainingAssemblyQty ?? workQty),
+  };
+
         }
     }, [stage, wo]);
 
@@ -386,6 +413,7 @@ const PickingDetailModal = ({
                 style={{ marginBottom: 16 }}
             >
                 {/* First row: Project/PO/POS */}
+                {stage === "Picking/Assembly" ? <></> : 
                 <div
                     style={{
                         display: "grid",
@@ -408,7 +436,7 @@ const PickingDetailModal = ({
                         <br />
                         <Text>{wo.posNo || wo.posNumber || "-"}</Text>
                     </div>
-                </div>
+                </div>}
 
                 <Divider style={{ margin: "12px 0" }} />
 

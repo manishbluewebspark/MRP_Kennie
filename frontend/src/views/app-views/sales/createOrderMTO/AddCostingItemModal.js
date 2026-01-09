@@ -1793,18 +1793,48 @@ const AddCostingItemModal = ({
 
   // inside your component
 
-  const handleMpnChange = (mpnId) => {
-    const selected = mpnList.find((m) => m._id === mpnId);
-    console.log('----selected', selected)
-    if (!selected) return;
+  // const handleMpnChange = (mpnId) => {
+  //   const selected = mpnList.find((m) => m._id === mpnId);
+  //   console.log('----selected', selected)
+  //   if (!selected) return;
 
-    const uomId = selected?.UOM?._id || form.getFieldValue('uom');
-    form.setFieldsValue({
-      description: selected.Description || "",   // or selected.description
-      uom: uomId,                      // will auto-select UOM in dropdown
-      // optional: unitPrice: selected.RFQUnitPrice
-    });
-  };
+  //   const uomId = selected?.UOM?._id || form.getFieldValue('uom');
+  //   form.setFieldsValue({
+  //     description: selected.Description || "",   // or selected.description
+  //     uom: uomId,                      // will auto-select UOM in dropdown
+  //     unitPrice: selected.RFQUnitPrice
+  //   });
+  // };
+
+  const handleMpnChange = (mpnId) => {
+  const selected = mpnList.find((m) => String(m._id) === String(mpnId));
+  if (!selected) return;
+
+  const uomId =
+    selected?.UOM?._id ||
+    selected?.UOM ||               // if already id
+    form.getFieldValue("uom");
+
+  const unitPrice = Number(selected?.RFQUnitPrice || 0);
+
+  // quantity agar blank ho to 1 set kar do
+  const qty = Number(form.getFieldValue("quantity") || 1);
+
+  form.setFieldsValue({
+    mpn: mpnId,
+    description: selected?.Description || "",
+    uom: uomId,
+    unitPrice,
+    quantity: qty,
+  });
+
+  // ✅ IMPORTANT: setFieldsValue onChange trigger nahi karta
+  // so manual recalculation
+  setTimeout(() => {
+    recalcPacking(); // <-- your existing function
+  }, 0);
+};
+
 
 
   // ---------- EFFECT: initialize form values on open / edit ----------

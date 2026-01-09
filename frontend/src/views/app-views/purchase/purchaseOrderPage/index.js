@@ -574,7 +574,24 @@ const PurchaseOrderPage = () => {
         </div>
     );
 
+
+
+const fmtDate = (d) => {
+  if (!d) return "-";
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "-";
+  return dt.toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+};
+
 const PurchaseShortageCard = ({ record }) => {
+  const shortList = Array.isArray(record.shortageByWorkOrders)
+    ? record.shortageByWorkOrders
+    : [];
+
   return (
     <div
       style={{
@@ -617,25 +634,27 @@ const PurchaseShortageCard = ({ record }) => {
         >
           <div
             style={{
-              fontSize: 16,      // ⬅️ increased
+              fontSize: 16,
               fontWeight: 700,
               color: "#111827",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
             }}
+            title={record.mpn}
           >
             {record.mpn}
           </div>
 
           <div
             style={{
-              fontSize: 13,      // ⬅️ increased
+              fontSize: 13,
               color: "#6B7280",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
             }}
+            title={record.description}
           >
             {record.description}
           </div>
@@ -646,7 +665,7 @@ const PurchaseShortageCard = ({ record }) => {
               color: "white",
               padding: "3px 10px",
               borderRadius: 14,
-              fontSize: 12,      // ⬅️ increased
+              fontSize: 12,
               fontWeight: 600,
               whiteSpace: "nowrap",
               justifySelf: "end",
@@ -663,36 +682,116 @@ const PurchaseShortageCard = ({ record }) => {
             display: "grid",
             gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
             gap: 12,
-            fontSize: 13,        // ⬅️ increased
+            fontSize: 13,
             color: "#374151",
           }}
         >
-          <div><b>Mfg:</b> {record.manufacturer}</div>
-          <div><b>Supplier:</b> {record.supplier}</div>
-          <div><b>Stock:</b> {record.currentStock}</div>
-          <div>
+          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <b>Mfg:</b> {record.manufacturer || "-"}
+          </div>
+          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <b>Supplier:</b> {record.supplier || "-"}
+          </div>
+          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <b>Stock:</b> {record.currentStock ?? 0}
+          </div>
+          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <b>Req:</b>{" "}
             <span style={{ color: "#DC2626", fontWeight: 700 }}>
-              {record.required}
+              {record.required ?? 0}
             </span>
           </div>
-          <div>
+          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <b>Short:</b>{" "}
             <span style={{ color: "#DC2626", fontWeight: 700 }}>
-              {record.shortage}
+              {record.shortage ?? 0}
             </span>
           </div>
         </div>
 
-        {/* Row 3 */}
-        {record.requireByWorkOrders?.length > 0 && (
+        {/* ✅ Row 3: Short#1 / Short#2 + Need Date + WO */}
+        {shortList.length > 0 && (
+          <div
+            style={{
+              marginTop: 8,
+              display: "flex",
+              gap: 14,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            {shortList.slice(0, 4).map((s, idx) => (
+              <div
+                key={idx}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  background: "#FFF",
+                  border: "1px dashed #F5D0D0",
+                }}
+              >
+                <div style={{ lineHeight: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: "#DC2626",
+                    }}
+                  >
+                    {s.label || `Short#${idx + 1}`}
+                  </div>
+
+                  <div style={{ fontSize: 11, color: "#6B7280" }}>
+                    {fmtDate(s.needDate)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: "#DC2626",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {s.shortageQty} pcs
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "#111827",
+                    fontWeight: 700,
+                    whiteSpace: "nowrap",
+                  }}
+                  title={s.workOrderNo}
+                >
+                  {s.workOrderNo || "-"}
+                </div>
+              </div>
+            ))}
+
+            {/* ✅ if more than 4 shortages */}
+            {shortList.length > 4 && (
+              <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}>
+                +{shortList.length - 4} more
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Optional: fallback if old field still used */}
+        {(!shortList.length && record.requireByWorkOrders?.length > 0) && (
           <div
             style={{
               marginTop: 6,
               display: "flex",
               gap: 12,
               flexWrap: "wrap",
-              fontSize: 13,     // ⬅️ increased
+              fontSize: 13,
             }}
           >
             {record.requireByWorkOrders.map((wo, idx) => (
@@ -712,6 +811,7 @@ const PurchaseShortageCard = ({ record }) => {
     </div>
   );
 };
+
 
 
 
