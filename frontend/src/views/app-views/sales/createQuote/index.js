@@ -234,7 +234,7 @@ const CreateQuote = () => {
           <Space size="large" style={{ marginTop: 4 }} align="center">
             <Text strong style={{ fontSize: 14 }}>
               <DollarOutlined style={{ marginRight: 6, color: "#16A34A" }} />
-              Total: ${record.totalQuoteValue.toFixed(2)}
+              Total: {record?.currency?.symbol}{record.totalQuoteValue.toFixed(2)} {record?.currency?.code}
             </Text>
 
             <Text type="secondary" style={{ fontSize: 13 }}>

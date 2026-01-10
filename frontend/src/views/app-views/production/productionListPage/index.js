@@ -550,7 +550,7 @@ const SkillLevelCostingList = () => {
     fetchWorkOrdersData();
     fetchCompleteWorkOrdersData();
     fetchMaterialShortagesData()
-  }, [page, limit]);
+  }, [page, limit, search]);
 
 
   const fetchFilterData = async () => {

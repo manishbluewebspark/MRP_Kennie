@@ -473,6 +473,7 @@ const QuoteModal = ({
         baseQty: safeNumber(d.qty, 1),
         unitPriceDefault: unitFromDrawing(d), // default price shown/used
         raw: d,
+        currency:d.currency?.code
       }))
       .filter((d) => !!d.id);
   }, [drawingList]);
@@ -810,7 +811,7 @@ const filtered = useMemo(() => {
     {
       key: '3',
       metric: 'Total Quote Value',
-      value: `$${totals.totalQuoteValue.toFixed(2)}`,
+      value: `${totals.totalQuoteValue.toFixed(2)}`,
     },
   ];
   const summaryCols = [
@@ -909,10 +910,12 @@ const filtered = useMemo(() => {
             <List
               dataSource={filtered}
               renderItem={(d) => {
+                console.log('-------d',d)
                 const checked = selectedIds.includes(d.id);
                 const qty = safeNumber(qtyMap[d.id], d.baseQty || 1);
                 const price = safeNumber(priceMap[d.id], d.unitPriceDefault || 0);
                 const total = qty * price;
+
 
                 return (
                   <List.Item
@@ -943,11 +946,11 @@ const filtered = useMemo(() => {
                     />
                     <Space direction="vertical" style={{ textAlign: 'right' }}>
                       <Text strong style={{ fontSize: 16 }}>
-                        ${price.toFixed(2)}
+                        {d.currency} {price.toFixed(2)}
                       </Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        Qty: {qty} × ${price.toFixed(2)} ={' '}
-                        <b>${total.toFixed(2)}</b>
+                        Qty: {qty} × {price.toFixed(2)} ={' '}
+                        <b>{total.toFixed(2)}</b>
                       </Text>
                     </Space>
                   </List.Item>

@@ -675,8 +675,8 @@ const CreateWorkOrderModal = ({
           customer: drawing.customerId?.companyName || drawing.customerName || "-",
           qty,
           unitPriceNum,
-          unitPrice: `$ ${unitPriceNum.toFixed(2)}`,
-          totalPrice: `$ ${totalPriceNum.toFixed(2)}`,
+          unitPrice: `${drawing?.currency?.symbol} ${unitPriceNum.toFixed(2)}`,
+          totalPrice: `${drawing?.currency?.symbol}  ${totalPriceNum.toFixed(2)}`,
           quotedDate: drawing.quotedDate ? dayjs(drawing.quotedDate).format("DD/MM/YYYY") : "-",
           // editable fields
           posNo: drawing.posNumber || "",
@@ -735,6 +735,7 @@ const CreateWorkOrderModal = ({
         title: "Drawing No",
         dataIndex: "drawingNo",
         key: "drawingNo",
+        width:200,
         render: (text) => <strong>{text}</strong>,
       },
       {
@@ -747,10 +748,11 @@ const CreateWorkOrderModal = ({
         title: "Customer",
         dataIndex: "customer",
         key: "customer",
+             width:200,
       },
       { title: "Qty", dataIndex: "qty", key: "qty" },
-      { title: "Unit Price", dataIndex: "unitPrice", key: "unitPrice" },
-      { title: "Total Price", dataIndex: "totalPrice", key: "totalPrice" },
+      { title: "Unit Price", dataIndex: "unitPrice", key: "unitPrice",width:100 },
+      { title: "Total Price", dataIndex: "totalPrice", key: "totalPrice",width:100 },
       { title: "Quoted Date", dataIndex: "quotedDate", key: "quotedDate" },
       {
         title: "Status",
