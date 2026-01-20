@@ -14,6 +14,7 @@ import {
   Progress,
   Tooltip,
   message,
+  Select,
 } from "antd";
 import {
   CalendarOutlined,
@@ -42,7 +43,7 @@ import WorkOrderService from "services/WorkOrderService";
 import InventoryService from "services/InventoryService";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import { fetchCustomers } from "store/slices/customerSlice";
-
+const { Option } = Select;
 const { Title, Text } = Typography;
 
 // ---------------- Info Item Component ----------------
@@ -539,11 +540,12 @@ const SkillLevelCostingList = () => {
   const [projectOptions, setProjectOptions] = useState([]);
   const [drawingOptions, setDrawingOptions] = useState([]);
   const [workOrderOptions, setWorkOrderOptions] = useState([]);
+  const [filterType, setFilterType] = useState("show_all_mpns");
 
-     const { list } = useSelector(
-          (state) => state.customers
-      );
-  
+  const { list } = useSelector(
+    (state) => state.customers
+  );
+
 
   useEffect(() => {
     fetchData();
@@ -579,9 +581,9 @@ const SkillLevelCostingList = () => {
     fetchFilterData()
   }, [])
 
-    useEffect(() => {
-          dispatch(fetchCustomers({limit:3000}))
-      }, [dispatch])
+  useEffect(() => {
+    dispatch(fetchCustomers({ limit: 3000 }))
+  }, [dispatch])
 
   const fetchCompleteWorkOrdersData = async () => {
     try {
@@ -703,6 +705,7 @@ const SkillLevelCostingList = () => {
         posNo: (params.filters ?? filters)?.posNo || undefined,
         status: (params.filters ?? filters)?.status || undefined,
         search: params.search || "", // optional
+        projectType: params?.filters?.projectType || undefined,
       };
 
       const res = await WorkOrderService.getAllProductionWorkOrders(payload);
@@ -944,9 +947,42 @@ const SkillLevelCostingList = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
         </Col>
-        <Button icon={<FilterOutlined />} type="default" onClick={() => setFilterVisible(true)}>
-          Filter
-        </Button>
+
+        <Col xs={24} md={6} style={{ display: "flex", alignItems: "center" }}>
+          <Select
+            value={filterType}
+            style={{ width: "70%" }}
+            placeholder="Select Type"
+            onChange={(val) => {
+              setFilterType(val);
+              fetchWorkOrdersData({
+      page: 1, // reset pagination
+      filters: {
+        ...filters,
+        projectType: val === "show_all_mpns" ? undefined : val,
+      },
+    });
+              // ✅ yahin se API / filter call karo
+              // fetchDrawings({ type: val });
+            }}
+          >
+            <Select.Option value="show_all_mpns">Show All</Select.Option>
+            <Select.Option value="cable_harness">Cable Harness</Select.Option>
+            <Select.Option value="box_build">Box Build</Select.Option>
+            <Select.Option value="other">Others</Select.Option>
+          </Select>
+
+          <Button
+            icon={<FilterOutlined />}
+            className="ml-4"
+            type="default"
+            onClick={() => setFilterVisible(true)}
+          >
+            Filter
+          </Button>
+        </Col>
+
+
       </Row>
 
       {/* Table */}

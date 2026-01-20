@@ -116,6 +116,7 @@ export const createQuote = async (req, res) => {
         totalPrice: 1,
         unitPrice: 1,
         projectId: 1,
+        leadTimeWeeks : 1
       }
     ).lean();
 
@@ -1009,7 +1010,7 @@ export const exportQuoteToWord = async (req, res) => {
     });
 
     // --- Items table (5 columns) ---
-    const colWidths = [1000, 7500, 1500, 2000, 2200];
+    const colWidths = [1000, 7500, 1500, 2000, 2200, 2000];
 
     const itemsHeaderRow = new TableRow({
       children: [
@@ -1038,6 +1039,11 @@ export const exportQuoteToWord = async (req, res) => {
           children: [P([T("Total Price", { bold: true })], { alignment: AlignmentType.CENTER })],
           shading: { fill: "ECECEC" },
         }),
+         new TableCell({
+          width: { size: colWidths[5], type: WidthType.DXA },
+          children: [P([T("Lead Time", { bold: true })], { alignment: AlignmentType.CENTER })],
+          shading: { fill: "ECECEC" },
+        }),
       ],
       tableHeader: true,
     });
@@ -1051,7 +1057,7 @@ export const exportQuoteToWord = async (req, res) => {
       const qty = Number(it?.quantity) || 0;
       const unit = Number(it?.unitPrice) || 0;
       const total = Number.isFinite(Number(it?.totalPrice)) ? Number(it.totalPrice) : unit * qty;
-
+      const leadTime = Number(it?.leadTime)
       totalQty += qty;
       totalAmount += total;
 
@@ -1080,6 +1086,10 @@ export const exportQuoteToWord = async (req, res) => {
             width: { size: colWidths[4], type: WidthType.DXA },
             children: [P([T(N(total))], { alignment: AlignmentType.RIGHT })],
           }),
+          new TableCell({
+            width: { size: colWidths[5], type: WidthType.DXA },
+            children: [P([T(N(leadTime))], { alignment: AlignmentType.RIGHT })],
+          }),
         ],
       });
     });
@@ -1091,6 +1101,7 @@ export const exportQuoteToWord = async (req, res) => {
         new TableCell({ width: { size: colWidths[2], type: WidthType.DXA }, children: [P([T(String(totalQty), { bold: true })], { alignment: AlignmentType.RIGHT })] }),
         new TableCell({ width: { size: colWidths[3], type: WidthType.DXA }, children: [P([T("")])] }),
         new TableCell({ width: { size: colWidths[4], type: WidthType.DXA }, children: [P([T(N(totalAmount), { bold: true })], { alignment: AlignmentType.RIGHT })] }),
+        new TableCell({ width: { size: colWidths[5], type: WidthType.DXA }, children: [P([T("")])] }),
       ],
     });
 

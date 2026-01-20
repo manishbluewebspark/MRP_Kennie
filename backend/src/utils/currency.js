@@ -67,6 +67,7 @@ export const getRate = (from, to, settings) => {
 };
 
 export const convertCurrency = (amount, from, to, settings, opts = {}) => {
+  console.log('----------coevyr',amount, from, to, settings, opts = {})
   const n = toNum(amount);
   const rate = getRate(from, to, settings);
   const converted = n * rate;

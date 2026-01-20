@@ -42,6 +42,17 @@ function mapRowToSchema(row) {
  */
 export const addMpn = async (req, res) => {
   try {
+    const exists = await MPN.findOne({
+      MPN: req.body.MPN,
+    });
+
+     if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: "MPN already exists",
+      });
+    }
+
     const mpn = new MPN(req.body);
     await mpn.save();
 
@@ -60,6 +71,23 @@ export const addMpn = async (req, res) => {
  */
 export const updateMpn = async (req, res) => {
   try {
+    const { id } = req.params;
+
+    if (req.body.MPN) {
+      const exists = await MPN.findOne({
+        MPN: req.body.MPN,
+        _id: { $ne: id }, // 👈 current record exclude
+      });
+
+      if (exists) {
+        return res.status(400).json({
+          success: false,
+          message: "MPN already exists",
+        });
+      }
+    }
+
+
     const mpn = await MPN.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!mpn) return res.status(404).json({ success: false, message: "MPN not found" });
     return res.json({ success: true, message: "MPN updated", data: mpn });
@@ -613,6 +641,7 @@ export const importMpn = async (req, res) => {
 
         if (mappedRow.currency) {
           const currencyDoc = await Currency.findOne({
+            isDeleted: false,
             $or: [
               { code: { $regex: new RegExp(`^${mappedRow.currency}$`, "i") } },
               { symbol: { $regex: new RegExp(`^${mappedRow.currency}$`, "i") } },

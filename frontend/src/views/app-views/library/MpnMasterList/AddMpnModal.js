@@ -56,7 +56,7 @@ const AddMpnModal = ({ visible, onCancel, onSubmit, formData, uoms = [], supplie
       status: formData.Status || "Active",
 
       // ✅ currency select expects _id
-      currency: formData?.currency?._id || formData?.currency || null,
+      currency: formData?.currency?._id,
     });
 
     // ✅ show symbol in addonAfter

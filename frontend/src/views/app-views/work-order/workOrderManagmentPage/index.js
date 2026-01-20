@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Table, Button, Space, Tag, message, Card, Modal, Drawer, Divider, Tooltip } from "antd";
+import { Table, Button, Space, Tag, message, Card, Modal, Drawer, Divider, Tooltip, Tabs, Col, Radio } from "antd";
 import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, CloseOutlined, PlayCircleOutlined, PlayCircleFilled, ClockCircleOutlined, ExperimentOutlined, ToolOutlined, HourglassOutlined, CheckCircleOutlined, PauseCircleOutlined, LoadingOutlined, BarcodeOutlined, TagsOutlined } from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
@@ -124,6 +124,17 @@ export const renderBadge = (status) => {
     );
 };
 
+const renderQyoteTypeBadge = (type) => {
+  const typeConfig = {
+    cable_harness: { color: "purple", text: "Cable Harness" },
+    box_build: { color: "cyan", text: "Box Build" },
+    other: { color: "default", text: "Other" },
+  };
+
+  const cfg = typeConfig[type] || { color: "default", text: type };
+  return <Tag color={cfg.color}>{cfg.text}</Tag>;
+};
+
 
 
 const DeliveryOrderPage = () => {
@@ -148,7 +159,7 @@ const DeliveryOrderPage = () => {
     const [drawingOptions, setDrawingOptions] = useState([]);
     const [workOrderOptions, setWorkOrderOptions] = useState([]);
     const [filters, setFilters] = useState({});
-
+    const [activeTab, setActiveTab] = useState("NON_PRODUCTION");
 
 
     const { workOrderSettings } = useSelector(
@@ -318,6 +329,12 @@ const DeliveryOrderPage = () => {
                 </Space>
             )
         },
+           {
+      title: "Project Type",
+      dataIndex: "projectType",
+      key: "projectType",
+      render: renderQyoteTypeBadge
+    },
         {
             title: "Actions",
             key: "actions",
@@ -410,7 +427,7 @@ const DeliveryOrderPage = () => {
     const fetchWorkOrders = async (params = {}) => {
         setLoading(true);
         try {
-            const { page = 1, limit = 10, search = "", filters: f = filters, } = params;
+            const { page = 1, limit = 10, search = "", filters: f = filters, activeTab } = params;
             const response = await WorkOrderService.getAllWorkOrders({
                 page,
                 limit,
@@ -420,6 +437,7 @@ const DeliveryOrderPage = () => {
                 projectId: f?.projectNo || undefined,
                 posNo: f?.posNo || undefined,
                 drawingId: f?.drawingNo || undefined,
+                activeTab
             });
 
             if (response.success) {
@@ -441,48 +459,48 @@ const DeliveryOrderPage = () => {
         }
     };
 
- const handleExport = async (filter) => {
-  console.log("-------filter", filter);
+    const handleExport = async (filter) => {
+        console.log("-------filter", filter);
 
-  try {
-    const resp = await WorkOrderService.exportWorkOrders({
-      customerMode: filter.customerMode,
-      customerId: filter.customerId,
-      filterMode: filter.filterMode,
-      projectIds: filter.projectNames, // array
-      posNos: filter.posNos,
-      drawingIds: filter.drawingNos,
-      workOrderNos: filter.workOrderNos,
-    });
+        try {
+            const resp = await WorkOrderService.exportWorkOrders({
+                customerMode: filter.customerMode,
+                customerId: filter.customerId,
+                filterMode: filter.filterMode,
+                projectIds: filter.projectNames, // array
+                posNos: filter.posNos,
+                drawingIds: filter.drawingNos,
+                workOrderNos: filter.workOrderNos,
+            });
 
-    let arrayBuffer;
-    let mime =
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            let arrayBuffer;
+            let mime =
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-    if (resp?.data instanceof ArrayBuffer) {
-      arrayBuffer = resp.data;
-      mime = resp?.headers?.["content-type"] || mime;
-    } else {
-      throw new Error("Invalid export response");
-    }
+            if (resp?.data instanceof ArrayBuffer) {
+                arrayBuffer = resp.data;
+                mime = resp?.headers?.["content-type"] || mime;
+            } else {
+                throw new Error("Invalid export response");
+            }
 
-    const blob = new Blob([arrayBuffer], { type: mime });
-    const url = window.URL.createObjectURL(blob);
+            const blob = new Blob([arrayBuffer], { type: mime });
+            const url = window.URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "work_orders_export.xlsx";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "work_orders_export.xlsx";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
 
-    window.URL.revokeObjectURL(url);
-    message.success("Work orders exported successfully");
-  } catch (err) {
-    console.error("Export error:", err);
-    message.error("Failed to export work orders");
-  }
-};
+            window.URL.revokeObjectURL(url);
+            message.success("Work orders exported successfully");
+        } catch (err) {
+            console.error("Export error:", err);
+            message.error("Failed to export work orders");
+        }
+    };
 
 
 
@@ -502,8 +520,8 @@ const DeliveryOrderPage = () => {
     };
 
     useEffect(() => {
-        fetchWorkOrders({ page, limit, search });
-    }, [page, limit]);
+        fetchWorkOrders({ page, limit, search, activeTab });
+    }, [page, limit, activeTab]);
 
 
 
@@ -538,6 +556,7 @@ const DeliveryOrderPage = () => {
 
     useEffect(() => {
         fetchFilterData()
+        fetchProjects()
     }, [])
 
     const handleSearch = useDebounce((value) => {
@@ -681,21 +700,51 @@ const DeliveryOrderPage = () => {
                 marginBottom: 16,
                 width: '100%'
             }}>
+
+
                 <div>
                     <h2 style={{ margin: 0 }}>Work Order Management</h2>
                     <p style={{ margin: 0, fontSize: 14, color: '#888' }}>
                         All Work Order List
                     </p>
                 </div>
-                {hasPermission("work_order.work_order_managment:create_edit_delete") && (
-                    <Button
-                        onClick={() => setIsModalVisible(true)}
-                        type="primary"
-                        icon={<PlusOutlined />}
-                    >
-                        Create Work Order
-                    </Button>
-                )}
+
+                <div>
+
+                    <Col>
+                        {hasPermission("work_order.work_order_managment:create_edit_delete") && (
+                            <Button
+                                onClick={() => setIsModalVisible(true)}
+                                type="primary"
+                                icon={<PlusOutlined />}
+                                className="mr-3"
+                            >
+                                Create Work Order
+                            </Button>
+                        )}
+                        <Radio.Group
+                            value={activeTab}
+                            optionType="button"
+                            buttonStyle="solid"
+                            onChange={(e) => {
+                                const tab = e.target.value;
+                                setActiveTab(tab);
+                            }}
+                        >
+                            <Radio.Button value="PRODUCTION">
+                                Production
+                            </Radio.Button>
+
+                            <Radio.Button value="NON_PRODUCTION">
+                                Not In Production
+                            </Radio.Button>
+                        </Radio.Group>
+                    </Col>
+
+
+
+                </div>
+
 
             </div>
 

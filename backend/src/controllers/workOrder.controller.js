@@ -235,6 +235,7 @@ export const getAllWorkOrders = async (req, res) => {
       drawingId,
       posNo,        // ✅ NEW
       status,
+      activeTab
     } = req.query;
 
     page = parseInt(page, 10) || 1;
@@ -257,6 +258,14 @@ export const getAllWorkOrders = async (req, res) => {
     }
 
     if (status) query.status = status;
+
+    if (activeTab === "PRODUCTION") {
+  query.isInProduction = true;
+}
+
+if (activeTab === "NON_PRODUCTION") {
+  query.isInProduction = false;
+}
 
     // ✅ Search (text fields only)
     if (search && String(search).trim()) {
@@ -2998,6 +3007,7 @@ export const getAllProductionWordOrders = async (req, res) => {
       posNo,
       status,
       customerId, // ✅ optional (customer via project)
+      projectType
     } = req.query;
 
     page = Number(page) || 1;
@@ -3016,6 +3026,10 @@ export const getAllProductionWordOrders = async (req, res) => {
 
     if (posNo !== undefined && posNo !== null && String(posNo).trim() !== "") {
       query.posNo = String(posNo).trim();
+    }
+
+    if(projectType && projectType !== "show_all_mpns"){
+       query.projectType = projectType
     }
 
     if (status) query.status = status;

@@ -259,6 +259,7 @@ const DrawingDetails = () => {
             }
 
             fetchCostingItems();
+            getDrawingData();
         } catch (error) {
             console.error(error);
             message.error("Excel import failed");
@@ -289,6 +290,7 @@ const DrawingDetails = () => {
             await DrawingService.deleteCostingItem(id, item._id);
             message.success('Item deleted successfully');
             fetchCostingItems();
+            getDrawingData();
         } catch (error) {
             console.error('Error deleting item:', error);
             message.error('Failed to delete item');
@@ -378,7 +380,8 @@ const DrawingDetails = () => {
             const response = await DrawingService.updateLatestPrice(id);
 
             console.log('Price updated successfully:', response.data);
-            fetchCostingItems()
+            fetchCostingItems();
+            getDrawingData();
             // Show success message
             message.success('Latest price updated successfully!');
 
@@ -420,6 +423,7 @@ const handleUpdateAll = async (ids = []) => {
 
     // ✅ fetch only once
     fetchCostingItems();
+    getDrawingData();
   } catch (error) {
     console.error("Bulk update error:", error);
 

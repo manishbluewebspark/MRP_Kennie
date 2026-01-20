@@ -18,7 +18,7 @@ const purchaseHistorySchema = new mongoose.Schema(
 
 const mpnSchema = new mongoose.Schema(
   {
-    MPN: { type: String, required: true },
+    MPN: { type: String, required: true,unique: true,  },
     Manufacturer: { type: String, required: true },
     Description: { type: String },
     UOM: {

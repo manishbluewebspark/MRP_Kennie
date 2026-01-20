@@ -609,6 +609,7 @@ const ChildPartLibrary = () => {
           (res.data || []).map((mpn) => ({
             label: mpn?.MPN,
             value: mpn?._id,
+            category:mpn?.Category?.name
           }))
         );
       }
@@ -797,15 +798,15 @@ const ChildPartLibrary = () => {
       }
 
       if (res?.success) message.success(res?.message || "Imported successfully!", 6);
-      else message.error(res?.message || "Import completed with errors!", 3);
-
-      fetchChildParts();
+      else message.error(res?.message || "Import completed with errors!", 6);
     } catch (err) {
+      
       if (downloadWin) downloadWin.close();
       console.error("Import failed:", err);
       message.error(err?.response?.data?.message || "Import failed!");
     } finally {
       setImportExcel(false);
+      fetchChildParts();
     }
   };
 

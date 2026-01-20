@@ -42,7 +42,7 @@ const PickingDetailModal = ({
     materials = [], // agar backend se aayega to yaha pass kar dena
 }) => {
 
-    console.log('-------stage',stage)
+    console.log('-------stage', stage)
 
     const normalize = (str = "") =>
         str.toLowerCase().replace(/[\s_]+/g, "");
@@ -54,7 +54,7 @@ const PickingDetailModal = ({
         ) || [];
 
 
-        console.log('--------processStageData',processStageData)
+    console.log('--------processStageData', processStageData)
 
     const getDrawingId = (workOrder) => {
         return (
@@ -76,7 +76,7 @@ const PickingDetailModal = ({
         if (!visible) return; // Run only when modal opened
         form.resetFields();
         setPickedQuantities({});
-  setStageQty(null);
+        setStageQty(null);
 
         const drawingId = getDrawingId(selectWorkOrderData);
         console.log("FINAL DRAWING ID:", drawingId);
@@ -225,7 +225,7 @@ const PickingDetailModal = ({
                     typeKey: "Picking",
                     layout: "single",
                     labels: {
-                        single: `Picking Qty * (Max: ${wo.remainingPickingQty ?? workQty - processStageData?.qty})`,
+                        single: `Picking Qty * (Max: ${wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)})`,
                     },
                     helpers: {
                         single:
@@ -236,29 +236,29 @@ const PickingDetailModal = ({
                     titleIcon: <ShoppingCartOutlined />,
                 };
 
-                case "Picking/Assembly":
-  return {
-    // ...base,
-    modalTitle: `Assembly Process - ${wo.projectName || ""}`,
-    mainCardTitle: "Assembly Production Details",   // ✅ title change
-    rightBtnText: "Save Assembly",
-    typeKey: "Picking/Assembly",
-    layout: "triple",
-    labels: {
-      left: "Work Order Quantity",
-      middle: `Assembly Qty * (Max: ${wo.remainingAssemblyQty ?? workQty} remaining)`,
-      right: "Balance Qty:",
-    },
-    helpers: {
-      left: "Original work order quantity",
-      middle: "Enter assembly quantity for this batch",
-      right: "Remaining after this entry",
-    },
-    infoText: "Assembly can be done in batches. Qty must not exceed remaining.",
-    titleIcon: <ToolOutlined />,
-    // ✅ max limit for assembly qty
-    maxQty: Number(wo.remainingAssemblyQty ?? workQty),
-  };
+            case "Picking/Assembly":
+                return {
+                    // ...base,
+                    modalTitle: `Assembly Process - ${wo.projectName || ""}`,
+                    mainCardTitle: "Assembly Production Details",   // ✅ title change
+                    rightBtnText: "Save Assembly",
+                    typeKey: "Picking/Assembly",
+                    layout: "triple",
+                    labels: {
+                        left: "Work Order Quantity",
+                        middle: `Assembly Qty * (Max: ${wo.remainingAssemblyQty ?? workQty} remaining)`,
+                        right: "Balance Qty:",
+                    },
+                    helpers: {
+                        left: "Original work order quantity",
+                        middle: "Enter assembly quantity for this batch",
+                        right: "Remaining after this entry",
+                    },
+                    infoText: "Assembly can be done in batches. Qty must not exceed remaining.",
+                    titleIcon: <ToolOutlined />,
+                    // ✅ max limit for assembly qty
+                    maxQty: Number(wo.remainingAssemblyQty ?? workQty),
+                };
 
         }
     }, [stage, wo]);
@@ -338,7 +338,7 @@ const PickingDetailModal = ({
                     <InputNumber
                         min={0}
                         max={record.maxQty}
-                        placeholder={`Max: ${record.maxQty - processStageData?.qty * record?.quantity}`}
+                        placeholder={`Max: ${(record.maxQty || 0) - (processStageData?.qty || 0) * (record?.quantity || 0)}`}
                         style={{ width: "100%" }}
                         value={pickedQuantities[record.key]}
                         onChange={(value) =>
@@ -413,30 +413,30 @@ const PickingDetailModal = ({
                 style={{ marginBottom: 16 }}
             >
                 {/* First row: Project/PO/POS */}
-                {stage === "Picking/Assembly" ? <></> : 
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr 1fr",
-                        gap: 16,
-                    }}
-                >
-                    <div>
-                        <Text strong>{stageConfig.projectNoLabel}</Text>
-                        <br />
-                        <Text>{wo.projectName || "-"}</Text>
-                    </div>
-                    <div>
-                        <Text strong>{stageConfig.poNumberLabel}</Text>
-                        <br />
-                        <Text>{wo.poNumber || "-"}</Text>
-                    </div>
-                    <div>
-                        <Text strong>{stageConfig.posNumberLabel}</Text>
-                        <br />
-                        <Text>{wo.posNo || wo.posNumber || "-"}</Text>
-                    </div>
-                </div>}
+                {stage === "Picking/Assembly" ? <></> :
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr 1fr",
+                            gap: 16,
+                        }}
+                    >
+                        <div>
+                            <Text strong>{stageConfig.projectNoLabel}</Text>
+                            <br />
+                            <Text>{wo.projectName || "-"}</Text>
+                        </div>
+                        <div>
+                            <Text strong>{stageConfig.poNumberLabel}</Text>
+                            <br />
+                            <Text>{wo.poNumber || "-"}</Text>
+                        </div>
+                        <div>
+                            <Text strong>{stageConfig.posNumberLabel}</Text>
+                            <br />
+                            <Text>{wo.posNo || wo.posNumber || "-"}</Text>
+                        </div>
+                    </div>}
 
                 <Divider style={{ margin: "12px 0" }} />
 

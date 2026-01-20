@@ -3,12 +3,12 @@ import { Modal, Button, Typography } from 'antd';
 
 const { Title, Text } = Typography;
 
-const ExportExcelModal = ({ visible, onCancel, onConfirm }) => {
+const ExportExcelModal = ({ visible, onCancel, onConfirm,mode }) => {
   return (
     <Modal
       title={
         <Title level={4} style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
-          Export Excel
+          Export {mode}
         </Title>
       }
       open={visible}
@@ -26,7 +26,7 @@ const ExportExcelModal = ({ visible, onCancel, onConfirm }) => {
     >
       <div style={{ padding: '10px 0' }}>
         <Text style={{ fontSize: '14px', lineHeight: '1.5', display: 'block' }}>
-          Are you sure you want to export this Excel?
+          Are you sure you want to export this {mode}?
         </Text>
         
         <Text style={{ fontSize: '14px', lineHeight: '1.5', display: 'block', marginTop: '8px' }}>

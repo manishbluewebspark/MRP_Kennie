@@ -652,7 +652,7 @@ export const createDrawing = async (req, res) => {
     data.materialMarkup = materialMarkup;
     data.manhourMarkup = manhourMarkup;
     data.packingMarkup = packingMarkup;
-    data.quotedDate = new Date()
+    // data.quotedDate = new Date()
     // 5) Compute initial total (basic)
     const totalPrice = Number(qty) * Number(unitPrice);
 
@@ -2373,152 +2373,174 @@ export const importCostingItems = async (req, res) => {
         }
 
         // ================= MATERIAL =================
-        else if (quoteType === "material") {
-          const childKey = (row["ChildPart"] ?? row["Part Number"] ?? "")
-            .toString()
-            .trim();
+       // ================= MATERIAL =================
+else if (quoteType === "material") {
+  const childKey = (row["ChildPart"] ?? row["Part Number"] ?? "")
+    .toString()
+    .trim();
 
-          if (!childKey) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "ChildPart / Part Number",
-              value: "",
-              message: "ChildPart / Part Number is required",
-            });
-            continue;
-          }
+  if (!childKey) {
+    errors.push({
+      row: rowNumber,
+      type: "material",
+      field: "ChildPart / Part Number",
+      value: "",
+      message: "ChildPart / Part Number is required",
+    });
+    continue;
+  }
 
-          const childPart = await Child.findOne({ ChildPartNo: childKey }).populate("mpn");
+  const childPart = await Child.findOne({
+    ChildPartNo: childKey,
+  }).populate({
+    path: "mpn",
+    populate: { path: "currency", select: "code" },
+  });
+  
 
-          if (!childPart || !childPart.mpn) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "ChildPart",
-              value: childKey,
-              message: `MPN not found for ChildPart: ${childKey}`,
-            });
-            continue;
-          }
+  if (!childPart || !childPart.mpn) {
+    errors.push({
+      row: rowNumber,
+      type: "material",
+      field: "ChildPart",
+      value: childKey,
+      message: `MPN not found for ChildPart: ${childKey}`,
+    });
+    continue;
+  }
 
-          // 🔒 DB-level duplicate (same drawingId + same childPart)
-          const alreadyExists = await CostingItems.findOne({
-            drawingId,
-            quoteType: "material",
-            childPart: childPart._id,
-          }).lean();
+  // 🔒 Duplicate check
+  const alreadyExists = await CostingItems.findOne({
+    drawingId,
+    quoteType: "material",
+    childPart: childPart._id,
+  }).lean();
 
-          if (alreadyExists) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "ChildPart",
-              value: childKey,
-              message: `Child Part ${childKey} already added in this Drawing`,
-            });
-            continue;
-          }
+  if (alreadyExists) {
+    errors.push({
+      row: rowNumber,
+      type: "material",
+      field: "ChildPart",
+      value: childKey,
+      message: `Child Part ${childKey} already added in this Drawing`,
+    });
+    continue;
+  }
 
-          const uomRaw = (row["UOM"] ?? "").toString().trim();
-          const uomId = await getUomId(uomRaw);
-          if (!uomId) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "UOM",
-              value: uomRaw,
-              message: `UOM not found: ${uomRaw}`,
-            });
-            continue;
-          }
+  const uomRaw = (row["UOM"] ?? "").toString().trim();
+  const uomId = await getUomId(uomRaw);
+  if (!uomId) {
+    errors.push({
+      row: rowNumber,
+      type: "material",
+      field: "UOM",
+      value: uomRaw,
+      message: `UOM not found: ${uomRaw}`,
+    });
+    continue;
+  }
 
-          const quantity = toNum(row["Qty"]);
-          if (!(quantity > 0)) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "Qty",
-              value: row["Qty"],
-              message: "Qty must be > 0",
-            });
-            continue;
-          }
+  const quantity = toNum(row["Qty"]);
+  if (!(quantity > 0)) {
+    errors.push({
+      row: rowNumber,
+      type: "material",
+      field: "Qty",
+      value: row["Qty"],
+      message: "Qty must be > 0",
+    });
+    continue;
+  }
 
-          const unitPriceRaw = toNum(childPart?.mpn?.RFQUnitPrice);
-          if (!(unitPriceRaw > 0)) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "RFQ Unit Price",
-              value: unitPriceRaw,
-              message: "RFQ Unit Price missing or 0 for this MPN",
-            });
-            continue;
-          }
+  const unitPriceRaw = toNum(childPart.mpn.RFQUnitPrice);
+  if (!(unitPriceRaw > 0)) {
+    errors.push({
+      row: rowNumber,
+      type: "material",
+      field: "RFQ Unit Price",
+      value: unitPriceRaw,
+      message: "RFQ Unit Price missing or 0 for this MPN",
+    });
+    continue;
+  }
 
-          // ✅ Currency conversion for Material (MPN RFQ price usually USD)
-          const rowCurrency = (
-            row["Currency"] ||
-            row["CUR"] ||
-            defaultSourceCurrency ||
-            "USD"
-          )
-            .toString()
-            .trim()
-            .toUpperCase();
+  // ================= CURRENCY LOGIC (FINAL) =================
 
-          const unitPrice =
-            rowCurrency === drawingCurrency
-              ? round2(unitPriceRaw)
-              : convertCurrency(unitPriceRaw, rowCurrency, drawingCurrency, settings, {
-                  decimals: 2,
-                });
+  // ✅ Source currency from MPN (ObjectId → code)
+  const mpnCurrencyCode = (
+    childPart.mpn.currency?.code || "USD"
+  ).toUpperCase();
 
-          const tolerance = toNum(row["Tolerance"]);
-          const sgaPercent = toNum(row["SGA %"]);
-          const matBurden = toNum(row["Mat Burden %"] || 0);
-          const freightPercent = toNum(row["Freight Cost %"] || 0);
-          const fixedFreightCost = toNum(row["Fixed Freight Cost"] || 0);
+  // ✅ Target currency from Drawing (ObjectId → code)
+  const drawingCurrencyCode = (
+    drawing.currency?.code || "USD"
+  ).toUpperCase();
 
-          const actualQty = round2(quantity + (quantity * tolerance) / 100);
-          const extPrice = round2(quantity * unitPrice);
-          const salesPrice = round2(
-            extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) +
-              fixedFreightCost
-          );
+  // ✅ Convert ONLY if needed
+  const unitPrice =
+    mpnCurrencyCode === drawingCurrencyCode
+      ? round2(unitPriceRaw)
+      : convertCurrency(
+          unitPriceRaw,
+          mpnCurrencyCode,
+          drawingCurrencyCode,
+          settings,
+          { decimals: 2 }
+        );
 
-          newItem = {
-            drawingId,
-            quoteType,
-            itemNumber: String(nextItemNumber).padStart(4, "0"),
-            childPart: childPart?._id,
-            mpn: childPart?.mpn?._id,
-            description: String(childPart?.mpn?.Description || "").trim(),
-            manufacturer: childPart?.mpn?.Manufacturer || "",
-            uom: uomId,
-            moq: toNum(childPart?.mpn?.MOQ),
-            leadTime: toNum(childPart?.mpn?.LeadTime_WK),
-            rfqDate: childPart?.mpn?.RFQDate,
-            supplier: childPart?.mpn?.Supplier,
+  // ==========================================================
 
-            unitPrice, // ✅ converted to drawingCurrency
-            sourceUnitPrice: round2(unitPriceRaw),
-            sourceCurrency: rowCurrency,
-            currency: drawingCurrency,
+  const tolerance = toNum(row["Tolerance"]);
+  const sgaPercent = toNum(row["SGA %"]);
+  const matBurden = toNum(row["Mat Burden %"] || 0);
+  const freightPercent = toNum(row["Freight Cost %"] || 0);
+  const fixedFreightCost = toNum(row["Fixed Freight Cost"] || 0);
 
-            quantity,
-            tolerance,
-            actualQty,
-            sgaPercent,
-            matBurden,
-            freightPercent,
-            fixedFreightCost,
-            extPrice,
-            salesPrice,
-            lastEditedBy: req.user?._id || null,
-          };
-        } else {
+  const actualQty = round2(quantity + (quantity * tolerance) / 100);
+  const extPrice = round2(quantity * unitPrice);
+  const salesPrice = round2(
+    extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) +
+      fixedFreightCost
+  );
+
+  newItem = {
+    drawingId,
+    quoteType,
+    itemNumber: String(nextItemNumber).padStart(4, "0"),
+
+    childPart: childPart._id,
+    mpn: childPart.mpn._id,
+
+    description: String(childPart.mpn.Description || "").trim(),
+    manufacturer: childPart.mpn.Manufacturer || "",
+
+    uom: uomId,
+    moq: toNum(childPart.mpn.MOQ),
+    leadTime: toNum(childPart.mpn.LeadTime_WK),
+    rfqDate: childPart.mpn.RFQDate,
+    supplier: childPart.mpn.Supplier,
+
+    // ✅ Currency fields (ObjectId saved)
+    unitPrice,
+    sourceUnitPrice: round2(unitPriceRaw),
+    sourceCurrency: childPart.mpn.currency?._id, // ✅ MPN currency ObjectId
+    currency: drawing.currency?._id,              // ✅ Drawing currency ObjectId
+
+    quantity,
+    tolerance,
+    actualQty,
+    sgaPercent,
+    matBurden,
+    freightPercent,
+    fixedFreightCost,
+
+    extPrice,
+    salesPrice,
+
+    lastEditedBy: req.user?._id || null,
+  };
+}
+ else {
           return res.status(400).json({
             success: false,
             message: `Unsupported quoteType: ${quoteType}`,
@@ -2623,7 +2645,7 @@ export const importCostingItems = async (req, res) => {
       drawing.lastEditedBy = req?.user?._id || drawing.lastEditedBy;
 
       // ✅ keep drawing currency consistent
-      drawing.currency = drawingCurrency;
+      drawing.currency = drawing?.currency?._id;
 
       await drawing.save();
     }
