@@ -104,7 +104,7 @@ const workOrderSchema = new mongoose.Schema(
 
         process: {
           type: String,
-          enum: ["picking", "assembly", "quality_check", "labelling", "cable_harness"],
+          enum: ["picking", "assembly", "quality_check", "labelling", "cable_harness", "picking_assembly"],
           required: true,
         },
 
