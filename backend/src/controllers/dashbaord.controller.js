@@ -405,3 +405,108 @@ export const getPurchaseFollowUps = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+export const getDashboardProjectTypeStats = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    const dateFilter = {};
+    if (from && to) {
+      dateFilter.createdAt = {
+        $gte: new Date(from),
+        $lte: new Date(`${to}T23:59:59.999Z`),
+      };
+    }
+
+    const projectTypes = ["box_build", "cable_harness", "other"];
+
+    const result = await Promise.all(
+      projectTypes.map(async (type) => {
+        const total = await WorkOrder.countDocuments({
+          projectType: type,
+          ...dateFilter,
+        });
+
+        const completed = await WorkOrder.countDocuments({
+          projectType: type,
+          status: "Completed",
+          ...dateFilter,
+        });
+
+        const inProduction = await WorkOrder.countDocuments({
+          projectType: type,
+          isInProduction: true,
+          status: { $ne: "Completed" },
+          ...dateFilter,
+        });
+
+        return {
+          type,
+          completed,
+          inProduction,
+          notStarted: Math.max(total - completed - inProduction, 0),
+        };
+      })
+    );
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+export const getOutgoingMTOCount = async (req, res) => {
+  try {
+    /**
+     * MTO definition:
+     * - drawingId exists
+     * - completed but not delivered => READY
+     * - packing stage => PACKING
+     * - not completed => PENDING
+     */
+
+    const baseQuery = {
+      drawingId: { $exists: true, $ne: null },
+    };
+
+    // 1️⃣ READY FOR DELIVERY
+    const ready = await WorkOrder.countDocuments({
+      ...baseQuery,
+      status: "Completed",
+      // delivered: { $ne: true },
+    });
+
+    // 2️⃣ IN PACKING
+    const packing = await WorkOrder.countDocuments({
+      ...baseQuery,
+      status: { $regex: /packing/i },
+      delivered: { $ne: true },
+    });
+
+    // 3️⃣ PENDING PRODUCTION
+    const pending = await WorkOrder.countDocuments({
+      ...baseQuery,
+      $or: [
+        { status: { $ne: "Completed" } },
+        { status: { $exists: false } },
+      ],
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        ready,
+        packing,
+        pending,
+      },
+    });
+  } catch (err) {
+    console.error("Error getOutgoingMTOCount:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};

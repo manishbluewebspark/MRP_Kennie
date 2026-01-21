@@ -1,5 +1,5 @@
 import express from "express";
-import { getDashboardAlertsStats, getDashboardCardsStats, getDashboardInventoryStats, getDashboardPurchaseStats, getDashboardSummary, getDashboardWorkOrderStats, getProductionDashboard, getPurchaseFollowUps, getSystemCheck } from "../controllers/dashbaord.controller.js";
+import { getDashboardAlertsStats, getDashboardCardsStats, getDashboardInventoryStats, getDashboardProjectTypeStats, getDashboardSummary, getOutgoingMTOCount, getProductionDashboard, getPurchaseFollowUps, getSystemCheck } from "../controllers/dashbaord.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 
 
@@ -16,5 +16,11 @@ router.get("/purchase-followups", authenticate, getPurchaseFollowUps);
 router.get("/inventory/stats", authenticate, getDashboardInventoryStats);
 router.get("/production/list", authenticate, getProductionDashboard);
 router.get("/alerts/stats", authenticate, getDashboardAlertsStats);
+router.get(
+  "/chart/projectTypeData",
+  authenticate,
+  getDashboardProjectTypeStats
+);
 
+router.get("/chart/outgoingMtoInventory", authenticate, getOutgoingMTOCount)
 export default router;

@@ -30,6 +30,8 @@ import LowStockAlertCard from "components/shared-components/LowStockAlertCard";
 // ---------------- Dropdown UI ----------------
 import { Dropdown } from "antd";
 import LatestAlertsCard from "components/shared-components/LowStockAlertCard/LatestAlertsCard";
+import ProjectTypeProductionChart from "./ProjectTypeProductionChart";
+import OutgoingMTOChartCard from "./OutgoingMTOChartCard";
 
 
 
@@ -70,8 +72,8 @@ export const PurchaseFollowUpsCard = ({ data, loading }) => {
           )}
         />
       ) : (
-        <div style={{ textAlign: "center", color: "#999",alignContent:'center', padding: 12,height:'25vh' }}>
-          No pending purchase follow-ups 
+        <div style={{ textAlign: "center", color: "#999", alignContent: 'center', padding: 12, height: '25vh' }}>
+          No pending purchase follow-ups
         </div>
       )}
     </Card>
@@ -279,7 +281,7 @@ export const DefaultDashboard = () => {
   const [poFollowUps, setPoFollowUps] = useState([])
   // low stock list
   const [lowStockList, setLowStockList] = useState([]);
-
+  const [outgoingMTOCount, setOutgoingMTOCount] = useState()
   // production dashboard
   const [prod, setProd] = useState({ cards: {}, list: [] });
 
@@ -337,6 +339,12 @@ export const DefaultDashboard = () => {
     if (res?.success) setStats(res.data);
   };
 
+  const getOutgoingMTOCount = async () => {
+    const res = await DashboardService.getOutgoingMTOCount();
+    // ✅ Axios: res.data.success
+    if (res?.success) setOutgoingMTOCount(res.data);
+  };
+
   const getLowStockAlerts = async () => {
     const res = await InventoryService.getLowStockAlertList();
     if (res?.success) setLowStockList(res.data || []);
@@ -366,6 +374,7 @@ export const DefaultDashboard = () => {
         getLatestAlerts(),
         fetchProduction(),
         getPurchaseFollowUps(),
+        getOutgoingMTOCount()
       ]);
     } catch (err) {
       console.error("Dashboard load error:", err);
@@ -486,22 +495,22 @@ export const DefaultDashboard = () => {
 
         {/* RIGHT SIDEBAR */}
         <Col xs={24} sm={24} md={24} lg={6}>
-            <PurchaseFollowUpsCard data={poFollowUps} loading={pageLoading} />
-          
+          <PurchaseFollowUpsCard data={poFollowUps} loading={pageLoading} />
+
           {/* You can remove this if not needed */}
-          <StatisticWidget
-            title="System"
-            value="OK"
-            status={0}
-            subtitle="Dashboard running"
+
+          <OutgoingMTOChartCard
+            data={outgoingMTOCount}
           />
+
+
         </Col>
       </Row>
 
       {/* SECOND ROW */}
       <Row gutter={16}>
         {/* LOW STOCK */}
-        <Col xs={24} sm={24} md={24} lg={7}>
+        {/* <Col xs={24} sm={24} md={24} lg={7}>
           <Card
             title="Low Stock Alerts"
             extra={
@@ -520,23 +529,33 @@ export const DefaultDashboard = () => {
                   <LowStockAlertCard key={item._id || item.id} item={item} />
                 ))
               ) : (
-                <div style={{ textAlign: "center",justifyContent:'center',alignContent:'center', color: "#999", padding: 12,height:'33vh' }}>
-                  No low stock alerts 
+                <div style={{ textAlign: "center", justifyContent: 'center', alignContent: 'center', color: "#999", padding: 12, height: '33vh' }}>
+                  No low stock alerts
                 </div>
               )}
             </div>
           </Card>
+        </Col> */}
+
+        <Col xs={12} sm={12} md={12} lg={12}>
+          <ProjectTypeProductionChart
+          />
         </Col>
 
         {/* RECENT ACTIVITIES / LATEST ALERTS */}
-        <Col xs={24} sm={24} md={24} lg={17}>
-          <Card
+        <Col xs={12} sm={12} md={12} lg={12}>
+          {/* <Card
             title="Recent Activities"
             extra={<CardDropdown items={latestTransactionOption} />}
-          >
-            <LatestAlertsCard latestAlerts={alertData} loading={pageLoading} />
-          </Card>
+          > */}
+          <LatestAlertsCard latestAlerts={alertData} loading={pageLoading} />
+          {/* </Card> */}
         </Col>
+
+
+
+
+
       </Row>
     </>
   );

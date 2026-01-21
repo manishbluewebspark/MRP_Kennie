@@ -590,6 +590,7 @@ const SkillLevelCostingList = () => {
       const res = await WorkOrderService.getCompleteWorkOrders({
         page,
         limit,
+        search
       });
       console.log("-------complete res", res);
       setCompleteWorkOrders(res?.data || []);
@@ -938,52 +939,53 @@ const SkillLevelCostingList = () => {
       </Row>
 
       {/* Search + Button */}
-      <Row justify="space-between" style={{ marginBottom: 12 }}>
-        <Col span={6}>
-          <Input
-            placeholder="Search..."
-            prefix={<SearchOutlined />}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </Col>
+     <Row justify="space-between" style={{ marginBottom: 12 }}>
+  {/* 🔍 SEARCH → ALWAYS VISIBLE */}
+  <Col span={6}>
+    <Input
+      placeholder="Search..."
+      prefix={<SearchOutlined />}
+      value={search}
+      onChange={(e) => setSearch(e.target.value)}
+    />
+  </Col>
 
-        <Col xs={24} md={6} style={{ display: "flex", alignItems: "center" }}>
-          <Select
-            value={filterType}
-            style={{ width: "70%" }}
-            placeholder="Select Type"
-            onChange={(val) => {
-              setFilterType(val);
-              fetchWorkOrdersData({
-      page: 1, // reset pagination
-      filters: {
-        ...filters,
-        projectType: val === "show_all_mpns" ? undefined : val,
-      },
-    });
-              // ✅ yahin se API / filter call karo
-              // fetchDrawings({ type: val });
-            }}
-          >
-            <Select.Option value="show_all_mpns">Show All</Select.Option>
-            <Select.Option value="cable_harness">Cable Harness</Select.Option>
-            <Select.Option value="box_build">Box Build</Select.Option>
-            <Select.Option value="other">Others</Select.Option>
-          </Select>
+  {/* 🎯 FILTER → ONLY FOR ACTIVE PRODUCTION */}
+  {activeTab === "active_production" && (
+    <Col xs={24} md={6} style={{ display: "flex", alignItems: "center" }}>
+      <Select
+        value={filterType}
+        style={{ width: "70%" }}
+        placeholder="Select Type"
+        onChange={(val) => {
+          setFilterType(val);
+          fetchWorkOrdersData({
+            page: 1,
+            filters: {
+              ...filters,
+              projectType: val === "show_all_mpns" ? undefined : val,
+            },
+          });
+        }}
+      >
+        <Select.Option value="show_all_mpns">Show All</Select.Option>
+        <Select.Option value="cable_harness">Cable Harness</Select.Option>
+        <Select.Option value="box_build">Box Build</Select.Option>
+        <Select.Option value="other">Others</Select.Option>
+      </Select>
 
-          <Button
-            icon={<FilterOutlined />}
-            className="ml-4"
-            type="default"
-            onClick={() => setFilterVisible(true)}
-          >
-            Filter
-          </Button>
-        </Col>
+      <Button
+        icon={<FilterOutlined />}
+        className="ml-4"
+        type="default"
+        onClick={() => setFilterVisible(true)}
+      >
+        Filter
+      </Button>
+    </Col>
+  )}
+</Row>
 
-
-      </Row>
 
       {/* Table */}
       <Table

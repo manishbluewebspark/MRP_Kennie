@@ -63,4 +63,20 @@ DashboardService.getAlertsStats = function (params = {}) {
   });
 };
 
+DashboardService.getProjectTypeChartData = function (params = {}) {
+  return fetch({
+    url: "/dashboard/chart/projectTypeData",
+    method: "get",
+    params,
+  });
+};
+
+DashboardService.getOutgoingMTOCount = function (params = {}) {
+  return fetch({
+    url: "/dashboard/chart/outgoingMtoInventory",
+    method: "get",
+    params,
+  });
+};
+
 export default DashboardService;
