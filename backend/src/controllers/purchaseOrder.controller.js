@@ -551,8 +551,14 @@ export const getPurchaseOrderById = async (req, res) => {
   try {
     const { id } = req.params;
     const purchaseOrder = await PurchaseOrders.findById(id)
-      .populate("supplier")
-      .populate("workOrderNo")
+       .populate({
+    path: "supplier",
+    populate: {
+      path: "currency",
+      select: "code"   // 👈 sirf currency code
+    }
+  })
+      .populate("workOrderNo","workOrderNo, poNumber,projectNo ")
       .populate({
         path: "items.mpn",   // populate each item’s MPN reference
         model: "MPNLibrary",        // make sure this matches your model name
@@ -608,7 +614,7 @@ export const sendPurchaseOrderMail = async (req, res) => {
 
     // ✅ Generate PDF buffer (no temp file needed)
     const pdfBuffer = await generatePurchaseOrderPDFBuffer(purchaseOrder);
-
+    const ackUrl = `${process.env.BACKEND_API_URL}/purchase-orders/accept/ack/${purchaseOrder._id}`;
     // ✅ Send Email with attachment
     await sendMailWithAttachment({
       to: receiverEmail,
@@ -638,6 +644,28 @@ export const sendPurchaseOrderMail = async (req, res) => {
       Kindly acknowledge receipt and share the <b>committed delivery date</b>.
       If you have any questions or need clarifications, please reply to this email.
     </p>
+
+      <!-- ACK BUTTON -->
+  <div style="margin:20px 0; text-align:center;">
+    <a
+      href="${ackUrl}"
+      style="
+        display:inline-block;
+        padding:12px 28px;
+        background:#16a34a;
+        color:#fff;
+        text-decoration:none;
+        border-radius:6px;
+        font-weight:bold;
+      "
+    >
+      ✔ Acknowledge Purchase Order
+    </a>
+  </div>
+
+  <p style="font-size:13px; color:#555;">
+    By clicking the button above, you confirm receipt of this Purchase Order.
+  </p>
 
     <p style="margin:0;">
       Regards,<br/>
@@ -680,6 +708,53 @@ export const sendPurchaseOrderMail = async (req, res) => {
     });
   }
 };
+
+
+export const exportPurchaseOrderPDF = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const purchaseOrder = await PurchaseOrders.findById(id)
+      .populate("supplier")
+      .populate({
+        path: "items.uom",
+        select: "name code",
+      })
+      .populate({
+        path: "items.mpn",
+        select: "MPN description",
+      })
+      .lean();
+
+    if (!purchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase Order not found",
+      });
+    }
+
+    // ✅ Generate PDF buffer
+    const pdfBuffer = await generatePurchaseOrderPDFBuffer(purchaseOrder);
+
+    // ✅ Set headers for download
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=PO_${purchaseOrder.poNumber}.pdf`
+    );
+
+    // ✅ Send buffer
+    return res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error("❌ exportPurchaseOrderPDF error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 
 
 export const getPurchaseOrdersHistory = async (req, res) => {
@@ -2532,5 +2607,41 @@ export const exportExcel = async (req, res) => {
       status: false,
       message: error.message || "Failed to export excel",
     });
+  }
+};
+
+export const acceptPurchaseOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const po = await PurchaseOrders.findById(id);
+    if (!po) {
+      return res.status(404).send("<h3>Purchase Order not found</h3>");
+    }
+
+    // Already Accepted
+    if (po.status === "Acknowledged") {
+      return res.send(`
+        <h3>✅ Purchase Order already accepted</h3>
+        <p>PO Number: ${po.poNumber}</p>
+      `);
+    }
+
+    // ✅ Update status
+    po.status = "Acknowledged";
+    po.acceptedAt = new Date();
+    await po.save();
+
+    return res.send(`
+      <div style="font-family:Arial;padding:20px">
+        <h2>✅ Thank you!</h2>
+        <p>Purchase Order <b>${po.poNumber}</b> has been <b>ACCEPTED</b> successfully.</p>
+        <p>You may now close this window.</p>
+      </div>
+    `);
+
+  } catch (error) {
+    console.error("ACCEPT ERROR:", error);
+    return res.status(500).send("Something went wrong");
   }
 };

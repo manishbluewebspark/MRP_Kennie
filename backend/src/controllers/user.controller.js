@@ -167,11 +167,11 @@ export const updateUser = async (req, res) => {
 export const deleteUser = async (req, res) => {
   try {
     const { userId } = req.params;
-    const user = await User.findById(userId);
+    const user = await User.findByIdAndDelete(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    user.isDeleted = true;
-    await user.save();
+    // user.isDeleted = true;
+    // await user.save();
 
     res.json({ message: "User soft deleted" });
   } catch (error) {

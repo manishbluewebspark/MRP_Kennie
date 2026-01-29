@@ -98,7 +98,7 @@ const PurchaseOrderItemSchema = new Schema({
   pendingQty:       { type: Number, default: 0 },   // remaining to be accepted = qty - acceptedTotal
   committedDate:{type:Date},
   remarks: { type: String, default: "" },           // last/overall remarks for this PO line
-
+  acceptedAt:{type:Date},
   status: {
     type: String,
     enum: ["Pending", "Accepted", "Rejected", "Partially Accepted"],
@@ -148,7 +148,8 @@ const PurchaseOrderSchema = new Schema(
         "Draft",
         "Closed",
         "Partially Received",  // receiving ke liye
-        "Completed",           // fully received
+        "Completed",  
+        "Acknowledged"         // fully received
       ],
       default: "Pending",
     },

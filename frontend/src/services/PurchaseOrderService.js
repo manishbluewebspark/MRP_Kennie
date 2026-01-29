@@ -101,5 +101,14 @@ PurchaseOrderService.exportPurchaseOrders = function (exportName) {
     responseType: 'arraybuffer',            // important for file downloads
   });
 }
+PurchaseOrderService.exportPurchaseOrderPDF = function (purchaseOrderId) {
+  return fetch({
+    url: `/purchase-orders/${purchaseOrderId}/export-pdf`,
+    method: "get",
+    responseType: "arraybuffer", // 🔑 for PDF download
+  });
+};
+
+
 
 export default PurchaseOrderService;

@@ -25,14 +25,16 @@ const getSupplierName = (supplier) =>
   typeof supplier === "object" ? (supplier?.companyName || "-") : (supplier || "-");
 
 const getCurrencyCode = (supplier) => {
-  const c = typeof supplier === "object" ? supplier?.currency : undefined;
+  const c = typeof supplier === "object" ? supplier?.currency?.code : undefined;
   return typeof c === "string" && c.length <= 4 ? c : "-";
 };
+
 
 const PurchaseOrderDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [downloadPdf,setDownloadPdf] = useState(false)
   const [po, setPo] = useState(null);
 
   useEffect(() => {
@@ -52,6 +54,9 @@ const PurchaseOrderDetailsPage = () => {
     })();
   }, [id]);
 
+
+
+
   const poInfoData = useMemo(() => {
     if (!po) return null;
     return {
@@ -69,6 +74,22 @@ const PurchaseOrderDetailsPage = () => {
       status: po.status || "Pending",
     };
   }, [po]);
+
+
+  const downloadPDF = async () => {
+    setDownloadPdf(true)
+    const res = await PurchaseOrderService.exportPurchaseOrderPDF(id);
+
+    const blob = new Blob([res.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `PO_${poInfoData?.poNumber}.pdf`;
+    link.click();
+    setDownloadPdf(false)
+    window.URL.revokeObjectURL(url);
+  };
 
   const supplierInfoData = useMemo(() => {
     if (!po) return null;
@@ -305,7 +326,7 @@ const PurchaseOrderDetailsPage = () => {
           borderTop: "1px solid #d9d9d9",
         }}
       >
-        <button
+        {/* <button
           onClick={() => window.print()}
           style={{
             padding: "8px 24px",
@@ -316,9 +337,9 @@ const PurchaseOrderDetailsPage = () => {
           }}
         >
           Print
-        </button>
+        </button> */}
         <button
-          onClick={() => message.info("Export PDF coming soon")}
+          onClick={downloadPDF}
           style={{
             padding: "8px 24px",
             border: "1px solid #1890ff",
@@ -328,7 +349,7 @@ const PurchaseOrderDetailsPage = () => {
             cursor: "pointer",
           }}
         >
-          Export PDF
+          {downloadPdf ? "Downloading..." :"Export PDF"}
         </button>
       </div>
     </div>

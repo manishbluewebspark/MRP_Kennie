@@ -12,6 +12,8 @@ import {
   updatePurchaseOrderStatus,
   getLastPurachseOrderNumber,
   exportExcel,
+  exportPurchaseOrderPDF,
+  acceptPurchaseOrder,
 } from "../controllers/purchaseOrder.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 
@@ -24,6 +26,8 @@ router.delete("/:id", authenticate, deletePurchaseOrder);
 router.get("/", authenticate, getAllPurchaseOrders);
 
 router.post("/:id/send-mail", authenticate, sendPurchaseOrderMail);
+router.get("/:id/export-pdf",authenticate, exportPurchaseOrderPDF);
+router.get("/accept/ack/:id", acceptPurchaseOrder);
 router.get("/history", authenticate, getPurchaseOrdersHistory);
 router.get("/summary", authenticate, getPurchaseOrdersSummary);
 router.get("/purchase/shortageList", authenticate, getPurchaseShortageList);

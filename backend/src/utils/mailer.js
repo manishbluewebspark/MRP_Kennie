@@ -13,7 +13,7 @@ const transporter = nodemailer.createTransport({
 
 export const sendMailWithAttachment = async ({ to, subject, html, attachments = [] }) => {
   return transporter.sendMail({
-    from: process.env.MAIL_FROM, // e.g. "sales@exxeltech.com"
+    from: 'purchaser@exxeltech.com', // e.g. "sales@exxeltech.com"
     to,
     subject,
     html,
