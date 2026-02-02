@@ -15,6 +15,7 @@ import SystemSettings from "../models/SystemSettings.js";
 
 import mongoose from "mongoose";
 import CostingItems from "../models/CostingItem.js";
+import { convertQty } from "../utils/uomController.js";
 
 // DemandQty map: mpnId -> totalDemandQty
 async function buildDemandMap() {
@@ -167,10 +168,39 @@ export const adjustInventory = async (req, res) => {
       });
     }
 
+    const inventory = await Inventory.findById(inventoryId)
+      .populate({
+        path: "mpnId",
+        select: "UOM MPN"
+      });
+
+    if (!inventory) {
+      return res.status(404).json({
+        success: false,
+        message: "Inventory not found"
+      });
+    }
+
+    if (!inventory.mpnId) {
+      return res.status(400).json({
+        success: false,
+        message: "MPN missing in inventory"
+      });
+    }
+
+
+
+    const baseUomId = inventory.mpnId.UOM; // ✅ BASE UOM (meter / EA)
+
+    const baseAdjustmentQty = await convertQty({
+      qty: adjustmentQuantity,
+      fromUomId: baseUomId,
+    });
+
     // Use the static method for transaction safety
     const result = await Inventory.adjustInventory(
       inventoryId,
-      adjustmentQuantity,
+      baseAdjustmentQty,
       reason,
       adjustedBy
     );
@@ -881,7 +911,7 @@ export const getInventoryList = async (req, res) => {
         Storage: mpnData.StorageLocation || "-",
         UOM: mpnData?.UOM?.code || "",
 
-        balanceQuantity: balanceQty,
+        balanceQuantity: balanceQty.toFixed(4),
         IncomingQty: incomingQty,
         DemandQty: demandQty,
 

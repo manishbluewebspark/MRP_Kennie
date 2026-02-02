@@ -93,6 +93,7 @@ export function mapRowToSchemaforMPN(row) {
   const mapped = {
     MPN: pick(normalizedRow, ["mpn"]),
     Manufacturer: pick(normalizedRow, ["manufacturer"]),
+    Quantity: pick(normalizedRow, ["Qty"]),
     Description: pick(normalizedRow, ["description"]),
     UOM: pick(normalizedRow, ["uom"]),
 

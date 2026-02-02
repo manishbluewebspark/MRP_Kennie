@@ -233,7 +233,10 @@ import { convertCurrency } from "../utils/currency.js";
 
 const S = (v) => (v == null ? "" : String(v));
 
-function round2(n) { return Math.round(Number(n || 0) * 100) / 100; }
+// function round2(n) { return Math.round(Number(n || 0) * 100) / 100; }
+function round2(n) {
+  return Number((Number(n || 0)).toFixed(2));
+}
 
 export const getAllDrawings = async (req, res) => {
   try {
@@ -477,7 +480,7 @@ export const getAllDrawings = async (req, res) => {
       const packingWith = sums.packing * (1 + packingMarkup / 100);
 
       const markupPrice = materialWith + manhourWith + packingWith;
-
+      console.log('-----markupPrice',markupPrice)
       return {
         ...d,
         costingSummary: {
@@ -532,10 +535,73 @@ export const getDrawingById = async (req, res) => {
       .populate("lastEditedBy", "name")
       .populate("currency", "code symbol name")
 
+      
     if (!drawing)
       return res.status(404).json({ success: false, message: "Drawing not found" });
 
-    res.status(200).json({ success: true, data: drawing });
+    const costingAgg = await CostingItems.aggregate([
+  {
+    $match: {
+      drawingId: new mongoose.Types.ObjectId(id)
+    }
+  },
+  {
+    $group: {
+      _id: "$drawingId",
+      materialSum: {
+        $sum: {
+          $cond: [
+            { $eq: [{ $toLower: "$quoteType" }, "material"] },
+            "$salesPrice",
+            0
+          ]
+        }
+      },
+      manhourSum: {
+        $sum: {
+          $cond: [
+            { $eq: [{ $toLower: "$quoteType" }, "manhour"] },
+            "$salesPrice",
+            0
+          ]
+        }
+      },
+      packingSum: {
+        $sum: {
+          $cond: [
+            { $eq: [{ $toLower: "$quoteType" }, "packing"] },
+            "$salesPrice",
+            0
+          ]
+        }
+      },
+      maxLeadTime: {
+        $max: { $ifNull: ["$leadTime", 0] }
+      }
+    }
+  }
+]);
+
+
+    const summary = costingAgg.length
+  ? {
+      material: Number(costingAgg[0].materialSum || 0),
+      manhour: Number(costingAgg[0].manhourSum || 0),
+      packing: Number(costingAgg[0].packingSum || 0),
+      maxLeadTime: Number(costingAgg[0].maxLeadTime || 0)
+    }
+  : {
+      material: 0,
+      manhour: 0,
+      packing: 0,
+      maxLeadTime: 0
+    };
+
+
+    res.status(200).json({ success: true, data: {
+    ...drawing.toObject(),
+    costingSummary: summary
+  } });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -1465,13 +1531,14 @@ export const addCostingItem = async (req, res) => {
     }
 
     const drawingCurrency = (drawing.currency?.code || "SGD").toUpperCase();
-
     // ✅ Incoming MPN price currency (default USD)
-    const sourceCurrency = (req.body.sourceCurrency || req.body.currency || "USD").toUpperCase();
 
     // ✅ Price fields (adjust according to your schema)
     // Example: req.body.salesPrice is coming from UI in USD
     const incomingPrice = toNum(req.body.salesPrice);
+
+    const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
+        const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
 
     // ✅ Convert only when needed
     const salesPriceInDrawingCurrency =
@@ -1594,7 +1661,9 @@ export const updateCostingItem = async (req, res) => {
     const drawingCurrency = (drawing?.currency?.code || "SGD").toUpperCase();
 
     // ✅ Incoming currency (default USD)
-    const sourceCurrency = (req.body.sourceCurrency || req.body.currency || "USD").toUpperCase();
+       const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
+        const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
+    // const sourceCurrency = (req.body.sourceCurrency || req.body.currency || "USD").toUpperCase();
 
     // ✅ Incoming price field (adjust if your API uses unitPrice/extPrice)
     const incomingPrice = toNum(req.body.salesPrice);
@@ -2178,6 +2247,8 @@ export const importCostingItems = async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }); // defval important
 
+
+    console.log('------rows',rows)
     const lastItem = await CostingItems.findOne({ drawingId, quoteType })
       .sort({ itemNumber: -1 })
       .lean();
@@ -2396,6 +2467,9 @@ else if (quoteType === "material") {
     path: "mpn",
     populate: { path: "currency", select: "code" },
   });
+
+
+  console.log('------childPart',childPart)
   
 
   if (!childPart || !childPart.mpn) {
@@ -4148,7 +4222,7 @@ export const importDrawings = async (req, res) => {
     // Drawing.currency must be ObjectId (Currency ref)
     const projectCurrencyId = projectData?.currency?._id || null;
     const projectCurrencyCode = normCur(projectData?.currency?.code) || "USD";
-
+    console.log('------projectCurrencyCode',projectCurrencyCode)
     if (!projectCurrencyId) {
       try { fs.unlinkSync(filePath); } catch {}
       return res.status(400).json({
@@ -4291,7 +4365,12 @@ export const importDrawings = async (req, res) => {
         if (childParts) {
           let materialHasError = false;
 
-          const childPart = await Child.findOne({ ChildPartNo: childParts }).populate("mpn");
+          const childPart = await Child.findOne({ ChildPartNo: childParts }).populate({
+    path: "mpn",
+    populate: { path: "currency", select: "code" },
+  });
+
+  console.log('------childPart',childPart)
 
           if (!childPart) {
             results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "Child Part", value: childParts, message: `Child Part not found in system: ${childParts}` });
@@ -4332,8 +4411,8 @@ export const importDrawings = async (req, res) => {
             const fixedFreight = toNum(pick(r, "Fixed Freight cost", "Fixed Freight", "Fixed Freight Cost"), 0);
 
             // ✅ Source currency from excel column OR default USD
-            const rowCurrency = normCur(pick(r, "Currency", "CUR", "Row Currency")) || defaultSourceCurrency;
-
+            // const rowCurrency = normCur(pick(r, "Currency", "CUR", "Row Currency")) || defaultSourceCurrency;
+            const rowCurrency = childPart?.mpn?.currency?.code || "USD"
             // ✅ Convert to drawing currency code
             let unitPrice = unitPriceRaw;
             try {

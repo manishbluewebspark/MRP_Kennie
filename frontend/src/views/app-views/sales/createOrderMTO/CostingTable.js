@@ -305,7 +305,28 @@ const handleUpdateAllLatestPrice = async () => {
       key: 'unitPrice',
       width: 110,
       align: 'right',
-      render: (v) => `${(Number(v || 0)).toFixed(2)}`,
+      render: (v,record) => `${record?.mpn?.currency?.symbol} ${(Number(v || 0)).toFixed(2)}`,
+    },
+    {
+      title: 'Latest P. Price',
+      dataIndex: 'unitPrice',
+      key: 'unitPrice',
+      width: 150,
+      align: 'right',
+      sorter: (a, b) => a.unitPrice - b.unitPrice, // enable sorting arrow
+      render: (value,record) => (
+        <div
+          style={{
+            // backgroundColor: '#ffeaea', // light red background
+            color: '#d32f2f', // darker red text
+            padding: '4px 8px',
+            borderRadius: '6px',
+            fontWeight: 600,
+          }}
+        >
+          {Number(record?.mpn?.RFQUnitPrice || 0).toFixed(2)}
+        </div>
+      ),
     },
      {
       title: 'Ex. Price',

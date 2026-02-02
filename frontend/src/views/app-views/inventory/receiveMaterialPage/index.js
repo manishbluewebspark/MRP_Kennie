@@ -42,7 +42,7 @@ const PurchaseOrdersReceivePage = () => {
 
     // ✅ Page load pe Pending POs fetch
     useEffect(() => {
-        dispatch(fetchPurchaseOrders({ status: ["Emailed", "Partially Received"] }));
+        dispatch(fetchPurchaseOrders({ status: ["Partially Received","Acknowledged"] }));
     }, [dispatch]);
 
     // 🔹 Card pe "Click to receive"

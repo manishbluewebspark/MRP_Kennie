@@ -9,6 +9,7 @@ import UOM from "../../models/UOM.js";
 import mongoose from "mongoose"; // make sure this is imported where your controllers live
 import Currency from "../../models/Currency.js";
 import Inventory from "../../models/Inventory.js";
+import { convertQty } from "../../utils/uomController.js";
 
 const fieldMap = {
   "MPN": "MPN",
@@ -729,10 +730,17 @@ export const importMpn = async (req, res) => {
           await MPN.updateOne({ _id: existing._id }, { $set: updateData });
           results.updated++;
         } else {
+          const mpnQty = mappedRow?.Quantity || 0
           const createdMpn = await MPN.create(mappedRow);
+
+           const acceptedQtyInMaster = await convertQty({
+                  qty: mpnQty,
+                  fromUomId: mappedRow?.UOM,  // should be the ObjectId of the UOM used in line / PO item
+                });
 
           await Inventory.create({
             mpnId: createdMpn._id,
+            balanceQuantity:acceptedQtyInMaster
           });
 
           results.inserted++;

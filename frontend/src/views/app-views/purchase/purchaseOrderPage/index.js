@@ -1062,6 +1062,7 @@ const PurchaseShortageCard = ({ record }) => {
             manufacturer: item.manufacturer,
             supplierName: item.supplier,
             workOrders: item.requireByWorkOrders || [],
+            shortageByWorkOrders:item?.shortageByWorkOrders
         }));
 
         // ---- Navigate with data ----

@@ -27,6 +27,7 @@ import { fetchWorkOrders } from 'store/slices/workOrderSlice';
 import { getAllPurchaseSettings } from 'store/slices/purchaseSettingSlice';
 import { getAllUOMs } from 'store/slices/uomSlice';
 import { fetchSystemSettings } from 'store/slices/systemSettingsSlice';
+import moment from 'moment';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -390,6 +391,16 @@ const PurchaseOrderForm = () => {
       shortageItems.length &&
       librarys?.mpnList?.length
     ) {
+
+      const firstShortageDate =
+      shortageItems[0]?.shortageByWorkOrders?.[0]?.needDate;
+
+          if (firstShortageDate) {
+      // moment object needed for DatePicker
+      form.setFieldsValue({ needDate: dayjs(firstShortageDate) });
+    }
+
+
       const existingNos = [];
       const mapped = shortageItems.map((item, idx) => {
         const lib =
@@ -613,7 +624,7 @@ const PurchaseOrderForm = () => {
                   size="large"
                   showSearch
                   optionFilterProp="children"
-                  disabled={fromShortage && !isEditMode} // lock when from shortage
+                  // disabled={fromShortage && !isEditMode} // lock when from shortage
                 >
                   {suppliers?.map((s) => (
                     <Option key={s._id} value={s._id}>

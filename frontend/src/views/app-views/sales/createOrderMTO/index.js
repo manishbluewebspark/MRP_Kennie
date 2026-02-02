@@ -192,13 +192,13 @@ const MTOList = () => {
       title: "Unit Price",
       dataIndex: "costingSummary",
       key: "costingSummary",
-      render: (costingSummary, record) => `${record.currency?.code} ${costingSummary?.grandTotalWithMarkup}`
+      render: (costingSummary, record) => `${record.currency?.code} ${record?.totalPriceWithMarkup}`
     },
     {
       title: "Total Price",
       dataIndex: "costingSummary",
       key: "costingSummary",
-      render: (costingSummary, record) => `${record.currency?.code} ${costingSummary?.grandTotalWithMarkup * record.qty}`
+      render: (costingSummary, record) => `${record.currency?.code} ${record?.totalPriceWithMarkup * record.qty}`
     },
     {
       title: "Lead Time",

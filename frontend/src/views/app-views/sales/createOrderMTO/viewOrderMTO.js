@@ -222,7 +222,7 @@ const DrawingDetails = () => {
    const grandTotalWithMarkup = useMemo(() => {
   // ✅ 1. Backend value ko priority do
   if (drawing?.totalPriceWithMarkup != null) {
-    return round2(drawing.totalPriceWithMarkup);
+    return drawing.totalPriceWithMarkup;
   }
 
   // ❌ 2. Sirf fallback ke liye frontend calculation
@@ -455,7 +455,7 @@ const handleUpdateAll = async (ids = []) => {
         { key: 'customer', label: 'Customer', value: drawing?.customerId?.companyName || "-", bold: true },
         { key: 'currency', label: 'Currency', value: drawing?.currency?.code || drawing?.projectId?.currency || "-", bold: true, fontSize: 20 },
         { key: 'unitPrice', label: 'Unit Price', value: `${drawing?.currency?.symbol || ""} ${grandTotalWithMarkup.toFixed(2)}`, bold: true, fontSize: 20 },
-        { key: 'leadTime', label: 'Lead Time', value: drawing?.leadTimeWeeks ? `${drawing.leadTimeWeeks} week(s)` : "TBD", bold: true },
+        { key: 'leadTime', label: 'Lead Time', value: drawing?.costingSummary?.maxLeadTime ? `${drawing?.costingSummary?.maxLeadTime} week(s)` : "TBD", bold: true },
         { key: 'createdAt', label: 'Quoted Date', value: drawing?.createdAt ? new Date(drawing.createdAt).toLocaleDateString() : "Not Quoted", bold: true },
         { key: 'lastEditedBy', label: 'Last Edited User', value: drawing?.lastEditedBy?.name || "No User", bold: true },
     ];

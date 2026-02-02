@@ -4,44 +4,8 @@ import MPN from "../models/library/MPN.js";
 import PurchaseOrders from "../models/PurchaseOrders.js";
 import ReceiveMaterial from "../models/ReceiveMaterial.js";
 import UOM from "../models/UOM.js";
+import { convertQty } from "../utils/uomController.js";
 
-
-
-// ============================
-// ✅ UOM CONVERSION HELPERS
-// ============================
-const normUom = (v = "") => String(v).trim().toLowerCase();
-
-// length factors → base: meter
-const lengthToMetersFactor = (uomName) => {
-  const u = normUom(uomName);
-
-  if (u === "m" || u === "meter" || u === "metre") return 1;
-
-  if (u === "cm" || u === "centimeter" || u === "centimetre") return 0.01;
-  if (u === "mm" || u === "millimeter" || u === "millimetre") return 0.001;
-
-  if (u === "in" || u === "inch" || u === "inches") return 0.0254;
-  if (u === "ft" || u === "feet" || u === "foot") return 0.3048;
-
-  return null; // unknown / not a length uom
-};
-
-const convertQtyLength = (qty, fromUomName, toUomName) => {
-  const q = Number(qty || 0);
-  if (!Number.isFinite(q) || q === 0) return 0;
-
-  const fromF = lengthToMetersFactor(fromUomName);
-  const toF = lengthToMetersFactor(toUomName);
-
-  // if not length units → no conversion
-  if (!fromF || !toF) return q;
-
-  return (q * fromF) / toF;
-};
-
-// ============================
-// ✅ MAIN API
 // ============================
 export const createReceiveMaterial = async (req, res) => {
   try {
@@ -88,8 +52,8 @@ export const createReceiveMaterial = async (req, res) => {
 
     const mpnDocs = mpnIds.length
       ? await MPN.find({ _id: { $in: mpnIds.map((id) => new mongoose.Types.ObjectId(id)) } })
-          .select("uom uomId") // master uom stored here
-          .lean()
+        .select("uom uomId") // master uom stored here
+        .lean()
       : [];
 
     const mpnMap = new Map(mpnDocs.map((m) => [String(m._id), m]));
@@ -118,8 +82,8 @@ export const createReceiveMaterial = async (req, res) => {
 
     const uomDocs = uomIds.length
       ? await UOM.find({ _id: { $in: uomIds.map((id) => new mongoose.Types.ObjectId(id)) } })
-          .select("name code")
-          .lean()
+        .select("name code")
+        .lean()
       : [];
 
     const uomMap = new Map(uomDocs.map((u) => [String(u._id), u]));
@@ -159,13 +123,12 @@ export const createReceiveMaterial = async (req, res) => {
       // ✅ from UOM priority: line.uom > poItem.uom > masterUOM
       const fromUomId = getId(line.uomId || line.uom || poItem?.uomId || poItem?.uom) || null;
       const fromUomName = getUomName(fromUomId) || masterUomName;
+      const fromUOMId = await MPN.findById(line.mpnId._id)
 
-      // ✅ Convert accepted qty into master UOM (Meter, etc.)
-      const acceptedQtyInMaster =
-        masterUomName && fromUomName
-          ? convertQtyLength(acceptedQty, fromUomName, masterUomName)
-          : acceptedQty;
-
+      const acceptedQtyInMaster = await convertQty({
+        qty: acceptedQty,
+        fromUomId: fromUOMId?.UOM,  // should be the ObjectId of the UOM used in line / PO item
+      });
       // ---- PO totals update ----
       if (poItem) {
         const orderedQty = Number(poItem.qty || line.orderedQty || 0);

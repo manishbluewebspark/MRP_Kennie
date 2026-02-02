@@ -415,7 +415,7 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
   },
 },
     { title: "Storage", dataIndex: "Storage", key: "Storage", width: 100, align: "center" },
-    { title: "Balance Qty", dataIndex: "balanceQuantity", key: "balanceQuantity", width: 120, align: "center" },
+    { title: "Balance Qty (M)", dataIndex: "balanceQuantity", key: "balanceQuantity", width: 200, align: "center" },
     {
       title: "Incoming Qty",
       dataIndex: "IncomingQty",
