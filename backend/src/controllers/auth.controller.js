@@ -7,6 +7,7 @@ import crypto from "crypto";
 import { send } from "process";
 import fs from 'fs';
 import path from 'path';
+import { sendMailWithAttachment } from "../utils/mailer.js";
 
 // ===== Helper Functions =====
 const generateToken = (user) => {
@@ -148,6 +149,45 @@ export const forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 2 * 60 * 1000; // 2 min
     await user.save();
 
+    await sendMailWithAttachment({
+      to: user.email,
+      subject: "Password Reset OTP",
+      html: `
+        <div style="font-family:Arial; font-size:14px; color:#111;">
+          <p>Hello ${user.name || "User"},</p>
+
+          <p>
+            Your <b>Password Reset OTP</b> is:
+          </p>
+
+          <div style="
+            font-size:22px;
+            font-weight:bold;
+            letter-spacing:3px;
+            margin:12px 0;
+          ">
+            ${otp}
+          </div>
+
+          <p>
+            This OTP is valid for <b>2 minutes</b>.
+            Please do not share it with anyone.
+          </p>
+
+          <p style="margin-top:20px;">
+            Regards,<br/>
+            <b>Exxel Technology</b>
+          </p>
+
+          <hr style="border:none;border-top:1px solid #eee;margin:16px 0;" />
+
+          <p style="font-size:12px;color:#777;">
+            This is an auto-generated email. Please ignore if you did not request password reset.
+          </p>
+        </div>
+      `,
+    });
+
     // Send OTP by email
     // await sendEmail(user.email, "Password Reset OTP", `Your OTP is ${otp}. It will expire in 2 minutes.`);
 
@@ -170,7 +210,42 @@ export const resendOtp = async (req, res) => {
     await user.save();
 
     // await sendEmail(user.email, "New Password Reset OTP", `Your new OTP is ${otp}. It will expire in 2 minutes.`);
+await sendMailWithAttachment({
+      to: user.email,
+      subject: "New Password Reset OTP",
+      html: `
+        <div style="font-family:Arial; font-size:14px; color:#111;">
+          <p>Hello ${user.name || "User"},</p>
 
+          <p>Your <b>new Password Reset OTP</b> is:</p>
+
+          <div style="
+            font-size:22px;
+            font-weight:bold;
+            letter-spacing:3px;
+            margin:12px 0;
+          ">
+            ${otp}
+          </div>
+
+          <p>
+            This OTP will expire in <b>2 minutes</b>.
+            If you did not request this, please ignore this email.
+          </p>
+
+          <p style="margin-top:20px;">
+            Regards,<br/>
+            <b>Exxel Technology</b>
+          </p>
+
+          <hr style="border:none;border-top:1px solid #eee;margin:16px 0;" />
+
+          <p style="font-size:12px;color:#777;">
+            This is an auto-generated email. Do not share this OTP with anyone.
+          </p>
+        </div>
+      `,
+    });
     res.json({ message: "New OTP sent to email", data: { otp } });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -264,7 +339,7 @@ export const updateProfile = async (req, res) => {
     // Update fields
     if (name) user.name = name;
     if (email) user.email = email;
-    if (userName) user.userName = userName  ;
+    if (userName) user.userName = userName;
     if (phoneNumber) user.phone = phoneNumber;
     if (website) user.website = website;
     if (address) user.address = address;

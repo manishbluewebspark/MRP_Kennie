@@ -36,6 +36,7 @@ import { fetchSuppliers } from 'store/slices/supplierSlice';
 import { fetchAllMpn } from 'store/slices/librarySlice';
 import { getAllMarkupParameters } from 'store/slices/markupParameterSlice';
 import { hasPermission } from 'utils/auth';
+import { limit } from 'firebase/firestore/lite';
 
 const { Text } = Typography;
 
@@ -178,8 +179,8 @@ const DrawingDetails = () => {
     useEffect(() => {
         if (!id) return;
         dispatch(fetchAllMpn());
-        dispatch(getAllUOMs());
-        dispatch(fetchSuppliers());
+        dispatch(getAllUOMs({limit:3000}));
+        dispatch(fetchSuppliers({limit:3000}));
         dispatch(getAllMarkupParameters());
         fetchProjects();
         fetchCostingItems();
@@ -324,6 +325,8 @@ const DrawingDetails = () => {
         if (!values.extPrice && values.quantity && values.unitPrice) {
             values.extPrice = Number(values.quantity) * Number(values.unitPrice);
         }
+
+        console.log('------values',values)
 
         if (editingItem) {
             await DrawingService.updateCostingItem(
