@@ -138,6 +138,15 @@ const modules = [
           { key: "qc", label: "Quality Check" }
         ],
       },
+      {
+        key: "other_assembly",
+        label: "Other Assembly",
+        actions: [
+          { key: "view", label: "View Only" },
+          { key: "picking_assembly_process", label: "Picking/Assembly Process" },
+          { key: "qc", label: "Quality Check" }
+        ],
+      },
     ],
   },
 

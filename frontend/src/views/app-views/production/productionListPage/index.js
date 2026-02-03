@@ -536,12 +536,12 @@ const SkillLevelCostingList = () => {
   const [selectWorkOrderData, setSelectWorkOrderData] = useState();
   const [filterVisible, setFilterVisible] = useState(false)
   const [filters, setFilters] = useState({});
-  const [posOptions, setPosOptions] = useState([]);
-  const [projectOptions, setProjectOptions] = useState([]);
-  const [drawingOptions, setDrawingOptions] = useState([]);
+  const [poOptions, setPoOptions] = useState([]);
+  const [projectNoOptions, setProjectNoOptions] = useState([]);
+  // const [drawingOptions, setDrawingOptions] = useState([]);
   const [workOrderOptions, setWorkOrderOptions] = useState([]);
   const [filterType, setFilterType] = useState("show_all_mpns");
-
+  const [needDatesOptions, setNeedDatesOptions] = useState([])
   const { list } = useSelector(
     (state) => state.customers
   );
@@ -562,9 +562,10 @@ const SkillLevelCostingList = () => {
       if (res?.status) {
         const data = res?.data || {};
 
-        setPosOptions(data.posNos || []);
-        setProjectOptions(data.projects || []);
-        setDrawingOptions(data.drawings || []);
+        setPoOptions(data.poNumbers || []);
+        setProjectNoOptions(data.projectNos || []);
+        setNeedDatesOptions(data?.needDates || [])
+        // setDrawingOptions(data.drawings || []);
         setWorkOrderOptions(data.workOrders || [])
       } else {
         message.error(res?.message || "Failed to load filter data");
@@ -606,31 +607,38 @@ const SkillLevelCostingList = () => {
       name: "projectNo",
       label: "Project No",
       placeholder: "Select Project No",
-      options: projectOptions.map((cat) => ({
+      options: projectNoOptions.map((cat) => ({
         label: cat.label,
         value: cat.value,
       })),
     },
     {
       type: "select",
-      name: "posNo",
-      label: "POS No",
-      placeholder: "Select POS No",
-      options: posOptions.map((cat) => ({
+      name: "poNo",
+      label: "PO No",
+      placeholder: "Select PO No",
+      options: poOptions.map((cat) => ({
         label: cat.label,
         value: cat.value,
       })),
     },
     {
       type: "select",
-      name: "drawingNo",
-      label: "Drawing No",
-      placeholder: "Select Drawing No",
-      options: drawingOptions.map((cat) => ({
-        label: cat.label,
-        value: cat.value,
-      })),
+      name: "needDate",
+      label: "Need Date",
+      placeholder: "Select Need Date",
+      options: needDatesOptions,
     },
+    // {
+    //   type: "select",
+    //   name: "drawingNo",
+    //   label: "Drawing No",
+    //   placeholder: "Select Drawing No",
+    //   options: drawingOptions.map((cat) => ({
+    //     label: cat.label,
+    //     value: cat.value,
+    //   })),
+    // },
     {
       type: "select",
       name: "customerId",
@@ -700,10 +708,13 @@ const SkillLevelCostingList = () => {
         limit: params.limit ?? limit,
 
         // ✅ filters (map names correctly)
-        projectId: (params.filters ?? filters)?.projectNo || undefined,   // actually projectId
+        // projectId: (params.filters ?? filters)?.projectNo || undefined,   // actually projectId
         customerId: (params.filters ?? filters)?.customerId || undefined,   // actually projectId
-        drawingId: (params.filters ?? filters)?.drawingNo || undefined,   // actually drawingId
+        // drawingId: (params.filters ?? filters)?.drawingNo || undefined,   // actually drawingId
         posNo: (params.filters ?? filters)?.posNo || undefined,
+        projectNo: (params.filters ?? filters)?.projectNo || undefined,
+        poNo: (params.filters ?? filters)?.poNo || undefined,
+        needDate: (params.filters ?? filters)?.needDate || undefined,
         status: (params.filters ?? filters)?.status || undefined,
         search: params.search || "", // optional
         projectType: params?.filters?.projectType || undefined,
@@ -939,52 +950,52 @@ const SkillLevelCostingList = () => {
       </Row>
 
       {/* Search + Button */}
-     <Row justify="space-between" style={{ marginBottom: 12 }}>
-  {/* 🔍 SEARCH → ALWAYS VISIBLE */}
-  <Col span={6}>
-    <Input
-      placeholder="Search..."
-      prefix={<SearchOutlined />}
-      value={search}
-      onChange={(e) => setSearch(e.target.value)}
-    />
-  </Col>
+      <Row justify="space-between" style={{ marginBottom: 12 }}>
+        {/* 🔍 SEARCH → ALWAYS VISIBLE */}
+        <Col span={6}>
+          <Input
+            placeholder="Search..."
+            prefix={<SearchOutlined />}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </Col>
 
-  {/* 🎯 FILTER → ONLY FOR ACTIVE PRODUCTION */}
-  {activeTab === "active_production" && (
-    <Col xs={24} md={6} style={{ display: "flex", alignItems: "center" }}>
-      <Select
-        value={filterType}
-        style={{ width: "70%" }}
-        placeholder="Select Type"
-        onChange={(val) => {
-          setFilterType(val);
-          fetchWorkOrdersData({
-            page: 1,
-            filters: {
-              ...filters,
-              projectType: val === "show_all_mpns" ? undefined : val,
-            },
-          });
-        }}
-      >
-        <Select.Option value="show_all_mpns">Show All</Select.Option>
-        <Select.Option value="cable_harness">Cable Harness</Select.Option>
-        <Select.Option value="box_build">Box Build</Select.Option>
-        <Select.Option value="other">Others</Select.Option>
-      </Select>
+        {/* 🎯 FILTER → ONLY FOR ACTIVE PRODUCTION */}
+        {activeTab === "active_production" && (
+          <Col xs={24} md={6} style={{ display: "flex", alignItems: "center" }}>
+            <Select
+              value={filterType}
+              style={{ width: "70%" }}
+              placeholder="Select Type"
+              onChange={(val) => {
+                setFilterType(val);
+                fetchWorkOrdersData({
+                  page: 1,
+                  filters: {
+                    ...filters,
+                    projectType: val === "show_all_mpns" ? undefined : val,
+                  },
+                });
+              }}
+            >
+              <Select.Option value="show_all_mpns">Show All</Select.Option>
+              <Select.Option value="cable_harness">Cable Harness</Select.Option>
+              <Select.Option value="box_build">Box Build</Select.Option>
+              <Select.Option value="other">Others</Select.Option>
+            </Select>
 
-      <Button
-        icon={<FilterOutlined />}
-        className="ml-4"
-        type="default"
-        onClick={() => setFilterVisible(true)}
-      >
-        Filter
-      </Button>
-    </Col>
-  )}
-</Row>
+            <Button
+              icon={<FilterOutlined />}
+              className="ml-4"
+              type="default"
+              onClick={() => setFilterVisible(true)}
+            >
+              Filter
+            </Button>
+          </Col>
+        )}
+      </Row>
 
 
       {/* Table */}

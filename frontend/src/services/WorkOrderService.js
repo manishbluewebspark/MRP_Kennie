@@ -188,11 +188,12 @@ WorkOrderService.getEachMPNUsage = (params) => {
 };
 
 
-WorkOrderService.exportGetTotalMPNNeeded = () => {
+WorkOrderService.exportGetTotalMPNNeeded = (params) => {
   return fetch({
     url: `/mpn-tracker/export/total-mpn-needed`,
     method: "get",
-    responseType: 'arraybuffer'
+    responseType: 'arraybuffer',
+    params
   });
 };
 

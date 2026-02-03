@@ -35,11 +35,11 @@ const chipStyle = {
 };
 
 const getStatusColor = (status = "") => {
-  const s = status.toLowerCase();
-  if (s.includes("hold")) return "orange";
-  if (s.includes("complete")) return "green";
-  if (s.includes("progress")) return "blue";
-  return "default";
+    const s = status.toLowerCase();
+    if (s.includes("hold")) return "orange";
+    if (s.includes("complete")) return "green";
+    if (s.includes("progress")) return "blue";
+    return "default";
 };
 
 
@@ -71,10 +71,10 @@ const MPNTrackerPage = () => {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [selectedProject, setSelectedProject] = useState(null);
     const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
-   const [importExcel, setImportExcel] = useState(false);
+    const [importExcel, setImportExcel] = useState(false);
     // ✅ MPN selection
     const [selectedMpn, setSelectedMpn] = useState(null);
-
+    const [openFilterModalExport, setOpenFilterModalExport] = useState(false)
     // -------------------- helpers --------------------
 
     // ✅ group total tab rows (if backend gives one row per work order)
@@ -272,54 +272,54 @@ const MPNTrackerPage = () => {
                 key: "projectName",
                 render: (text) => <span style={{ fontSize: 13 }}>{text}</span>,
             },
-           {
-  title: "Work Orders",
-  dataIndex: "workOrders",
-  key: "workOrders",
-  render: (workOrders = []) => {
-    if (!workOrders.length) return "-";
+            {
+                title: "Work Orders",
+                dataIndex: "workOrders",
+                key: "workOrders",
+                render: (workOrders = []) => {
+                    if (!workOrders.length) return "-";
 
-    return (
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {workOrders.map((wo) => (
-          <div
-            key={wo.workOrderId}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "4px 10px",
-              borderRadius: 14,
-              border: "1px solid #d9d9d9",
-              background: "#fafafa",
-              fontSize: 12,
-              fontWeight: 600,
-            }}
-          >
-            {/* Work Order No */}
-            <span style={{ color: "#1890ff" }}>
-              {wo.workOrderNo}
-            </span>
+                    return (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {workOrders.map((wo) => (
+                                <div
+                                    key={wo.workOrderId}
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                        padding: "4px 10px",
+                                        borderRadius: 14,
+                                        border: "1px solid #d9d9d9",
+                                        background: "#fafafa",
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    {/* Work Order No */}
+                                    <span style={{ color: "#1890ff" }}>
+                                        {wo.workOrderNo}
+                                    </span>
 
-            {/* Status Tag */}
-            <Tag
-              color={getStatusColor(wo.status)}
-              style={{
-                margin: 0,
-                borderRadius: 10,
-                fontSize: 11,
-                padding: "0 8px",
-                fontWeight: 600,
-              }}
-            >
-              {wo.status}
-            </Tag>
-          </div>
-        ))}
-      </div>
-    );
-  },
-},
+                                    {/* Status Tag */}
+                                    <Tag
+                                        color={getStatusColor(wo.status)}
+                                        style={{
+                                            margin: 0,
+                                            borderRadius: 10,
+                                            fontSize: 11,
+                                            padding: "0 8px",
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        {wo.status}
+                                    </Tag>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                },
+            },
             {
                 title: "Quantity Used",
                 dataIndex: "quantityUsed",
@@ -503,28 +503,67 @@ const MPNTrackerPage = () => {
         }
     }, 500);
 
-       const handleImportMpnNeeded = async (file) => {
+    const handleImportMpnNeeded = async (file) => {
+        setImportExcel(true);
+        if (!file) {
             setImportExcel(true);
-            if (!file) {
-                setImportExcel(true);
-                return
-            }
-            try {
-                const formData = new FormData();
-                formData.append("file", file);
-    
-                const res = await WorkOrderService.importTotalMpnNeeded(formData);
-                message.success("Mpn Needed imported successfully!");
-                fetchTotalMpnNeeded()
-                setImportExcel(false)
-                return res;
-            } catch (err) {
-                setImportExcel(false)
-                console.error("❌ Import failed:", err);
-                message.error(err?.response?.data?.message || "Import failed!");
-                throw err;
-            }
-        };
+            return
+        }
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const res = await WorkOrderService.importTotalMpnNeeded(formData);
+            message.success("Mpn Needed imported successfully!");
+            fetchTotalMpnNeeded()
+            setImportExcel(false)
+            return res;
+        } catch (err) {
+            setImportExcel(false)
+            console.error("❌ Import failed:", err);
+            message.error(err?.response?.data?.message || "Import failed!");
+            throw err;
+        }
+    };
+
+const handleExport = async (filters) => {
+  try {
+    setOpenFilterModalExport(false);
+
+    const params = {
+      customer: filters?.customer || "",
+      project: filters?.project || "",
+      drawingDate: filters?.drawingDate || "",
+      drawingRange: filters?.drawingRange || "",
+    };
+
+    const res = await WorkOrderService.exportGetTotalMPNNeeded(params);
+
+    // 🔽 trigger download
+    const blob = new Blob([res.data], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "total_mpn_needed.xlsx";
+
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    message.success("MPN Needed exported successfully!");
+  } catch (error) {
+    console.error(error);
+    message.error("Failed to export MPN Needed");
+  }
+};
+
+
+
 
     const handleFilterSubmit = async (filters) => {
         try {
@@ -866,9 +905,9 @@ const MPNTrackerPage = () => {
                     handleSearch(value);
                 }}
                 showImport={isTotalTab}
-                onImport={(file)=>handleImportMpnNeeded(file)}
+                onImport={(file) => handleImportMpnNeeded(file)}
                 showExport={true}
-                onExport={() => message.info("Export function same as your old one (call your export API here).")}
+                onExport={() => setOpenFilterModalExport(true)}
                 showFilter={isTotalTab}
                 onFilter={() => setIsFilterModalOpen(true)}
             />
@@ -883,6 +922,14 @@ const MPNTrackerPage = () => {
                     pagination={false}
                 />
             </Card>
+
+            <GlobalFilterModal
+                visible={openFilterModalExport}
+                onClose={() => setOpenFilterModalExport(false)}
+                onSubmit={handleExport}
+                filters={filterConfig}
+                title="Filters"
+            />
 
             {/* Total tab filter modal */}
             <GlobalFilterModal
