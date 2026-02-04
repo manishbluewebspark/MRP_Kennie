@@ -26,9 +26,9 @@
 //   const handleUpdate = async () => {
 //     try {
 //       const values = await form.validateFields();
-      
+
 //       setLoading(true);
-      
+
 //       // Prepare update data - support both increase and decrease
 //       const updateData = {
 //         inventoryId: inventoryItem?._id,
@@ -50,7 +50,7 @@
 
 //       message.success('Inventory adjusted successfully!');
 //       handleCancel();
-      
+
 //     } catch (error) {
 //       console.error('Form validation failed:', error);
 //       if (error.errorFields) {
@@ -201,14 +201,14 @@
 //                 if (value === 0 || value === null || value === undefined) {
 //                   return Promise.reject(new Error('Adjustment quantity cannot be zero or empty'));
 //                 }
-                
+
 //                 const currentBalance = inventoryItem?.balanceQuantity || 0;
 //                 const newBalance = currentBalance + value;
-                
+
 //                 if (newBalance < 0) {
 //                   return Promise.reject(new Error(`Cannot reduce below zero. Maximum decrease: ${currentBalance}`));
 //                 }
-                
+
 //                 return Promise.resolve();
 //               }
 //             }
@@ -374,11 +374,13 @@ import {
   Button,
 } from "antd";
 import { InfoCircleOutlined } from "@ant-design/icons";
+import { fromMeter } from "utils/unitConversion";
 
 const { Text } = Typography;
 const { TextArea } = Input;
 
 const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryItem }) => {
+  console.log('-----inventoryItem', inventoryItem)
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [adjustmentQuantity, setAdjustmentQuantity] = useState(0);
@@ -499,7 +501,8 @@ const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryIte
                 color={getBalanceColor(currentBalance)}
                 style={{ fontSize: 14, padding: "4px 8px", marginTop: 4 }}
               >
-                {currentBalance} {uomCode}
+                {/* {currentBalance} {uomCode} */}
+                 {fromMeter(currentBalance,uomCode)} {uomCode}
               </Tag>
             </Col>
           </Row>
@@ -588,6 +591,57 @@ const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryIte
         >
           <TextArea rows={4} placeholder="Explain why this adjustment is being made..." showCount maxLength={500} />
         </Form.Item>
+
+        <div style={{ border: "1px solid #f0f0f0", borderRadius: 6 }}>
+          {/* Header */}
+          <div
+            style={{
+              padding: "10px 12px",
+              fontWeight: 600,
+              background: "#fafafa",
+              borderBottom: "1px solid #f0f0f0",
+            }}
+          >
+            Latest Adjustments
+          </div>
+
+          {/* Body */}
+          {inventoryItem?.adjustLog?.length > 0 ? (
+            inventoryItem.adjustLog
+              .slice()                // safe copy
+              .reverse()              // latest first
+              .map((item) => (
+                <div
+                  key={item._id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    borderBottom: "1px solid #f0f0f0",
+                  }}
+                >
+                  <span>{item.reason}</span>
+
+                  <span
+                    style={{
+                      color: item.adjustmentQuantity > 0 ? "green" : "red",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {item.adjustmentQuantity > 0 ? "+" : ""}
+                    {fromMeter(item.adjustmentQuantity,uomCode)} {uomCode}
+                  </span>
+                </div>
+              ))
+          ) : (
+            <div style={{ padding: 12, color: "#999" }}>
+              No adjustment history
+            </div>
+          )}
+        </div>
+
+
+
 
         <div style={{ marginTop: 8, padding: "8px 12px", background: "#f0f0f0", borderRadius: 4, fontSize: 12, color: "#666" }}>
           <InfoCircleOutlined style={{ marginRight: 4 }} />

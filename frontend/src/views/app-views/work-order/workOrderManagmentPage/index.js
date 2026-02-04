@@ -125,14 +125,14 @@ export const renderBadge = (status) => {
 };
 
 const renderQyoteTypeBadge = (type) => {
-  const typeConfig = {
-    cable_harness: { color: "purple", text: "Cable Harness" },
-    box_build: { color: "cyan", text: "Box Build" },
-    other: { color: "default", text: "Other" },
-  };
+    const typeConfig = {
+        cable_harness: { color: "purple", text: "Cable Harness" },
+        box_build: { color: "cyan", text: "Box Build" },
+        other: { color: "default", text: "Other" },
+    };
 
-  const cfg = typeConfig[type] || { color: "default", text: type };
-  return <Tag color={cfg.color}>{cfg.text}</Tag>;
+    const cfg = typeConfig[type] || { color: "default", text: type };
+    return <Tag color={cfg.color}>{cfg.text}</Tag>;
 };
 
 
@@ -329,12 +329,12 @@ const DeliveryOrderPage = () => {
                 </Space>
             )
         },
-           {
-      title: "Project Type",
-      dataIndex: "projectType",
-      key: "projectType",
-      render: renderQyoteTypeBadge
-    },
+        {
+            title: "Project Type",
+            dataIndex: "projectType",
+            key: "projectType",
+            render: renderQyoteTypeBadge
+        },
         {
             title: "Actions",
             key: "actions",

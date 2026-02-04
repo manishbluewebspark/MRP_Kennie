@@ -132,6 +132,10 @@ const inventorySchema = new mongoose.Schema({
     needDate: {
       type: Date
     },
+    reason:{
+      type:String,
+      default:""
+    },
 
     createdAt: {
       type: Date,

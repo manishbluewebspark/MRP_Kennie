@@ -80,6 +80,16 @@ export const protectedRoutes = [
         path: `${APP_PREFIX_PATH}/work-order/work-order-managment`,
         component: React.lazy(() => import('views/app-views/work-order/workOrderManagmentPage/index')),
     },
+     {
+        key: 'demand-list',
+        path: `${APP_PREFIX_PATH}/work-order/demand-list`,
+        component: React.lazy(() => import('views/app-views/work-order/demandListPage/index')),
+    },
+     {
+        key: 'demand-item-list',
+        path: `${APP_PREFIX_PATH}/work-order/demand-item-list/:id`,
+        component: React.lazy(() => import('views/app-views/work-order/demandListPage/demandItemList')),
+    },
     {
         key: 'delivery-order',
         path: `${APP_PREFIX_PATH}/work-order/delivery-order`,

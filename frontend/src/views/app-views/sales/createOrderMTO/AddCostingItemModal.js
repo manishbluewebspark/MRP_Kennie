@@ -393,7 +393,7 @@ const AddCostingItemModal = ({
 
   const debouncedSearch = useDebounce((val) => {
     loadChildParts(val);
-  }, 500);
+  }, 1000);
 
 
   // ---------- EFFECT: if UOM list arrives later, try to map by code for edit (packing/material) ----------

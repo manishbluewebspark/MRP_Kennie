@@ -95,6 +95,15 @@ const workingOrderNavTree = [{
       permissions: ["work_order.work_order_managment:view"],
       submenu: []
     },
+    // {
+    //   key: 'demand-list',
+    //   path: `${APP_PREFIX_PATH}/work-order/demand-list`,
+    //   title: 'work-order.demand-list',
+    //   icon: CarOutlined,
+    //   breadcrumb: false,
+    //   // permissions: ["work_order.demand_list:view"],
+    //   submenu: []
+    // },
     {
       key: 'delivery-order',
       path: `${APP_PREFIX_PATH}/work-order/delivery-order`,
@@ -310,7 +319,7 @@ const productionNavTree = [{
       title: 'production.production',
       icon: BuildOutlined,
       breadcrumb: false,
-      permissions: ["production.cable_harness_assembly:view","production.box_build:vie"],
+      permissions: ["production.cable_harness_assembly:view","production.other_assembly:view","production.box_build:view"],
       submenu: []
     },
   ]

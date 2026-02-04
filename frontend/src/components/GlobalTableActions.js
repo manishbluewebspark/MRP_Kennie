@@ -83,7 +83,7 @@ const GlobalTableActions = ({
         <Input
           placeholder={searchPlaceholder}
           prefix={<SearchOutlined />}
-          style={{ width: 300, borderRadius: 8 }}
+          style={{ width: 300, borderRadius: 8,marginRight:10 }}
           onChange={(e) => onSearch && onSearch(e.target.value)}
         />
       )}

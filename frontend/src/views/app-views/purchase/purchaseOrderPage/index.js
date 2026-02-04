@@ -1043,11 +1043,11 @@ const PurchaseShortageCard = ({ record }) => {
 
         console.log('------uniqueSuppliers', uniqueSuppliers)
 
-        if (uniqueSuppliers.length > 1) {
-            return message.error(
-                "You can only create a PO for items from the SAME supplier. Please select items from one supplier only."
-            );
-        }
+        // if (uniqueSuppliers.length > 1) {
+        //     return message.error(
+        //         "You can only create a PO for items from the SAME supplier. Please select items from one supplier only."
+        //     );
+        // }
 
         // Selected supplier
         const finalSupplier = uniqueSuppliers[0] || null;

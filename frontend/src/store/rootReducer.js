@@ -16,6 +16,7 @@ import systemSettings from './slices/systemSettingsSlice'
 import projects from './slices/ProjectSlice'
 import workOrders from "./slices/workOrderSlice"
 import purchaseOrders from "./slices/purchaseOrderSlice"
+import demandList from "./slices/demandListSlice"
 const rootReducer = (asyncReducers) => (state, action) => {
     const combinedReducer = combineReducers({
         theme,
@@ -35,6 +36,7 @@ const rootReducer = (asyncReducers) => (state, action) => {
         workOrders,
         projects,
         purchaseOrders,
+        demandList,
         ...asyncReducers,
     })
     return combinedReducer(state, action)

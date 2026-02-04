@@ -19,6 +19,7 @@ import SelectPurchaseOrderModal from "./SelectPurchaseOrderModal";
 import ReceiveMaterialsModal from "./ReceiveMaterialsModal";
 import UpdateOutgoingQuantityModal from "../mtoInventoryList/UpdateOutgoingQuantityModal";
 import IncomingStockModal from "./IncomingStockModal";
+import { render } from "@testing-library/react";
 
 const { Title, Text } = Typography;
 
@@ -415,7 +416,9 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
   },
 },
     { title: "Storage", dataIndex: "Storage", key: "Storage", width: 100, align: "center" },
-    { title: "Balance Qty (M)", dataIndex: "balanceQuantity", key: "balanceQuantity", width: 200, align: "center" },
+    { title: "Balance Qty (M)", dataIndex: "balanceQuantity", key: "balanceQuantity", width: 200, align: "center",
+      render:(_,record)=>(`${record?.balanceQuantity}`)
+     },
     {
       title: "Incoming Qty",
       dataIndex: "IncomingQty",

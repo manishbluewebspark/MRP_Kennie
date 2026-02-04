@@ -5900,7 +5900,7 @@ export const updateLatestPriceBulk = async (req, res) => {
     for (const costingItem of items) {
       try {
         // only material
-        if ((costingItem.quoteType || "").toLowerCase() !== "material") continue;
+        // if ((costingItem.quoteType || "").toLowerCase() !== "material") continue;
 
         if (!costingItem.mpn) {
           failed.push({ id: costingItem._id, reason: "MPN not linked" });

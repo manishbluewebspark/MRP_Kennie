@@ -54,7 +54,8 @@ const handleUpdateAllLatestPrice = async () => {
     <div style={{ display: "flex", alignItems: "center", gap: 48 }}>
       <span>Actions</span>
 
-      {hasPermission('sales.mto:create_edit_delete_costingmaterial') && (
+      {activeTab !== 'manhour'
+       && hasPermission('sales.mto:create_edit_delete_costingmaterial') && (
         <Button
           size="small"
           type="primary"
@@ -75,7 +76,7 @@ const handleUpdateAllLatestPrice = async () => {
         showDeleteConfirm
         onEdit={() => onEdit && onEdit(record)}
         onDelete={() => onDelete && onDelete(record)}
-        showUpdate={hasPermission('sales.mto:create_edit_delete_costingmaterial')}
+        showUpdate={ activeTab !== 'manhour' && hasPermission('sales.mto:create_edit_delete_costingmaterial')}
         onUpdate={() => {handleUpdateLatestPrice(record?._id)}}
       />
     ),

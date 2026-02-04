@@ -925,6 +925,7 @@ export const getInventoryList = async (req, res) => {
 
         Status: netQty < 0 ? "Out of Stock" : "Low Stock",
         purchaseData: item.purchaseData,
+        adjustLog:item?.adjustmentLogs
       };
     });
 

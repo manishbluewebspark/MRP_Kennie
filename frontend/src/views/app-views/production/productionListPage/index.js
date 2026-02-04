@@ -43,6 +43,7 @@ import WorkOrderService from "services/WorkOrderService";
 import InventoryService from "services/InventoryService";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import { fetchCustomers } from "store/slices/customerSlice";
+import { hasPermission } from "utils/auth";
 const { Option } = Select;
 const { Title, Text } = Typography;
 
@@ -93,6 +94,26 @@ const statusTagColor = (status, isInProduction) => {
   }
 };
 
+const STAGE_PERMISSION_MAP = {
+  "Box Build": {
+    picking: "production.box_build:picking_process",
+    assembly: "production.box_build:assembly",
+    quality_check: "production.box_build:qc",
+  },
+  "Cable Harness": {
+    picking: "production.cable_harness_assembly:picking_process",
+    assembly: "production.cable_harness_assembly:cable_harness",
+    labelling: "production.cable_harness_assembly:labelling",
+    quality_check: "production.cable_harness_assembly:qc",
+    packing: "production.cable_harness_assembly:packing",
+  },
+  "Others": {
+    picking_assembly: "production.other_assembly:picking_assembly_process",
+    quality_check: "production.other_assembly:qc",
+  },
+};
+
+
 // ---------------- Cable Assembly Card ----------------
 const CableAssemblyCard = ({
   record,
@@ -100,9 +121,12 @@ const CableAssemblyCard = ({
   setSelectWorkOrderData,
   setActiveStage,
 }) => {
+  console.log('-----record', record)
   const need = formatDate(record?.needDate);
   const commit = formatDate(record?.commitDate);
   const statusColor = statusTagColor(record?.status, record?.isInProduction);
+
+
 
   // ------- Stage Config + Summary -------
 
@@ -154,6 +178,9 @@ const CableAssemblyCard = ({
     const history = record.processHistory || [];
     const STAGE_CONFIG = getStageConfig(record.projectType);
 
+    const projectType = formatProjectType(record.projectType);
+    const permissionConfig = STAGE_PERMISSION_MAP[projectType] || {};
+
     const stages = STAGE_CONFIG.map((stage) => {
       const entry = history.find((p) => p.process === stage.key);
       const doneRaw = Number(entry?.qty || 0);
@@ -174,6 +201,7 @@ const CableAssemblyCard = ({
         doneQty,
         outstandingQty,
         status,
+        permission: permissionConfig[stage.key] || null,
       };
     });
 
@@ -206,6 +234,7 @@ const CableAssemblyCard = ({
 
   const progress = getOverallProgress(record);
   const { stages, activeKey } = getStageSummary(record);
+
 
   return (
     <>
@@ -387,7 +416,18 @@ const CableAssemblyCard = ({
               let boxShadow = ''
 
               const sequenceAllowed = index === 0 || stages.slice(0, index).every(s => s.status === "completed");
-              const canClick = sequenceAllowed && (status === "new" || status === "in_progress");
+              const permissionAllowed = hasPermission(
+                stage.permission
+              );
+
+              console.log('-----permissionAllowed',stage.permission, permissionAllowed)
+
+              const canClick =
+                permissionAllowed &&
+                sequenceAllowed &&
+                (stage.status === "new" || stage.status === "in_progress");
+
+              // const canClick = sequenceAllowed && (status === "new" || status === "in_progress");
               // Completed = solid green (no blink)
               if (status === "completed") {
                 bg = "#2e7d32";       // dark green
@@ -415,7 +455,12 @@ const CableAssemblyCard = ({
               return (
                 <Tooltip
                   key={stage.key}
-                  title={`Stage: ${stage.label} | Done: ${stage.doneQty}/${record.quantity}`}
+                  // title={`Stage: ${stage.label} | Done: ${stage.doneQty}/${record.quantity}`}
+                  title={
+                    !permissionAllowed
+                      ? "You do not have permission for this stage"
+                      : `${stage.label}: ${stage.doneQty}/${record.quantity}`
+                  }
                 >
                   <div
                     onClick={() => {
@@ -435,7 +480,7 @@ const CableAssemblyCard = ({
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
-                      cursor: canClick ? "pointer" : "default",
+                      cursor: canClick ? "pointer" : "not-allowed",
                       boxShadow:
                         status === "completed"
                           ? "0 2px 4px rgba(0,0,0,0.18)"

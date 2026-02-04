@@ -104,6 +104,14 @@ const modules = [
           { key: "export", label: "Export" }
         ],
       },
+       {
+        key: "demand_list",
+        label: "Delivery Order",
+        actions: [
+          { key: "view", label: "View Only" },
+          { key: "export", label: "Export" }
+        ],
+      },
     ]
   },
 
@@ -123,7 +131,7 @@ const modules = [
           { key: "cable_harness", label: "Cable Harness" },
           { key: "labelling", label: "Labelling" },
           { key: "qc", label: "Quality Check" },
-          { key: "view", label: "Packing" },
+          { key: "packing", label: "Packing" },
         ],
       },
 

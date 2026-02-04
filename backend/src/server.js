@@ -28,6 +28,7 @@ import inventoryRoutes from './routes/inventory.routes.js'
 import mpnTrackerRoutes from './routes/mpnTracker.routes.js'
 import alertRoutes from './routes/alert.routes.js'
 import dashboardRoutes from "./routes/dashboard.routes.js";
+import demandListRoutes from "./routes/demandlist.routes.js"
 import path from "path";
 import crypto from 'crypto'
 import axios from 'axios'
@@ -83,7 +84,7 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/mpn-tracker", mpnTrackerRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/dashboard", dashboardRoutes);
-
+app.use("/api/demand-lists", demandListRoutes);
 // PhonePe Configuration
 
 app.get("/api/system-check", (req, res) => {
