@@ -15,6 +15,8 @@ import {
     CloudDownloadOutlined,
     ExclamationCircleFilled,
     FilterOutlined,
+    CaretDownOutlined,
+    CaretRightOutlined,
 } from "@ant-design/icons";
 
 import { hasPermission } from "utils/auth";
@@ -194,153 +196,117 @@ const PurchaseOrderPage = () => {
 
     // ---- COLUMNS ----
 
-    const openingOrderColumns = [
-        {
-            title: "",
-            key: "work",
-            render: (_, record) => (
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    {/* LEFT */}
-                    <div style={{ minWidth: 260 }}>
-                        <div
-                            style={{
-                                fontSize: 16,
-                                fontWeight: 700,
-                                color: "#111827",
-                                lineHeight: 1.2,
-                            }}
-                        >
-                            {record?.poNumber || "P25-00010"}
-                        </div>
+   const openingOrderColumns = [
+  {
+    title: "",
+    key: "orderCard",
+    width: "100%",
+    render: (_, record) => (
+      <div
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "10px 12px",
+          borderRadius: 10,
+          background: "#F9FAFB",
+          border: "1px solid #E5E7EB",
+        }}
+      >
+        {/* LEFT – DETAILS */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#111827",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {record?.poNumber || "P25-00010"}
+          </div>
 
-                        <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
-                            Supplier: {record?.supplier?.companyName || "ABC Pte Ltd"}
-                        </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#6B7280",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            Supplier: {record?.supplier?.companyName || "ABC Pte Ltd"}
+          </div>
 
-                        <div style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
-                            Created:{" "}
-                            {record?.createdAt
-                                ? new Date(record?.createdAt).toLocaleDateString("en-GB")
-                                : "-"}
-                        </div>
-                    </div>
+          <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+            Created:{" "}
+            {record?.createdAt
+              ? new Date(record.createdAt).toLocaleDateString("en-GB")
+              : "-"}
+          </div>
+        </div>
 
-                    {/* PRICE CHIP */}
-                    <div
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            border: "1px solid #D1D5DB",
-                            background: "#F9FAFB",
-                            padding: "2px 10px",
-                            borderRadius: 16,
-                            fontSize: 13,
-                            color: "#111827",
-                            fontWeight: 600,
-                            height: 24,
-                        }}
-                    >
-                        {formatMoney(
-                            record?.totals?.finalAmount,
-                            record.currency || "USD"
-                        )}
-                    </div>
-                </div>
-            ),
-        },
-        {
-            title: "",
-            dataIndex: "status",
-            key: "status",
-            align: "right",
-            width: 140,
-            render: (status) => {
-                const label = status || "Pending";
-                const lower = label.toLowerCase();
-                const style =
-                    lower === "pending"
-                        ? { bg: "#FB923C", color: "#FFFFFF" }
-                        : lower === "approved"
-                            ? { bg: "#22C55E", color: "#FFFFFF" }
-                            : { bg: "#6B7280", color: "#FFFFFF" };
+        {/* AMOUNT */}
+        <span
+          style={{
+            padding: "4px 10px",
+            borderRadius: 14,
+            fontSize: 12,
+            fontWeight: 700,
+            background: "#EEF2FF",
+            color: "#3730A3",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {formatMoney(record?.totals?.finalAmount, record.currency || "USD")}
+        </span>
 
-                return (
-                    <span
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: "2px 10px",
-                            borderRadius: 16,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            background: style.bg,
-                            color: style.color,
-                        }}
-                    >
-                        {label}
-                    </span>
-                );
-            },
-        },
-        {
-            title: "",
-            key: "actions",
-            align: "right",
-            width: 220,
-            render: (_, record) => (
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                    <ActionButtons
-                        onEdit={() => handleEdit(record?._id)}
-                        onDelete={() => handleDelete(record?._id)}
-                        onInfo={() =>
-                            navigate(`/app/purchase/view-purchase-order/${record?._id}`)
-                        }
-                        onMail={() => {handleSendMail(record?._id) }}
-                        onCross={() => {
-                            confirmClose(record?._id);
-                        }}
-                        showEdit
-                        showInfo
-                        showDelete
-                        showDeleteConfirm
-                        showCross
-                        showMail={record?.status === "Pending"}
-                        styleEdit={{
-                            background: "#DBEAFE",
-                            color: "#1D4ED8",
-                            borderRadius: 8,
-                            padding: 8,
-                        }}
-                        styleDelete={{
-                            background: "#FEE2E2",
-                            color: "#DC2626",
-                            borderRadius: 8,
-                            padding: 8,
-                        }}
-                        styleMail={{
-                            background: "#E5E7EB",
-                            color: "#374151",
-                            borderRadius: 8,
-                            padding: 8,
-                        }}
-                        styleCross={{
-                            background: "#FEE2E2",
-                            color: "#DC2626",
-                            borderRadius: 8,
-                            padding: 8,
-                        }}
-                        styleInfo={{
-                            background: "#E5E7EB",
-                            color: "#111827",
-                            borderRadius: 8,
-                            padding: 8,
-                        }}
-                    />
-                </div>
-            ),
-        },
-    ];
+        {/* STATUS */}
+        <span
+          style={{
+            padding: "4px 10px",
+            borderRadius: 14,
+            fontSize: 12,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+            background:
+              record?.status === "Approved"
+                ? "#22C55E"
+                : record?.status === "Pending"
+                ? "#FB923C"
+                : "#6B7280",
+            color: "#fff",
+          }}
+        >
+          {record?.status || "Pending"}
+        </span>
+
+        {/* ACTIONS */}
+        <div style={{ display: "flex", gap: 6 }}>
+          <ActionButtons
+            onEdit={() => handleEdit(record?._id)}
+            onDelete={() => handleDelete(record?._id)}
+            onInfo={() =>
+              navigate(`/app/purchase/view-purchase-order/${record?._id}`)
+            }
+            onMail={() => handleSendMail(record?._id)}
+            onCross={() => confirmClose(record?._id)}
+            showEdit
+            showInfo
+            showDelete
+            showCross
+            showMail={record?.status === "Pending"}
+            iconOnly
+          />
+        </div>
+      </div>
+    ),
+  },
+];
+
 
     // Dummy partial completion data (if you want real, replace with API)
     const partialCompletionData = [];
@@ -588,6 +554,8 @@ const fmtDate = (d) => {
 };
 
 const PurchaseShortageCard = ({ record }) => {
+  const [open, setOpen] = useState(false);
+
   const shortList = Array.isArray(record.shortageByWorkOrders)
     ? record.shortageByWorkOrders
     : [];
@@ -596,47 +564,43 @@ const PurchaseShortageCard = ({ record }) => {
     <div
       style={{
         width: "100%",
-        borderRadius: 10,
-        padding: "8px 12px",
+        borderRadius: 8,
+        padding: "6px 10px",
         background: "#FFF7F7",
         border: "1px solid #F5D0D0",
-        display: "flex",
-        gap: 10,
         boxSizing: "border-box",
       }}
     >
-      {/* Icon */}
+      {/* 🔹 ROW 1 : Compact Header */}
       <div
         style={{
-          width: 30,
-          height: 30,
-          borderRadius: 8,
-          background: "#FDE8E8",
           display: "grid",
-          placeItems: "center",
-          color: "#DC2626",
-          flexShrink: 0,
+          gridTemplateColumns: "auto 1fr auto auto",
+          gap: 10,
+          alignItems: "center",
         }}
       >
-        <ExclamationCircleFilled style={{ fontSize: 18 }} />
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Row 1 */}
+        {/* Icon */}
         <div
           style={{
+            width: 26,
+            height: 26,
+            borderRadius: 6,
+            background: "#FDE8E8",
             display: "grid",
-            gridTemplateColumns: "minmax(180px, 1fr) minmax(220px, 2fr) auto",
-            alignItems: "center",
-            gap: 12,
+            placeItems: "center",
+            color: "#DC2626",
           }}
         >
+          <ExclamationCircleFilled />
+        </div>
+
+        {/* MPN + Desc */}
+        <div style={{ minWidth: 0 }}>
           <div
             style={{
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: 700,
-              color: "#111827",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -645,10 +609,9 @@ const PurchaseShortageCard = ({ record }) => {
           >
             {record.mpn}
           </div>
-
           <div
             style={{
-              fontSize: 13,
+              fontSize: 12,
               color: "#6B7280",
               whiteSpace: "nowrap",
               overflow: "hidden",
@@ -658,159 +621,115 @@ const PurchaseShortageCard = ({ record }) => {
           >
             {record.description}
           </div>
-
-          <span
-            style={{
-              background: "#EF4444",
-              color: "white",
-              padding: "3px 10px",
-              borderRadius: 14,
-              fontSize: 12,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-              justifySelf: "end",
-            }}
-          >
-            Short: {record.shortage} PCS
-          </span>
         </div>
 
-        {/* Row 2: 5 columns */}
-        <div
+        {/* Shortage badge */}
+        <span
           style={{
-            marginTop: 6,
-            display: "grid",
-            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-            gap: 12,
-            fontSize: 13,
-            color: "#374151",
+            background: "#EF4444",
+            color: "white",
+            padding: "2px 8px",
+            borderRadius: 12,
+            fontSize: 11,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
           }}
         >
-          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <b>Mfg:</b> {record.manufacturer || "-"}
-          </div>
-          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <b>Supplier:</b> {record.supplier || "-"}
-          </div>
-          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <b>Stock:</b> {record.currentStock ?? 0}
-          </div>
-          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <b>Req:</b>{" "}
-            <span style={{ color: "#DC2626", fontWeight: 700 }}>
-              {record.required ?? 0}
-            </span>
-          </div>
-          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <b>Short:</b>{" "}
-            <span style={{ color: "#DC2626", fontWeight: 700 }}>
-              {record.shortage ?? 0}
-            </span>
-          </div>
-        </div>
+          Short {record.shortage.toFixed(2)}
+        </span>
 
-        {/* ✅ Row 3: Short#1 / Short#2 + Need Date + WO */}
-        {shortList.length > 0 && (
-          <div
-            style={{
-              marginTop: 8,
-              display: "flex",
-              gap: 14,
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            {shortList.slice(0, 4).map((s, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "6px 10px",
-                  borderRadius: 10,
-                  background: "#FFF",
-                  border: "1px dashed #F5D0D0",
-                }}
-              >
-                <div style={{ lineHeight: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color: "#DC2626",
-                    }}
-                  >
-                    {s.label || `Short#${idx + 1}`}
-                  </div>
+        {/* Expand toggle */}
+        <span
+          onClick={() => setOpen(!open)}
+          style={{
+            cursor: "pointer",
+            color: "#DC2626",
+            fontSize: 14,
+          }}
+        >
+          {open ? <CaretDownOutlined /> : <CaretRightOutlined />}
+        </span>
+      </div>
 
-                  <div style={{ fontSize: 11, color: "#6B7280" }}>
-                    {fmtDate(s.needDate)}
-                  </div>
+      {/* 🔹 ROW 2 : Meta line */}
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 12,
+          color: "#374151",
+          display: "flex",
+          gap: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <span><b>Mfg:</b> {record.manufacturer || "-"}</span>
+        <span><b>Supplier:</b> {record.supplier || "-"}</span>
+        <span><b>Stock:</b> {record.currentStock ?? 0}</span>
+        <span style={{ color: "#DC2626", fontWeight: 700 }}>
+          Req: {record.required.toFixed(2) ?? 0}
+        </span>
+      </div>
+
+      {/* 🔹 EXPANDABLE DETAILS */}
+      {open && shortList.length > 0 && (
+        <div
+          style={{
+            marginTop: 8,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          {shortList.map((s, idx) => (
+            <div
+              key={idx}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 8,
+                background: "#FFF",
+                border: "1px dashed #F5D0D0",
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#DC2626" }}>
+                  {s.label || `Short#${idx + 1}`}
                 </div>
-
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: "#DC2626",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {s.shortageQty} pcs
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#111827",
-                    fontWeight: 700,
-                    whiteSpace: "nowrap",
-                  }}
-                  title={s.workOrderNo}
-                >
-                  {s.workOrderNo || "-"}
+                <div style={{ fontSize: 10, color: "#6B7280" }}>
+                  {fmtDate(s.needDate)}
                 </div>
               </div>
-            ))}
 
-            {/* ✅ if more than 4 shortages */}
-            {shortList.length > 4 && (
-              <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}>
-                +{shortList.length - 4} more
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Optional: fallback if old field still used */}
-        {(!shortList.length && record.requireByWorkOrders?.length > 0) && (
-          <div
-            style={{
-              marginTop: 6,
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-              fontSize: 13,
-            }}
-          >
-            {record.requireByWorkOrders.map((wo, idx) => (
-              <span
-                key={idx}
+              <div
                 style={{
-                  color: "#1D4ED8",
-                  fontWeight: 600,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: "#DC2626",
                 }}
               >
-                {wo}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+                {s.shortageQty} pcs
+              </div>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                }}
+                title={s.workOrderNo}
+              >
+                {s.workOrderNo}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
+
 
 
 

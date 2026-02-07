@@ -29,6 +29,7 @@ import Child from "../models/library/Child.js";
 import path from "path";
 import ejs from 'ejs'
 import puppeteer from 'puppeteer'
+import { convertQty } from "../utils/uomController.js";
 
 function generateWorkOrderNumber(lastWorkOrderNo) {
   const now = new Date();
@@ -244,8 +245,8 @@ export const getAllWorkOrders = async (req, res) => {
     const query = {};
 
     // ✅ Filters
-    if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
-      query.projectId = new mongoose.Types.ObjectId(projectId);
+    if (projectId) {
+      query.projectNo = projectId;
     }
 
     if (drawingId && mongoose.Types.ObjectId.isValid(drawingId)) {
@@ -263,8 +264,13 @@ export const getAllWorkOrders = async (req, res) => {
       query.isInProduction = true;
     }
 
+    if (activeTab === "show_all") {
+      query.isInProduction = true;
+    }
+
     if (activeTab === "NON_PRODUCTION") {
       query.isInProduction = false;
+      query.isProductionComplete = false
     }
 
     if (search && String(search).trim()) {
@@ -2978,20 +2984,48 @@ export const moveToProduction = async (req, res) => {
       });
     }
 
-    // Update only the required fields
+    // ❗ drawingId mandatory
+    if (!wo.drawingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Drawing not assigned to this work order",
+      });
+    }
+
+    // 🔍 Fetch costing items for this drawing
+    const costingItems = await CostingItems.find({
+      drawingId: wo.drawingId,
+    }).select("quoteType");
+
+    if (!costingItems.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Costing not created for this drawing",
+      });
+    }
+
+    // ✅ Check required quote types
+    const quoteTypes = new Set(
+      costingItems.map((c) => c.quoteType)
+    );
+
+    const requiredTypes = ["material", "manhour", "packing"];
+
+    const missingTypes = requiredTypes.filter(
+      (type) => !quoteTypes.has(type)
+    );
+
+    if (missingTypes.length) {
+      return res.status(400).json({
+        success: false,
+        message: `Missing costing for: ${missingTypes.join(", ")}`,
+      });
+    }
+
+    // ✅ All checks passed → move to production
     wo.isInProduction = true;
     wo.isTriggered = true;
     wo.status = "In Production";
-
-    // wo.processHistory.push({
-    //   process: "picking",
-    //   qty: 0,                     // start with zero qty → process started
-    //   notes: "Picking started",   // helpful info
-    //   completedBy: null,
-    //   completedAt: new Date(),
-    //   createdAt: new Date(),
-    // });
-
 
     await wo.save();
 
@@ -3007,6 +3041,38 @@ export const moveToProduction = async (req, res) => {
     });
   }
 };
+
+// export const moveToProduction = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const wo = await WorkOrder.findById(id);
+//     if (!wo) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Work order not found",
+//       });
+//     }
+
+//     // Update only the required fields
+//     wo.isInProduction = true;
+//     wo.isTriggered = true;
+//     wo.status = "In Production";
+
+//     await wo.save();
+
+//     return res.json({
+//       success: true,
+//       message: "Work order moved to production successfully",
+//       data: wo,
+//     });
+//   } catch (err) {
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
 
 // helper – index number → A / B / C ...
 const indexToLetter = (index) => {
@@ -3080,15 +3146,39 @@ export const getAllProductionWordOrders = async (req, res) => {
 
     if (status) query.status = status;
 
-    // ✅ Search
-    if (search && String(search).trim()) {
-      const s = String(search).trim();
-      query.$or = [
-        { workOrderNo: { $regex: s, $options: "i" } },
-        { poNumber: { $regex: s, $options: "i" } },
-        { posNo: { $regex: s, $options: "i" } },
-      ];
-    }
+  if (search && String(search).trim()) {
+  const s = String(search).trim();
+
+  // 1️⃣ Find drawings matching drawingNo
+  const drawings = await Drawing.find({
+    drawingNo: { $regex: s, $options: "i" },
+  })
+    .select("_id")
+    .lean();
+
+  const drawingIds = drawings.map((d) => d._id);
+
+  // 2️⃣ Build OR conditions
+  const orConditions = [
+    { workOrderNo: { $regex: s, $options: "i" } },
+    { poNumber: { $regex: s, $options: "i" } },
+    { projectNo: { $regex: s, $options: "i" } },
+  ];
+
+  // numeric posNo
+  if (!isNaN(s)) {
+    orConditions.push({ posNo: Number(s) });
+  }
+
+  // drawing search
+  if (drawingIds.length) {
+    orConditions.push({ drawingId: { $in: drawingIds } });
+  }
+
+  query.$or = orConditions;
+}
+
+
 
     // ✅ CUSTOMER FILTER (via Project)
     // NOTE: customerId directly WorkOrder me nahi hai, so via Project
@@ -3765,7 +3855,7 @@ export const getAllChilPartByDrawingId = async (req, res) => {
 
         // UOM
         uomId: ci.uom || null,
-        uom: uomDoc?.name || uomDoc?.code || null,
+        uom: uomDoc?.code || null,
 
         // Quantity from costingItems
         quantity,
@@ -6081,6 +6171,45 @@ export const saveWorkOrderStage = async (req, res) => {
       storageLocation: m.storageLocation,
     }));
 
+    // ---------------- INVENTORY DEDUCTION ----------------
+    for (let i = 0; i < materials.length; i++) {
+      const material = materials[i];
+
+      const pickedQty = Number(pickedQuantities?.[i] || 0);
+      if (pickedQty <= 0) continue;
+
+      // 1️⃣ Find inventory by MPN
+      const inventory = await Inventory.findOne({
+        mpnId: material.mpnId,
+      });
+
+      if (!inventory) {
+        return res.status(400).json({
+          success: false,
+          message: `Inventory not found for MPN ${material.mpn}`,
+        });
+      }
+
+      // 2️⃣ Convert picked qty → inventory base UOM
+      const baseAdjustmentQty = await convertQty({
+        qty: pickedQty,
+        fromUomId: material.uomId,       // FT
+      });
+
+      // 3️⃣ Stock validation
+      if (inventory.balanceQuantity < baseAdjustmentQty) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for MPN ${material.mpn}`,
+        });
+      }
+
+      // 4️⃣ Deduct stock
+      inventory.balanceQuantity -= baseAdjustmentQty;
+      await inventory.save();
+    }
+
+
     // ---------------- Stage Update Logic ----------------
     if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
 
@@ -6645,12 +6774,12 @@ export const importTotalMpnNeeded = async (req, res) => {
   }
 };
 
-
 export const getFilterData = async (req, res) => {
   try {
-    // Only required fields
     const workOrders = await WorkOrder.find({})
-      .select("projectNo poNumber needDate")
+      .select(
+        "projectNo poNumber needDate projectId drawingId workOrderNo"
+      )
       .lean();
 
     if (!workOrders.length) {
@@ -6661,33 +6790,84 @@ export const getFilterData = async (req, res) => {
           projectNos: [],
           poNumbers: [],
           needDates: [],
+          projects: [],
+          drawings: [],
+          workOrders: [],
         },
       });
     }
 
+    // ---------- Sets ----------
     const projectNoSet = new Set();
     const poNumberSet = new Set();
     const needDateSet = new Set();
+    const projectIdSet = new Set();
+    const drawingIdSet = new Set();
+    const workOrderSet = new Set();
 
     for (const wo of workOrders) {
-      // ✅ Project No
       if (wo.projectNo && String(wo.projectNo).trim()) {
         projectNoSet.add(String(wo.projectNo).trim());
       }
 
-      // ✅ PO Number
       if (wo.poNumber && String(wo.poNumber).trim()) {
         poNumberSet.add(String(wo.poNumber).trim());
       }
 
-      // ✅ Need Date (ISO → date only)
       if (wo.needDate) {
         const d = new Date(wo.needDate);
-        needDateSet.add(d.toISOString().split("T")[0]); // yyyy-mm-dd
+        needDateSet.add(d.toISOString().split("T")[0]);
+      }
+
+      if (wo.projectId) projectIdSet.add(String(wo.projectId));
+      if (wo.drawingId) drawingIdSet.add(String(wo.drawingId));
+
+      if (wo.workOrderNo && String(wo.workOrderNo).trim()) {
+        workOrderSet.add(String(wo.workOrderNo).trim());
       }
     }
 
-    // Frontend-friendly format
+    // ---------- Project Docs ----------
+    const projectIds = [...projectIdSet].map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    const projectDocs = projectIds.length
+      ? await Project.find({ _id: { $in: projectIds } })
+        .select("name projectName")
+        .lean()
+      : [];
+
+    const projects = projectDocs
+      .map((p) => ({
+        label: p.name || p.projectName || String(p._id),
+        value: String(p._id),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    // ---------- Drawing Docs ----------
+    const drawingIds = [...drawingIdSet].map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    const drawingDocs = drawingIds.length
+      ? await Drawing.find({ _id: { $in: drawingIds } })
+        .select("drawingNo drawing drawingNumber")
+        .lean()
+      : [];
+
+    const drawings = drawingDocs
+      .map((d) => ({
+        label:
+          d.drawingNo ||
+          d.drawing ||
+          d.drawingNumber ||
+          String(d._id),
+        value: String(d._id),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    // ---------- Frontend Friendly ----------
     const projectNos = [...projectNoSet]
       .sort()
       .map((v) => ({ label: v, value: v }));
@@ -6699,9 +6879,13 @@ export const getFilterData = async (req, res) => {
     const needDates = [...needDateSet]
       .sort()
       .map((v) => ({
-        label: new Date(v).toLocaleDateString("en-GB"), // UI readable
-        value: v, // backend filter friendly
+        label: new Date(v).toLocaleDateString("en-GB"),
+        value: v,
       }));
+
+    const workOrdersList = [...workOrderSet]
+      .sort()
+      .map((v) => ({ label: v, value: v }));
 
     return res.json({
       status: true,
@@ -6710,6 +6894,9 @@ export const getFilterData = async (req, res) => {
         projectNos,
         poNumbers,
         needDates,
+        projects,
+        drawings,
+        workOrders: workOrdersList,
       },
     });
   } catch (error) {
@@ -6721,10 +6908,94 @@ export const getFilterData = async (req, res) => {
         projectNos: [],
         poNumbers: [],
         needDates: [],
+        projects: [],
+        drawings: [],
+        workOrders: [],
       },
     });
   }
 };
+
+
+// export const getFilterData = async (req, res) => {
+//   try {
+//     // Only required fields
+//     const workOrders = await WorkOrder.find({})
+//       .select("projectNo poNumber needDate")
+//       .lean();
+
+//     if (!workOrders.length) {
+//       return res.json({
+//         status: true,
+//         message: "No work orders found",
+//         data: {
+//           projectNos: [],
+//           poNumbers: [],
+//           needDates: [],
+//         },
+//       });
+//     }
+
+//     const projectNoSet = new Set();
+//     const poNumberSet = new Set();
+//     const needDateSet = new Set();
+
+//     for (const wo of workOrders) {
+//       // ✅ Project No
+//       if (wo.projectNo && String(wo.projectNo).trim()) {
+//         projectNoSet.add(String(wo.projectNo).trim());
+//       }
+
+//       // ✅ PO Number
+//       if (wo.poNumber && String(wo.poNumber).trim()) {
+//         poNumberSet.add(String(wo.poNumber).trim());
+//       }
+
+//       // ✅ Need Date (ISO → date only)
+//       if (wo.needDate) {
+//         const d = new Date(wo.needDate);
+//         needDateSet.add(d.toISOString().split("T")[0]); // yyyy-mm-dd
+//       }
+//     }
+
+//     // Frontend-friendly format
+//     const projectNos = [...projectNoSet]
+//       .sort()
+//       .map((v) => ({ label: v, value: v }));
+
+//     const poNumbers = [...poNumberSet]
+//       .sort()
+//       .map((v) => ({ label: v, value: v }));
+
+//     const needDates = [...needDateSet]
+//       .sort()
+//       .map((v) => ({
+//         label: new Date(v).toLocaleDateString("en-GB"), // UI readable
+//         value: v, // backend filter friendly
+//       }));
+
+//     return res.json({
+//       status: true,
+//       message: "Filter master data fetched successfully",
+//       data: {
+//         projectNos,
+//         poNumbers,
+//         needDates,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("getFilterData error:", error);
+//     return res.status(500).json({
+//       status: false,
+//       message: error.message,
+//       data: {
+//         projectNos: [],
+//         poNumbers: [],
+//         needDates: [],
+//       },
+//     });
+//   }
+// };
 
 
 // export const getFilterData = async (req, res) => {

@@ -570,7 +570,7 @@ const T = (text, extra = {}) => new TextRun({ text: S(text), ...extra });
 
     // ✅ Column widths (7 cols)
     ws.columns = [
-      { key: "no", width: 8 },
+      { key: "no", width: 15 },
       { key: "drawingNo", width: 22 },
       { key: "desc", width: 40 },
       { key: "qty", width: 10 },
@@ -937,7 +937,7 @@ export const exportQuoteToWord = async (req, res) => {
     const paymentTerms = S(quote?.customerId?.paymentTerms);
     const incoterms = S(quote?.customerId?.incoterms);
     const currency = S(quote.currency?.code || "USD");
-    const quoteDate = D(quote.quoteDate);
+    const quoteDate = D(new Date());
     const validUntil = D(quote.validUntil);
     const items = Array.isArray(quote.items) ? quote.items : [];
 

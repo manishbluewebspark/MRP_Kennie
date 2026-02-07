@@ -403,7 +403,7 @@ const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryIte
     }
   }, [visible, inventoryItem, form]);
 
-  const calculateNewBalance = () => currentBalance + Number(adjustmentQuantity || 0);
+  const calculateNewBalance = () => fromMeter(currentBalance, uomCode) + Number(adjustmentQuantity || 0);
 
   const getBalanceColor = (balance) => {
     if (balance < 0) return "red";
@@ -569,7 +569,7 @@ const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryIte
             </Row>
 
             <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 4 }}>
-              Current {currentBalance} {adjustmentQuantity > 0 ? "+" : ""}{adjustmentQuantity} = {calculateNewBalance()}
+              Current {fromMeter(currentBalance, uomCode)} {adjustmentQuantity > 0 ? "+" : ""}{adjustmentQuantity} = {calculateNewBalance()}
             </Text>
           </div>
         )}

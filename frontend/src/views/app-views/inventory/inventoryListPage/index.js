@@ -585,7 +585,7 @@ const handleFilterSubmit = async (data) => {
         inventoryItem={selectedInventoryItem}
       />
 
-      <IncomingStockModal visible={showPoDataModal} onCancel={() => setShowPoDataModal(false)} purchaseData={selectedPurchaseData} />
+      <IncomingStockModal visible={showPoDataModal} onCancel={() => {setShowPoDataModal(false); getInventoryList()}} purchaseData={selectedPurchaseData} />
     </div>
   );
 };

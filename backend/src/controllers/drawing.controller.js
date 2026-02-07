@@ -5701,9 +5701,9 @@ export const updateLatestPrice = async (req, res) => {
     }
 
     // ✅ support only material (optional)
-    if ((costingItem.quoteType || "").toLowerCase() !== "material") {
-      return res.status(400).json({ success: false, message: "updateLatestPrice works only for material items" });
-    }
+    // if ((costingItem.quoteType || "").toLowerCase() !== "material") {
+    //   return res.status(400).json({ success: false, message: "updateLatestPrice works only for material items" });
+    // }
 
     // helpers
     const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;

@@ -152,7 +152,8 @@ const handleCommitDateChange = async (record, newDate) => {
       mpn: record?.mpn,
       committedDate: formatted,
     });
-
+    
+    onCancel()
     message.success("Committed date updated successfully");
   } catch (err) {
     console.error(err);

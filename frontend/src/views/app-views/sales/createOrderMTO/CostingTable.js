@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Table, Typography, Tag, InputNumber, Spin, message, Button } from 'antd';
+import { Table, Typography, Tag, InputNumber, Spin, message, Button, Modal } from 'antd';
 import ActionButtons from 'components/ActionButtons';
 import { hasPermission } from 'utils/auth';
 
@@ -20,7 +20,8 @@ const CostingTable = ({
   handleUpdateAll
 }) => {
   const [localMarkup, setLocalMarkup] = useState(0);
-
+const [infoOpen, setInfoOpen] = useState(false);
+const [infoRecord, setInfoRecord] = useState(null);
   // sync local with parent whenever tab or markups change
   useEffect(() => {
     const k = tabKey(activeTab);
@@ -46,6 +47,23 @@ const handleUpdateAllLatestPrice = async () => {
     );
 };
 
+
+
+const handleShowInfoModal = (record) => {
+  console.log('--------info',record)
+  setInfoRecord(record);
+  setInfoOpen(true);
+};
+
+
+const basePrice = infoRecord?.unitPrice * infoRecord?.actualQty;
+
+const sgaAmount = (basePrice * (infoRecord?.sgaPercent || 0)) / 100;
+const freightAmount =
+  infoRecord?.freightCost ||
+  (basePrice * (infoRecord?.freightPercent || 0)) / 100;
+
+const totalCost = basePrice + sgaAmount + freightAmount;
 
 
 
@@ -78,6 +96,8 @@ const handleUpdateAllLatestPrice = async () => {
         onDelete={() => onDelete && onDelete(record)}
         showUpdate={ activeTab !== 'manhour' && hasPermission('sales.mto:create_edit_delete_costingmaterial')}
         onUpdate={() => {handleUpdateLatestPrice(record?._id)}}
+        showInfo={true}
+        onInfo={()=>{handleShowInfoModal(record)}}
       />
     ),
   };
@@ -446,6 +466,205 @@ const handleUpdateAllLatestPrice = async () => {
           </Table.Summary>
         )}
       />
+
+<Modal
+  open={infoOpen}
+  onCancel={() => setInfoOpen(false)}
+  footer={null}
+  width={480}
+  title={
+    <div style={{ fontSize: 16, fontWeight: 600 }}>
+    Costing Breakdown
+    </div>
+  }
+>
+  {infoRecord && (
+    <div style={{ fontSize: 14 }}>
+      
+      {/* HEADER WITH PRODUCT INFO */}
+      <div style={{ 
+        backgroundColor: '#f8f9fa', 
+        padding: '12px 16px',
+        borderRadius: 6,
+        marginBottom: 16,
+        borderLeft: '4px solid #1890ff'
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+          {infoRecord?.description}
+        </div>
+        <div style={{ color: "#666", fontSize: 13 }}>
+          <span style={{ marginRight: 16 }}>
+            MPN: <b>{infoRecord?.mpn?.MPN}</b>
+          </span>
+          <span>
+            Mfr: <b>{infoRecord?.manufacturer}</b>
+          </span>
+        </div>
+      </div>
+
+      {/* QUANTITY & PRICE SECTION */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 8
+        }}>
+          <span>Quantity</span>
+          <span style={{ fontWeight: 500 }}>{infoRecord?.actualQty} units</span>
+        </div>
+
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 8
+        }}>
+          <span>Unit Price</span>
+          <span style={{ fontWeight: 500 }}>
+            {infoRecord?.mpn?.currency?.symbol}
+            {parseFloat(infoRecord?.unitPrice).toFixed(2)}
+          </span>
+        </div>
+
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '10px 12px',
+          backgroundColor: '#f0f7ff',
+          borderRadius: 4,
+          marginTop: 8
+        }}>
+          <span style={{ fontWeight: 600 }}>Base Cost</span>
+          <span style={{ fontWeight: 700, fontSize: 15 }}>
+            {infoRecord?.mpn?.currency?.symbol}
+            {(infoRecord?.unitPrice * infoRecord?.actualQty).toFixed(2)}
+          </span>
+        </div>
+      </div>
+
+      {/* COST BREAKDOWN */}
+      <div style={{ 
+        backgroundColor: '#fffbf0', 
+        padding: '16px',
+        borderRadius: 6,
+        marginBottom: 20
+      }}>
+        <div style={{ 
+          fontSize: 14, 
+          fontWeight: 600, 
+          marginBottom: 12,
+          color: '#d48806'
+        }}>
+          Cost Breakdown
+        </div>
+
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          marginBottom: 8,
+          paddingBottom: 8,
+          borderBottom: '1px dashed #f0f0f0'
+        }}>
+          <span>
+            <span style={{ color: '#8c8c8c' }}></span> SGA
+            <span style={{ 
+              fontSize: 12, 
+              color: '#8c8c8c',
+              marginLeft: 4
+            }}>
+              ({infoRecord?.sgaPercent}%)
+            </span>
+          </span>
+          <span style={{ fontWeight: 500 }}>
+            {infoRecord?.mpn?.currency?.symbol}
+            {sgaAmount.toFixed(2)}
+          </span>
+        </div>
+
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between'
+        }}>
+          <span>
+            <span style={{ color: '#8c8c8c' }}></span> Freight
+            <span style={{ 
+              fontSize: 12, 
+              color: '#8c8c8c',
+              marginLeft: 4
+            }}>
+              ({infoRecord?.freightPercent || 0}%)
+            </span>
+          </span>
+          <span style={{ fontWeight: 500 }}>
+            {infoRecord?.mpn?.currency?.symbol}
+            {freightAmount.toFixed(2)}
+          </span>
+        </div>
+      </div>
+
+      {/* FINAL TOTAL */}
+      <div style={{ 
+        backgroundColor: '#f6ffed', 
+        padding: '16px',
+        borderRadius: 6,
+        border: '1px solid #b7eb8f',
+        marginBottom: 16
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>
+              Total Sales Price
+            </div>
+            <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+              Including all costs
+            </div>
+          </div>
+          <span style={{ 
+            fontWeight: 800, 
+            fontSize: 18,
+            color: '#389e0d'
+          }}>
+            {infoRecord.mpn?.currency?.symbol}
+            {parseFloat(infoRecord.salesPrice).toFixed(2)}
+          </span>
+        </div>
+      </div>
+
+      {/* FOOTER INFO */}
+      <div style={{ 
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '8px 12px',
+        backgroundColor: '#fafafa',
+        borderRadius: 4,
+        fontSize: 13
+      }}>
+        <div>
+          <span style={{ color: '#8c8c8c', marginRight: 8 }}>⏱️</span>
+          <span>Lead Time:</span>
+          <span style={{ 
+            fontWeight: 600,
+            marginLeft: 4,
+            color: infoRecord.leadTime > 30 ? '#cf1322' : '#389e0d'
+          }}>
+            {infoRecord.leadTime} days
+          </span>
+        </div>
+        <div style={{ color: '#8c8c8c' }}>
+          Updated: {new Date().toLocaleDateString()}
+        </div>
+      </div>
+    </div>
+  )}
+</Modal>
+
     </div>
   );
 };

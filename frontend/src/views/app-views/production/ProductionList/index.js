@@ -5,20 +5,24 @@ import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
 import GlobalTableActions from "components/GlobalTableActions";
 import { useNavigate } from "react-router-dom";
-import CreateWorkOrderModal from "./CreateWorkOrderModal";
+
 import WorkOrderService from "services/WorkOrderService";
 import useDebounce from "utils/debouce";
-import WorkOrderSettingsModal from "./ProductSettingsModal";
-import ImportWorkOrderModal from "./ImportWorkOrderModal";
+
+
 import { useDispatch, useSelector } from "react-redux";
 import { fetchSystemSettings } from "store/slices/systemSettingsSlice";
 import dayjs from 'dayjs'
 import ProjectService from "services/ProjectService";
-import MoveToProductionModal from "./MoveToProductionModal";
-import SystemSettingsService from "services/SystemSettingsService";
-import WorkOrderExportModal from "./WorkOrderExportModal";
-import GlobalFilterModal from "components/GlobalFilterModal";
+
 import { fetchCustomers } from "store/slices/customerSlice";
+import WorkOrderExportModal from "views/app-views/work-order/workOrderManagmentPage/WorkOrderExportModal";
+import ImportWorkOrderModal from "views/app-views/work-order/workOrderManagmentPage/ImportWorkOrderModal";
+import WorkOrderSettingsModal from "views/app-views/work-order/workOrderManagmentPage/ProductSettingsModal";
+import GlobalFilterModal from "components/GlobalFilterModal";
+import MoveToProductionModal from "views/app-views/work-order/workOrderManagmentPage/MoveToProductionModal";
+import CreateWorkOrderModal from "views/app-views/work-order/workOrderManagmentPage/CreateWorkOrderModal";
+import SystemSettingsService from "services/SystemSettingsService";
 const { confirm } = Modal;
 
 const fmt = (d) => (d ? dayjs(d).format("DD/MM/YYYY") : "-");
@@ -137,7 +141,7 @@ const renderQyoteTypeBadge = (type) => {
 
 
 
-const DeliveryOrderPage = () => {
+const ProductionPage = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch()
     const [data, setData] = useState([]);
@@ -228,6 +232,7 @@ const DeliveryOrderPage = () => {
             dataIndex: "workOrderNo",
             key: "workOrderNo",
             sorter: true,
+            // sorter: (a, b) => a.workOrderNo.localeCompare(b.workOrderNo),
             render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
         },
         {
@@ -351,7 +356,7 @@ const DeliveryOrderPage = () => {
                     onEdit={() => handleEdit(record)}
                     onDelete={() => handleDelete(record._id)}
                     showInfo={hasPermission("work_order.work_order_managment:view")}
-                    showEdit={hasPermission("work_order.work_order_managment:create_edit_delete")}
+                    // showEdit={hasPermission("work_order.work_order_managment:create_edit_delete")}
                     showDelete={record?.status === "completed"}
                     showDeleteConfirm={true}
                     onInfo={() => handleInfo(record)}
@@ -434,8 +439,8 @@ const DeliveryOrderPage = () => {
     const fetchWorkOrders = async (params = {}) => {
         setLoading(true);
         try {
-            const { page = 1, limit = 10, search = "", filters: f = filters, sortBy = "createdAt",
-                sortOrder = "desc", activeTab } = params;
+            const { page = 1, limit = 10, search = "", filters: f = filters,  sortBy = "createdAt",
+      sortOrder = "desc",activeTab } = params;
             const response = await WorkOrderService.getAllWorkOrders({
                 page,
                 limit,
@@ -445,7 +450,7 @@ const DeliveryOrderPage = () => {
                 projectId: f?.projectNo || undefined,
                 posNo: f?.posNo || undefined,
                 drawingId: f?.drawingNo || undefined,
-                activeTab
+                activeTab: "show_all"
             });
 
             if (response.success) {
@@ -711,43 +716,15 @@ const DeliveryOrderPage = () => {
 
 
                 <div>
-                    <h2 style={{ margin: 0 }}>Work Order Management</h2>
+                    <h2 style={{ margin: 0 }}>Production List</h2>
                     <p style={{ margin: 0, fontSize: 14, color: '#888' }}>
-                        All Work Order List
+                        List of Work Orders Ready for Production
                     </p>
                 </div>
 
                 <div>
 
-                    <Col>
-                        {hasPermission("work_order.work_order_managment:create_edit_delete") && (
-                            <Button
-                                onClick={() => setIsModalVisible(true)}
-                                type="primary"
-                                icon={<PlusOutlined />}
-                                className="mr-3"
-                            >
-                                Create Work Order
-                            </Button>
-                        )}
-                        <Radio.Group
-                            value={activeTab}
-                            optionType="button"
-                            buttonStyle="solid"
-                            onChange={(e) => {
-                                const tab = e.target.value;
-                                setActiveTab(tab);
-                            }}
-                        >
-                            <Radio.Button value="PRODUCTION">
-                                Production List
-                            </Radio.Button>
 
-                            <Radio.Button value="NON_PRODUCTION">
-                                Not In Production
-                            </Radio.Button>
-                        </Radio.Group>
-                    </Col>
 
 
 
@@ -772,13 +749,13 @@ const DeliveryOrderPage = () => {
                 // onExport={() => handleExport()}
                 showFilter={true}
                 onFilter={() => setFilterVisible(true)}
-                showProductSetting={hasPermission("work_order.work_order_managment:setting")}
+                // showProductSetting={hasPermission("work_order.work_order_managment:setting")}
                 onProductSetting={() => { setIsProductSettingmodalVisible(true) }}
-                showMPNTracker={hasPermission("work_order.work_order_managment:mpn_tracker")}
-                onMPNTracker={() => {
-                    navigate('/app/work-order/mpn-tracker')
-                }}
-                showImportWorkOrder={hasPermission("work_order.work_order_managment:import")}
+                // showMPNTracker={hasPermission("work_order.work_order_managment:mpn_tracker")}
+                // onMPNTracker={() => {
+                //     navigate('/app/work-order/mpn-tracker')
+                // }}
+                // showImportWorkOrder={hasPermission("work_order.work_order_managment:import")}
                 onImportWorkOrder={() => { setImportWorkOrderModalVisible(true) }}
             />
 
@@ -989,4 +966,4 @@ const DeliveryOrderPage = () => {
     );
 };
 
-export default DeliveryOrderPage;
+export default ProductionPage;

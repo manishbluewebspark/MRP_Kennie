@@ -14,6 +14,7 @@ import {
   InputNumber,
   Table,
   message,
+  Checkbox,
 } from 'antd';
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -101,6 +102,7 @@ const PurchaseOrderForm = () => {
   const { purchaseSettings } = useSelector((state) => state.purchaseSettings);
   const { uoms } = useSelector((state) => state.uoms);
   const [lastPOOrderNumber, setLastPOOrderNumber] = useState([]);
+  const [isOfficePO, setIsOfficePO] = useState(false);
   const { workOrderSettings } = useSelector(
     (state) => state.systemSettings
   );
@@ -393,12 +395,12 @@ const PurchaseOrderForm = () => {
     ) {
 
       const firstShortageDate =
-      shortageItems[0]?.shortageByWorkOrders?.[0]?.needDate;
+        shortageItems[0]?.shortageByWorkOrders?.[0]?.needDate;
 
-          if (firstShortageDate) {
-      // moment object needed for DatePicker
-      form.setFieldsValue({ needDate: dayjs(firstShortageDate) });
-    }
+      if (firstShortageDate) {
+        // moment object needed for DatePicker
+        form.setFieldsValue({ needDate: dayjs(firstShortageDate) });
+      }
 
 
       const existingNos = [];
@@ -486,32 +488,81 @@ const PurchaseOrderForm = () => {
   };
 
   const handleItemChange = (key, field, value) => {
-    setOrderItems((prev) =>
-      prev.map((item) => {
-        if (item.key !== key) return item;
-        let updated = { ...item, [field]: value };
-
-        // when MPN changes, auto-fill from library
-        if (field === 'mpn') {
-          const match = librarys?.mpnList?.find((m) => m._id === value);
-          if (match) {
-            const uomId =
-              match?.UOM?._id || match?.UOM?.name || updated.uom || '';
-            updated = {
-              ...updated,
-              description: match.Description || '',
-              manufacturer: match.Manufacturer || '',
-              uom: uomId,
-              qty: 1,
-              unitPrice: n(match.RFQUnitPrice, 0),
-              discPercentage: 0,
-            };
-          }
-        }
-        return updated;
-      })
+  // ✅ MPN validation for Office PO
+  if (field === 'mpn' && isOfficePO) {
+    const selectedMPN = librarys?.mpnList?.find(
+      (m) => m._id === value
     );
-  };
+
+    if (
+      selectedMPN &&
+      !['Office Supplies/Equipment'].includes(
+        selectedMPN.Category?.name
+      )
+    ) {
+      message.error('Accept Office Supplies/Equipment items only');
+      return; // ❌ yahin stop, state update nahi hoga
+    }
+  }
+
+  setOrderItems((prev) =>
+    prev.map((item) => {
+      if (item.key !== key) return item;
+
+      let updated = { ...item, [field]: value };
+
+      // when MPN changes, auto-fill from library
+      if (field === 'mpn') {
+        const match = librarys?.mpnList?.find((m) => m._id === value);
+        if (match) {
+          const uomId =
+            match?.UOM?._id || match?.UOM?.name || updated.uom || '';
+
+          updated = {
+            ...updated,
+            description: match.Description || '',
+            manufacturer: match.Manufacturer || '',
+            uom: uomId,
+            qty: 1,
+            unitPrice: n(match.RFQUnitPrice, 0),
+            discPercentage: 0,
+          };
+        }
+      }
+
+      return updated;
+    })
+  );
+};
+
+
+  // const handleItemChange = (key, field, value) => {
+  //   setOrderItems((prev) =>
+  //     prev.map((item) => {
+  //       if (item.key !== key) return item;
+  //       let updated = { ...item, [field]: value };
+
+  //       // when MPN changes, auto-fill from library
+  //       if (field === 'mpn') {
+  //         const match = librarys?.mpnList?.find((m) => m._id === value);
+  //         if (match) {
+  //           const uomId =
+  //             match?.UOM?._id || match?.UOM?.name || updated.uom || '';
+  //           updated = {
+  //             ...updated,
+  //             description: match.Description || '',
+  //             manufacturer: match.Manufacturer || '',
+  //             uom: uomId,
+  //             qty: 1,
+  //             unitPrice: n(match.RFQUnitPrice, 0),
+  //             discPercentage: 0,
+  //           };
+  //         }
+  //       }
+  //       return updated;
+  //     })
+  //   );
+  // };
 
   /** ---------- PO number ---------- */
   const generatePONumber = (existing = []) => {
@@ -624,7 +675,7 @@ const PurchaseOrderForm = () => {
                   size="large"
                   showSearch
                   optionFilterProp="children"
-                  // disabled={fromShortage && !isEditMode} // lock when from shortage
+                // disabled={fromShortage && !isEditMode} // lock when from shortage
                 >
                   {suppliers?.map((s) => (
                     <Option key={s._id} value={s._id}>
@@ -636,29 +687,39 @@ const PurchaseOrderForm = () => {
             </Col>
           </Row>
 
-          <Row gutter={16}>
-            <Col span={8}>
-              <Text type="secondary">Reference No</Text>
+          <Row gutter={16} align="bottom">
+            <Col span={6}>
+              <Text type="primary" style={{ fontSize: 16 }}>Reference No</Text>
               <Form.Item name="referenceNo">
                 <Input placeholder="Enter number" size="large" />
               </Form.Item>
             </Col>
-            <Col span={8}>
-              <Text type="secondary">Need Date</Text>
+
+            <Col span={6}>
+              <Text type="primary" style={{ fontSize: 16 }}>Need Date</Text>
               <Form.Item name="needDate">
-                <DatePicker format="DD/MM/YYYY" size="large" style={{ width: '100%' }} />
+                <DatePicker
+                  format="DD/MM/YYYY"
+                  size="large"
+                  style={{ width: '100%' }}
+                />
               </Form.Item>
             </Col>
-            <Col span={8}>
-              <Title level={4} style={{ fontSize: 16 }}>
+
+            <Col span={6}>
+              <Text type="primary" style={{ fontSize: 16 }}>
                 Work Order No
-              </Title>
-              <Form.Item name="workOrderNo" rules={[{ required: true }]}>
+              </Text>
+              <Form.Item
+                name="workOrderNo"
+                rules={[{ required: !isOfficePO }]}
+              >
                 <Select
                   placeholder="Select Work Order"
                   size="large"
                   showSearch
                   optionFilterProp="children"
+                  disabled={isOfficePO}
                 >
                   {workOrders?.map((w) => (
                     <Option key={w._id} value={w._id}>
@@ -668,7 +729,22 @@ const PurchaseOrderForm = () => {
                 </Select>
               </Form.Item>
             </Col>
+
+            <Col span={6}>
+              <Form.Item style={{ marginBottom: 20 }}>
+                <Checkbox
+                  checked={isOfficePO}
+                  onChange={(e) => setIsOfficePO(e.target.checked)}
+                >
+                  Office Supplies / Equipment
+                </Checkbox>
+                <div style={{ fontSize: 12, textAlign: 'center', color: "#8c8c8c" }}>
+                  (Without Work Order)
+                </div>
+              </Form.Item>
+            </Col>
           </Row>
+
 
           <Title level={4} style={{ fontSize: 16 }}>
             Ship To Address

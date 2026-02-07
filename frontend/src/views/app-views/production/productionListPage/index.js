@@ -267,7 +267,7 @@ const CableAssemblyCard = ({
                   style={{ fontSize: 15, fontWeight: 600, color: "#000" }}
                 >
                   {record?.workOrderNo || "-"} —{" "}
-                  {formatProjectType(record?.projectType || "-")}
+                  {formatProjectType(record?.projectType || "-")} - Details
                 </span>
                 <Tag color="purple" style={{ fontSize: 11, padding: "0 6px" }}>
                   Qty: {record?.quantity ?? 0}
@@ -304,7 +304,7 @@ const CableAssemblyCard = ({
                   </span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {/* <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <Tag
                     color={statusColor}
                     style={{ fontWeight: 500, fontSize: 11, padding: "0 6px" }}
@@ -313,8 +313,8 @@ const CableAssemblyCard = ({
                       ? "In Production"
                       : record?.status || "-"}
                   </Tag>
-                  {/* <EyeOutlined style={{ fontSize: 20, color: "#1890ff" }} /> */}
-                </div>
+                  <EyeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
+                </div> */}
               </div>
             </Col>
           </Row>
@@ -322,7 +322,7 @@ const CableAssemblyCard = ({
       >
         {/* Cable Assembly Info */}
         <div>
-          <h3
+          {/* <h3
             style={{
               fontSize: 13,
               fontWeight: 600,
@@ -332,7 +332,7 @@ const CableAssemblyCard = ({
           >
             <ToolOutlined style={{ marginRight: 5, color: "#1890ff" }} />
             {formatProjectType(record?.projectType)} Details
-          </h3>
+          </h3> */}
 
           <div
             style={{
@@ -420,7 +420,7 @@ const CableAssemblyCard = ({
                 stage.permission
               );
 
-              console.log('-----permissionAllowed',stage.permission, permissionAllowed)
+              console.log('-----permissionAllowed', stage.permission, permissionAllowed)
 
               const canClick =
                 permissionAllowed &&
@@ -592,12 +592,48 @@ const SkillLevelCostingList = () => {
   );
 
 
+  // useEffect(() => {
+  //   fetchData();
+  //   fetchWorkOrdersData();
+  //   fetchCompleteWorkOrdersData();
+  //   fetchMaterialShortagesData()
+  // }, [page, limit, search]);
+
   useEffect(() => {
-    fetchData();
-    fetchWorkOrdersData();
-    fetchCompleteWorkOrdersData();
-    fetchMaterialShortagesData()
-  }, [page, limit, search]);
+    fetchWorkOrdersData({
+      page,
+      limit,
+      search,
+      filters,
+    });
+  }, [page, limit, search, filters]);
+
+  useEffect(() => {
+    fetchData({
+      page,
+      limit,
+      search,
+      filters,
+    });
+  }, [page, limit, search, filters]);
+
+  useEffect(() => {
+    fetchCompleteWorkOrdersData({
+      page,
+      limit,
+      search,
+      filters,
+    });
+  }, [page, limit, search, filters]);
+
+  useEffect(() => {
+    fetchMaterialShortagesData({
+      page,
+      limit,
+      search,
+      filters,
+    });
+  }, [page, limit, search, filters]);
 
 
   const fetchFilterData = async () => {
@@ -708,6 +744,11 @@ const SkillLevelCostingList = () => {
     fetchWorkOrdersData({ page: 1, limit, filters: filterData });
   };
 
+  const handleSearch = useDebounce((value) => {
+    setPage(1);
+    setSearch(value);
+    // fetchWorkOrders({ page: 1, limit, search: value });
+  }, 500);
 
   const fetchData = async () => {
     try {
@@ -805,6 +846,7 @@ const SkillLevelCostingList = () => {
     {
       title: "",
       key: "projectDetails",
+       width: "100%",
       render: (_, record) => (
         <CableAssemblyCard
           record={record}
@@ -1002,7 +1044,7 @@ const SkillLevelCostingList = () => {
             placeholder="Search..."
             prefix={<SearchOutlined />}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
           />
         </Col>
 

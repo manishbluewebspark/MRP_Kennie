@@ -813,10 +813,10 @@ export const getInventoryList = async (req, res) => {
         "items.mpn": { $in: mpnIdsOnList },
       })
         .select(
-          "poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt"
+          "poNumber commitDate needDate supplier items.idNumber items.mpn items.qty items.receivedQty items.committedDate items.needDate status createdAt updatedAt"
         )
         .populate("items.mpn", "MPN Description Manufacturer")
-        .populate("supplier", "name contactEmail phoneNumber")
+        .populate("supplier", "companyName email phone contactPerson")
         .lean();
     }
 
@@ -852,13 +852,16 @@ export const getInventoryList = async (req, res) => {
         }
 
         entry.purchaseData.push({
+          _id:po._id,
+          idNumber:it?.idNumber,
+          mpn:it.mpn,
           poNumber: po.poNumber,
           supplier: po.supplier || { name: "N/A" },
           quantity: remainingQty,
           totalQuantity: it.qty,
           receivedQuantity: it.receivedQty || 0,
-          needDate: it.needDate ? new Date(it.needDate).toLocaleDateString() : "N/A",
-          committedDate: it.commitDate ? new Date(it.commitDate).toLocaleDateString() : "N/A",
+          needDate: po.needDate ? new Date(po.needDate).toLocaleDateString() : "N/A",
+          committedDate: it.committedDate ? new Date(it.committedDate).toLocaleDateString() : "N/A",
           status: po.status,
           createdAt: po.createdAt,
           updatedAt: po.updatedAt,

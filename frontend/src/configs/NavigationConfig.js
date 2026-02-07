@@ -308,11 +308,20 @@ const purchaseNavTree = [{
 const productionNavTree = [{
   key: 'production',
   path: `${APP_PREFIX_PATH}/production`,
-  title: 'production.production',
+  title: 'production.production-main',
   icon: BuildOutlined,
   breadcrumb: false,
   isGroupTitle: false,
   submenu: [
+    {
+      key: 'production-list',
+      path: `${APP_PREFIX_PATH}/production-list`,
+      title: 'production.production-list',
+      icon: BuildOutlined,
+      breadcrumb: false,
+      permissions: ["production.cable_harness_assembly:view","production.other_assembly:view","production.box_build:view"],
+      submenu: []
+    },
     {
       key: 'production',
       path: `${APP_PREFIX_PATH}/production`,

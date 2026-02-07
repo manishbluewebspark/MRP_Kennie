@@ -142,5 +142,7 @@
 	"purchase.purchase-history":"Purchase History",
 	"purchase.purchase-managment":"Supplier Managment",
 	"purchase.purchase-settings":"Purchase Settings",
-	"production.production":"Production"
+	"production.production-main":"Production",
+	"production.production":"Production Start",
+	"production.production-list":"Production List"
 }
