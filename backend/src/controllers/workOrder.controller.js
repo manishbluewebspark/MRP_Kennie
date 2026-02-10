@@ -3094,8 +3094,11 @@ export const getAllProductionWordOrders = async (req, res) => {
       needDate,
       status,
       customerId, // ✅ optional (customer via project)
-      projectType
+      projectType,
+      workOrderId
     } = req.query;
+
+    console.log('----workOrderId',workOrderId)
 
     page = Number(page) || 1;
     limit = Number(limit) || 20;
@@ -3126,6 +3129,9 @@ export const getAllProductionWordOrders = async (req, res) => {
       };
     }
 
+    if (workOrderId && mongoose.Types.ObjectId.isValid(workOrderId)) {
+      query._id = new mongoose.Types.ObjectId(workOrderId);
+    }
 
     // ✅ Filters
     if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
@@ -3146,37 +3152,37 @@ export const getAllProductionWordOrders = async (req, res) => {
 
     if (status) query.status = status;
 
-  if (search && String(search).trim()) {
-  const s = String(search).trim();
+    if (search && String(search).trim()) {
+      const s = String(search).trim();
 
-  // 1️⃣ Find drawings matching drawingNo
-  const drawings = await Drawing.find({
-    drawingNo: { $regex: s, $options: "i" },
-  })
-    .select("_id")
-    .lean();
+      // 1️⃣ Find drawings matching drawingNo
+      const drawings = await Drawing.find({
+        drawingNo: { $regex: s, $options: "i" },
+      })
+        .select("_id")
+        .lean();
 
-  const drawingIds = drawings.map((d) => d._id);
+      const drawingIds = drawings.map((d) => d._id);
 
-  // 2️⃣ Build OR conditions
-  const orConditions = [
-    { workOrderNo: { $regex: s, $options: "i" } },
-    { poNumber: { $regex: s, $options: "i" } },
-    { projectNo: { $regex: s, $options: "i" } },
-  ];
+      // 2️⃣ Build OR conditions
+      const orConditions = [
+        { workOrderNo: { $regex: s, $options: "i" } },
+        { poNumber: { $regex: s, $options: "i" } },
+        { projectNo: { $regex: s, $options: "i" } },
+      ];
 
-  // numeric posNo
-  if (!isNaN(s)) {
-    orConditions.push({ posNo: Number(s) });
-  }
+      // numeric posNo
+      if (!isNaN(s)) {
+        orConditions.push({ posNo: Number(s) });
+      }
 
-  // drawing search
-  if (drawingIds.length) {
-    orConditions.push({ drawingId: { $in: drawingIds } });
-  }
+      // drawing search
+      if (drawingIds.length) {
+        orConditions.push({ drawingId: { $in: drawingIds } });
+      }
 
-  query.$or = orConditions;
-}
+      query.$or = orConditions;
+    }
 
 
 

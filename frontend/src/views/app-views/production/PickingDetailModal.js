@@ -42,7 +42,7 @@ const PickingDetailModal = ({
     materials = [], // agar backend se aayega to yaha pass kar dena
 }) => {
 
-    console.log('-------stage', stage)
+    console.log('-------selectWorkOrderData', selectWorkOrderData)
 
     const normalize = (str = "") =>
         str.toLowerCase().replace(/[\s_]+/g, "");
@@ -72,6 +72,10 @@ const PickingDetailModal = ({
     const [childParts, setChildParts] = useState([])
     const wo = selectWorkOrderData || {};
     const workQty = Number(wo.quantity || 0);
+
+    const [shortageInputs, setShortageInputs] = useState({});
+const [shortageChecked, setShortageChecked] = useState({});
+
     useEffect(() => {
         if (!visible) return; // Run only when modal opened
         form.resetFields();
@@ -137,6 +141,44 @@ const PickingDetailModal = ({
         }
     };
 
+    const handleShortageSave = async (record, workOrder) => {
+  try {
+    const shortageQty = Number(shortageInputs[record.key] || 0);
+
+    if (shortageQty <= 0) {
+      message.warning("Shortage quantity must be greater than 0");
+      return;
+    }
+
+    const payload = {
+      mpnId: record.mpnId,
+      workOrderId: workOrder?.workOrderId,
+      drawingId: workOrder?.drawingId,
+      requiredQty: shortageQty,
+      pickedQty: Number(pickedQuantities[record.key] || 0),
+      needDate: workOrder?.needDate,
+      workOrderNo: workOrder?.workOrderNo,
+    };
+
+    const res = await InventoryService.addShortage(payload);
+
+    if (res?.success) {
+      message.success("Shortage saved");
+
+      // lock input after success (optional but recommended)
+      setShortageInputs((prev) => ({
+        ...prev,
+        [record.key]: shortageQty,
+      }));
+    } else {
+      message.error(res?.message || "Failed to save shortage");
+    }
+  } catch (err) {
+    console.error(err);
+    message.error("Error saving shortage");
+  }
+};
+
 
 
     // ---------- CONFIG PER STAGE ----------
@@ -151,25 +193,21 @@ const PickingDetailModal = ({
             case "Cable Harness":
                 return {
                     ...base,
-                    modalTitle: `Assembly Process - ${wo.projectName || ""}`,
-                    mainCardTitle: "Assembly Production Details",
-                    rightBtnText: "Save Assembly",
+                    modalTitle: `Cable Harness Process - ${wo.projectName || ""}`,
+                    mainCardTitle:
+                        "Complete the cable harness process by entering picked quantities and any remarks",
+                    rightBtnText: "Cable Harness Done",
                     typeKey: "Cable Harness",
-                    layout: "triple", // 3 numeric fields
+                    layout: "single", // ✅ ONLY ONE QTY FIELD
                     labels: {
-                        left: "Work Order Quantity",
-                        middle: `Assembly Qty * (Max: ${wo.remainingAssemblyQty ?? workQty} remaining)`,
-                        right: "Balance Qty:",
+                        single: "Produce Qty * (Must equal Work Order Qty)",
                     },
                     helpers: {
-                        left: "Original work order quantity",
-                        middle: `${wo.completedAssemblyQty || 0} already completed. You can assemble the remaining units.`,
-                        right: "Remaining quantity after this assembly batch",
+                        single: " Production quantity must exactly match work order quantity - no more, no less",
                     },
-                    infoText:
-                        "Assembly can be done in batches. Quantities must not exceed the remaining work order quantity.",
                     titleIcon: <ToolOutlined />,
                 };
+
 
             case "Quality Check":
                 return {
@@ -236,7 +274,30 @@ const PickingDetailModal = ({
                     titleIcon: <ShoppingCartOutlined />,
                 };
 
-            case "Picking/Assembly":
+            case "Assembly":
+                return {
+                    // ...base,
+                    modalTitle: `Assembly Process - ${wo.projectName || ""}`,
+                    mainCardTitle: "Assembly Production Details",   // ✅ title change
+                    rightBtnText: "Save Assembly",
+                    typeKey: "Assembly",
+                    layout: "triple",
+                    labels: {
+                        left: "Work Order Quantity",
+                        middle: `Assembly Qty * (Max: ${wo.remainingAssemblyQty ?? workQty} remaining)`,
+                        right: "Balance Qty:",
+                    },
+                    helpers: {
+                        left: "Original work order quantity",
+                        middle: "Enter assembly quantity for this batch",
+                        right: "Remaining after this entry",
+                    },
+                    infoText: "Assembly can be done in batches. Qty must not exceed remaining.",
+                    titleIcon: <ToolOutlined />,
+                    // ✅ max limit for assembly qty
+                    maxQty: Number(wo.remainingAssemblyQty ?? workQty),
+                };
+                case "Picking/Assembly":
                 return {
                     // ...base,
                     modalTitle: `Assembly Process - ${wo.projectName || ""}`,
@@ -352,18 +413,77 @@ const PickingDetailModal = ({
             },
         }
         ,
+        // {
+        //     title: "Shortage",
+        //     dataIndex: "shortage",
+        //     key: "shortage",
+        //     width: 90,
+        //     render: (_, record) => (
+        //         <Checkbox
+        //             checked={!!record.shortage}
+        //             onChange={(e) => handleShortageToggle(e.target.checked, record, wo)}
+        //         />
+        //     ),
+        // }
         {
-            title: "Shortage",
-            dataIndex: "shortage",
-            key: "shortage",
-            width: 90,
-            render: (_, record) => (
-                <Checkbox
-                    checked={!!record.shortage}
-                    onChange={(e) => handleShortageToggle(e.target.checked, record, wo)}
-                />
-            ),
-        }
+  title: "Shortage",
+  key: "shortage",
+  width: 160,
+  render: (_, record) => {
+    const isChecked = shortageChecked[record.key];
+    const maxQty = Math.max(
+      Number(record.quantity || 0) -
+      Number(pickedQuantities[record.key] || 0),
+      0
+    );
+
+    return (
+      <Space>
+        <Checkbox
+          checked={isChecked}
+          onChange={(e) => {
+            const checked = e.target.checked;
+
+            setShortageChecked((prev) => ({
+              ...prev,
+              [record.key]: checked,
+            }));
+
+            if (!checked) {
+              // reset input on uncheck
+              setShortageInputs((prev) => {
+                const copy = { ...prev };
+                delete copy[record.key];
+                return copy;
+              });
+            }
+          }}
+        />
+
+        {isChecked && (
+          <InputNumber
+            min={0}
+            max={maxQty}
+            placeholder="Qty"
+            size="small"
+            value={shortageInputs[record.key]}
+            onChange={(val) =>
+              setShortageInputs((prev) => ({
+                ...prev,
+                [record.key]: val,
+              }))
+            }
+            onBlur={() =>
+              handleShortageSave(record, wo)
+            }
+            style={{ width: 70 }}
+          />
+        )}
+      </Space>
+    );
+  },
+}
+
 
     ];
 
@@ -413,7 +533,7 @@ const PickingDetailModal = ({
                 style={{ marginBottom: 16 }}
             >
                 {/* First row: Project/PO/POS */}
-                {stage === "Picking/Assembly" ? <></> :
+                {stage === "Assembly" ? <></> :
                     <div
                         style={{
                             display: "grid",
@@ -603,7 +723,7 @@ const PickingDetailModal = ({
 
 
             {/* ----------- Materials for Picking ----------- */}
-            <Card title="Materials for Picking" size="small">
+            <Card title={`Materials for ${stage}`} size="small">
                 <Table
                     columns={columns}
                     dataSource={dataSource}

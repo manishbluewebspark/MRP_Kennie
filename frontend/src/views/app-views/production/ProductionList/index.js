@@ -439,8 +439,8 @@ const ProductionPage = () => {
     const fetchWorkOrders = async (params = {}) => {
         setLoading(true);
         try {
-            const { page = 1, limit = 10, search = "", filters: f = filters,  sortBy = "createdAt",
-      sortOrder = "desc",activeTab } = params;
+            const { page = 1, limit = 10, search = "", filters: f = filters, sortBy = "createdAt",
+                sortOrder = "desc", activeTab } = params;
             const response = await WorkOrderService.getAllWorkOrders({
                 page,
                 limit,
@@ -765,6 +765,16 @@ const ProductionPage = () => {
                     columns={columns}
                     dataSource={data}
                     loading={loading}
+                    rowKey="_id"
+                    onRow={(record) => ({
+                        onClick: () => {
+                            navigate("/app/production", {
+                                state: {
+                                    workOrderId: record._id, // ya record._id
+                                },
+                            });
+                        },
+                    })}
                     pagination={{
                         current: page,
                         pageSize: limit,

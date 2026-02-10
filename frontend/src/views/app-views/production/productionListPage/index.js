@@ -44,6 +44,7 @@ import InventoryService from "services/InventoryService";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import { fetchCustomers } from "store/slices/customerSlice";
 import { hasPermission } from "utils/auth";
+import { useLocation } from "react-router-dom";
 const { Option } = Select;
 const { Title, Text } = Typography;
 
@@ -592,6 +593,11 @@ const SkillLevelCostingList = () => {
   );
 
 
+  const { state } = useLocation();
+const workOrderId = state?.workOrderId;
+console.log('------workOrderId',workOrderId)
+
+
   // useEffect(() => {
   //   fetchData();
   //   fetchWorkOrdersData();
@@ -600,13 +606,13 @@ const SkillLevelCostingList = () => {
   // }, [page, limit, search]);
 
   useEffect(() => {
-    fetchWorkOrdersData({
-      page,
-      limit,
-      search,
-      filters,
-    });
-  }, [page, limit, search, filters]);
+     if (workOrderId) {
+    fetchWorkOrdersData({ workOrderId });
+  } else {
+    fetchWorkOrdersData({ page, limit, search, filters });
+  }
+
+  }, [page, limit, search, filters, workOrderId]);
 
   useEffect(() => {
     fetchData({
@@ -804,6 +810,9 @@ const SkillLevelCostingList = () => {
         status: (params.filters ?? filters)?.status || undefined,
         search: params.search || "", // optional
         projectType: params?.filters?.projectType || undefined,
+
+        workOrderId: workOrderId || undefined,
+
       };
 
       const res = await WorkOrderService.getAllProductionWorkOrders(payload);
