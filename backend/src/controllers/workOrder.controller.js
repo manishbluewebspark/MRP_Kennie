@@ -29,7 +29,7 @@ import Child from "../models/library/Child.js";
 import path from "path";
 import ejs from 'ejs'
 import puppeteer from 'puppeteer'
-import { convertQty } from "../utils/uomController.js";
+import { convertQty, convertToInventoryUom } from "../utils/uomController.js";
 
 function generateWorkOrderNumber(lastWorkOrderNo) {
   const now = new Date();
@@ -3098,7 +3098,7 @@ export const getAllProductionWordOrders = async (req, res) => {
       workOrderId
     } = req.query;
 
-    console.log('----workOrderId',workOrderId)
+    console.log('----workOrderId', workOrderId)
 
     page = Number(page) || 1;
     limit = Number(limit) || 20;
@@ -6187,7 +6187,7 @@ export const saveWorkOrderStage = async (req, res) => {
       // 1️⃣ Find inventory by MPN
       const inventory = await Inventory.findOne({
         mpnId: material.mpnId,
-      });
+      }).populate("mpnId");
 
       if (!inventory) {
         return res.status(400).json({
@@ -6196,11 +6196,23 @@ export const saveWorkOrderStage = async (req, res) => {
         });
       }
 
-      // 2️⃣ Convert picked qty → inventory base UOM
-      const baseAdjustmentQty = await convertQty({
-        qty: pickedQty,
-        fromUomId: material.uomId,       // FT
-      });
+      const masterUomId = inventory.mpnId?.UOM;
+
+      let baseAdjustmentQty;
+
+      try {
+        // 3️⃣ Convert Production UOM → Master UOM
+        baseAdjustmentQty = await convertToInventoryUom({
+          qty: pickedQty,
+          fromUom: material.uomId,   // e.g. FT / MM / IN
+          toUom: masterUomId,       // MPN Base UOM
+        });
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: `UOM conversion failed for ${material.mpn}: ${err.message}`,
+        });
+      }
 
       // 3️⃣ Stock validation
       if (inventory.balanceQuantity < baseAdjustmentQty) {

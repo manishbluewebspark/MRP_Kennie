@@ -10,47 +10,25 @@ export const createCustomer = async (req, res) => {
     const companyName = req?.body?.companyName?.trim();
     const phone = req?.body?.phone?.trim();
 
-    // 🔍 EMAIL duplicate check
-    if (emailLower) {
-      const emailExists = await Customer.findOne({ email: emailLower }).lean();
-      if (emailExists) {
-        return res.status(400).json({
-          success: false,
-          code: "EMAIL_EXISTS",
-          message: "Email already exists.",
-        });
-      }
+    if (!companyName || !emailLower) {
+      return res.status(400).json({
+        success: false,
+        message: "Company name and email are required",
+      });
     }
 
-    // 🔍 COMPANY NAME duplicate check (case-insensitive)
-    if (companyName) {
-      const companyExists = await Customer.findOne({
-        companyName: { $regex: `^${companyName}$`, $options: "i" },
-      }).lean();
+    // 🔎 Check only companyName + email combination
+    const existingCustomer = await Customer.findOne({
+      companyName: { $regex: `^${companyName}$`, $options: "i" },
+      email: emailLower,
+    }).lean();
 
-      if (companyExists) {
-        return res.status(400).json({
-          success: false,
-          code: "COMPANY_EXISTS",
-          message: "Company name already exists.",
-        });
-      }
+    if (existingCustomer) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer Already Exist",
+      });
     }
-
-    // 🔍 PHONE duplicate check
-    if (phone) {
-      const phoneExists = await Customer.findOne({ phone }).lean();
-      if (phoneExists) {
-        return res.status(400).json({
-          success: false,
-          code: "PHONE_EXISTS",
-          message: "Phone number already exists.",
-        });
-      }
-    }
-
-
-
 
     const customer = new Customer({
       ...req.body,
@@ -68,22 +46,43 @@ export const createCustomer = async (req, res) => {
 export const updateCustomer = async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, ...updateData } = req.body;
+    const { email, companyName, ...rest } = req.body;
 
+        const emailLower = email ? normalizeEmail(email) : undefined;
+    const companyTrim = companyName?.trim();
+
+    
     // 1️⃣ Check if customer exists
     const customer = await Customer.findById(id);
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
 
-    // 2️⃣ If email is being updated, check if already used by another customer
-    if (email && email !== customer.email) {
-      const existingEmail = await Customer.findOne({ email });
-      if (existingEmail) {
-        return res.status(400).json({ success: false, message: "Email already in use" });
-      }
-      updateData.email = email; // safely update email if unique
+    // Determine final values (agar update nahi bheja to old value use hoga)
+    const finalEmail = emailLower || customer.email;
+    const finalCompany = companyTrim || customer.companyName;
+
+    // 2️⃣ Check duplicate combination (exclude current document)
+    const existingCustomer = await Customer.findOne({
+      _id: { $ne: id }, // exclude current record
+      companyName: { $regex: `^${finalCompany}$`, $options: "i" },
+      email: finalEmail,
+    }).lean();
+
+    if (existingCustomer) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer Already Exist",
+      });
     }
+
+    // 3️⃣ Prepare update object
+    const updateData = {
+      ...rest,
+      companyName: finalCompany,
+      email: finalEmail,
+    };
+
 
     // 3️⃣ Perform update
     const updatedCustomer = await Customer.findByIdAndUpdate(id, updateData, { new: true });

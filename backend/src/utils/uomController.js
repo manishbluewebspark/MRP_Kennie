@@ -64,3 +64,57 @@ export const convertQty = async ({
 
   return Number((q * factor).toFixed(6)); // 👈 ALWAYS meter
 };
+
+export const convertToInventoryUom = async ({
+  qty,
+  fromUom,     // supplier UOM (FT / M / CM etc)
+  toUom,       // MPN Master UOM
+}) => {
+  console.log('----ccc',qty,
+  fromUom,     // supplier UOM (FT / M / CM etc)
+  toUom,)
+  const quantity = Number(qty);
+  if (!Number.isFinite(quantity) || quantity === 0) return 0;
+
+  // Resolve UOM codes (agar id aa raha ho to resolve karo, warna direct code use ho sakta hai)
+  const fromCode = await resolveUomCode(fromUom);
+  const toCode = await resolveUomCode(toUom);
+
+  if (!fromCode || !toCode) {
+    throw new Error("Invalid UOM");
+  }
+
+  // ✅ Same UOM → no conversion
+  if (fromCode === toCode) {
+    return Number(quantity.toFixed(6));
+  }
+
+  // -------- LENGTH TYPE --------
+  if (isLength(fromCode) && isLength(toCode)) {
+
+    const fromToMeter = LENGTH_TO_METER[fromCode];
+    const toToMeter = LENGTH_TO_METER[toCode];
+
+    if (!fromToMeter || !toToMeter) {
+      throw new Error(`Unsupported length UOM: ${fromCode} or ${toCode}`);
+    }
+
+    // Step 1: Convert → Meter
+    const inMeter = quantity * fromToMeter;
+
+    // Step 2: Meter → Target UOM
+    const finalQty = inMeter / toToMeter;
+
+    return Number(finalQty.toFixed(6));
+  }
+
+  // -------- COUNT TYPE --------
+  if (!isLength(fromCode) && !isLength(toCode)) {
+    return quantity;
+  }
+
+  // -------- Invalid Mix --------
+  throw new Error(
+    `Cannot convert between different UOM types: ${fromCode} → ${toCode}`
+  );
+};

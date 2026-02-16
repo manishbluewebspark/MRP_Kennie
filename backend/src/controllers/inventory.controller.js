@@ -809,7 +809,7 @@ export const getInventoryList = async (req, res) => {
     let pendingPOs = [];
     if (mpnIdsOnList.length) {
       pendingPOs = await PurchaseOrders.find({
-        status: { $in: ["Pending", "Approved", "Partially Received"] },
+        status: { $in: ["Emailed", "Approved","Acknowledged", "Partially Received"] },
         "items.mpn": { $in: mpnIdsOnList },
       })
         .select(

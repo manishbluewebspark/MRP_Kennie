@@ -4,7 +4,7 @@ import MPN from "../models/library/MPN.js";
 import PurchaseOrders from "../models/PurchaseOrders.js";
 import ReceiveMaterial from "../models/ReceiveMaterial.js";
 import UOM from "../models/UOM.js";
-import { convertQty } from "../utils/uomController.js";
+import { convertQty, convertToInventoryUom } from "../utils/uomController.js";
 
 // ============================
 export const createReceiveMaterial = async (req, res) => {
@@ -125,9 +125,10 @@ export const createReceiveMaterial = async (req, res) => {
       const fromUomName = getUomName(fromUomId) || masterUomName;
       const fromUOMId = await MPN.findById(line.mpnId._id)
 
-      const acceptedQtyInMaster = await convertQty({
+      const acceptedQtyInMaster = await convertToInventoryUom({
         qty: acceptedQty,
-        fromUomId: fromUOMId?.UOM,  // should be the ObjectId of the UOM used in line / PO item
+        fromUom: fromUomId,
+        toUom: masterUomId,
       });
       // ---- PO totals update ----
       if (poItem) {
