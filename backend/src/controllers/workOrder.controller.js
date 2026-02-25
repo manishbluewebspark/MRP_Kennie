@@ -6141,162 +6141,345 @@ export const getCompleteWorkOrders = async (req, res) => {
 };
 
 // --------------------- CONTROLLER ---------------------
+// export const saveWorkOrderStage = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { stage, comments, stageQty, pickedQuantities, materials = [] } = req.body;
+
+//     const wo = await WorkOrder.findById(id);
+//     if (!wo)
+//       return res.status(404).json({ success: false, message: "Work order not found" });
+
+//     const processKey = mapStageToProcessKey(stage);
+//     if (!processKey)
+//       return res.status(400).json({ success: false, message: "Invalid stage" });
+
+//     const qty = Number(stageQty || 0);
+//     if (qty <= 0)
+//       return res.status(400).json({ success: false, message: "Invalid stageQty" });
+
+//     const userId = req.user?._id || null;
+
+//     // ---------------- Material Lines ----------------
+//     const materialLines = materials.map((m, index) => ({
+//       itemNumber: m.itemNumber,
+//       costingItemId: m.costingItemId,
+//       drawingId: m.drawingId,
+//       childPartId: m.childPartId,
+//       childPartNo: m.childPartNo,
+//       mpnId: m.mpnId,
+//       mpn: m.mpn,
+//       description: m.description,
+//       uomId: m.uomId,
+//       uom: m.uom,
+//       requiredQty: m.quantity,
+//       pickedQty: Number(pickedQuantities?.[index] || 0),
+//       storageLocation: m.storageLocation,
+//     }));
+
+//     // ---------------- INVENTORY DEDUCTION ----------------
+//     for (let i = 0; i < materials.length; i++) {
+//       const material = materials[i];
+
+//       const pickedQty = Number(pickedQuantities?.[i] || 0);
+//       if (pickedQty <= 0) continue;
+
+//       // 1️⃣ Find inventory by MPN
+//       const inventory = await Inventory.findOne({
+//         mpnId: material.mpnId,
+//       }).populate("mpnId");
+
+//       if (!inventory) {
+//         return res.status(400).json({
+//           success: false,
+//           message: `Inventory not found for MPN ${material.mpn}`,
+//         });
+//       }
+
+//       const masterUomId = inventory.mpnId?.UOM;
+
+//       let baseAdjustmentQty;
+
+//       try {
+//         // 3️⃣ Convert Production UOM → Master UOM
+//         baseAdjustmentQty = await convertToInventoryUom({
+//           qty: pickedQty,
+//           fromUom: material.uomId,   // e.g. FT / MM / IN
+//           toUom: masterUomId,       // MPN Base UOM
+//         });
+//       } catch (err) {
+//         return res.status(400).json({
+//           success: false,
+//           message: `UOM conversion failed for ${material.mpn}: ${err.message}`,
+//         });
+//       }
+
+//       // 3️⃣ Stock validation
+//       if (inventory.balanceQuantity < baseAdjustmentQty) {
+//         return res.status(400).json({
+//           success: false,
+//           message: `Insufficient stock for MPN ${material.mpn}`,
+//         });
+//       }
+
+//       // 4️⃣ Deduct stock
+//       inventory.balanceQuantity -= baseAdjustmentQty;
+//       await inventory.save();
+//     }
+
+
+//     // ---------------- Stage Update Logic ----------------
+//     if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
+
+//     const index = wo.processHistory.findIndex((p) => p.process === processKey);
+//     let entry;
+
+//     if (index !== -1) {
+//       entry = wo.processHistory[index];
+//       entry.qty = Number(entry.qty || 0) + qty;
+//       entry.completedBy = userId;
+//       entry.completedAt = new Date();
+//       entry.comments.push({
+//         comment: comments,
+//         commentedBy: userId,
+//       });
+//       entry.details = {
+//         ...(entry.details || {}),
+//         materials: materialLines,
+//         pickedQuantities,
+//         lastUpdateAt: new Date(),
+//         lastStageQty: qty,
+//       };
+//       wo.processHistory[index] = entry;
+//     } else {
+//       entry = {
+//         process: processKey,
+//         qty,
+//         completedBy: userId,
+//         completedAt: new Date(),
+//         createdAt: new Date(),
+//         notes: comments || "",
+//         details: {
+//           stage,
+//           materials: materialLines,
+//           pickedQuantities,
+//         },
+//       };
+//       wo.processHistory.push(entry);
+//     }
+
+//     // ---------------- Auto-start Next Stage (Picking → Assembly) ----------------
+//     const nextStage = getNextStageForProject(wo, processKey);
+//     if (nextStage) {
+//       const exists = wo.processHistory.some((p) => p.process === nextStage.processKey);
+//       if (!exists) {
+//         wo.processHistory.push({
+//           process: nextStage.processKey,
+//           qty: 0,
+//           completedBy: null,
+//           completedAt: null,
+//           createdAt: new Date(),
+//           notes: `${nextStage.stageLabel} started`,
+//           details: { stage: nextStage.stageLabel, autoStarted: true },
+//         });
+//       }
+//     }
+
+//     // ---------------- UPDATE STATUS ENGINE ----------------
+//     updateWorkOrderStatus(wo);
+
+//     await wo.save();
+
+//     return res.json({
+//       success: true,
+//       message: "Stage updated successfully",
+//       data: wo,
+//     });
+//   } catch (err) {
+//     console.error("Error saving stage:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 export const saveWorkOrderStage = async (req, res) => {
   try {
     const { id } = req.params;
-    const { stage, comments, stageQty, pickedQuantities, materials = [] } = req.body;
+    const { stage, comments, stageQty, pickedQuantities = {}, materials = [] } = req.body;
 
     const wo = await WorkOrder.findById(id);
-    if (!wo)
+    if (!wo) {
       return res.status(404).json({ success: false, message: "Work order not found" });
+    }
 
     const processKey = mapStageToProcessKey(stage);
-    if (!processKey)
+    if (!processKey) {
       return res.status(400).json({ success: false, message: "Invalid stage" });
+    }
 
-    const qty = Number(stageQty || 0);
-    if (qty <= 0)
-      return res.status(400).json({ success: false, message: "Invalid stageQty" });
+    const qty = Number(stageQty);
+    if (!qty || qty <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid quantity" });
+    }
 
-    const userId = req.user?._id || null;
+    const userId = req.user?._id;
 
-    // ---------------- Material Lines ----------------
+    // --------------------------------------------------
+    // 🔎 STAGE VALIDATION
+    // --------------------------------------------------
+
+    const getStageQty = (key) =>
+      wo.processHistory?.find(p => p.process === key)?.qty || 0;
+
+    const pickingDone = getStageQty("PICKING");
+    const assemblyDone = getStageQty("ASSEMBLY");
+    const qcDone = getStageQty("QUALITY_CHECK");
+
+    if (processKey === "PICKING") {
+      if (pickingDone + qty > wo.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: "Picking quantity exceeds work order quantity",
+        });
+      }
+    }
+
+    if (processKey === "ASSEMBLY") {
+      if (assemblyDone + qty > pickingDone) {
+        return res.status(400).json({
+          success: false,
+          message: "Assembly cannot exceed picked quantity",
+        });
+      }
+    }
+
+    if (processKey === "QUALITY_CHECK") {
+      if (qcDone + qty > assemblyDone) {
+        return res.status(400).json({
+          success: false,
+          message: "QC cannot exceed assembly completed",
+        });
+      }
+    }
+
+    if (processKey === "LABELLING") {
+      if (qty !== wo.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: "Labelling must match full work order quantity",
+        });
+      }
+    }
+
+    // --------------------------------------------------
+    // 🧾 MATERIAL LINES
+    // --------------------------------------------------
+
     const materialLines = materials.map((m, index) => ({
       itemNumber: m.itemNumber,
-      costingItemId: m.costingItemId,
-      drawingId: m.drawingId,
-      childPartId: m.childPartId,
-      childPartNo: m.childPartNo,
       mpnId: m.mpnId,
       mpn: m.mpn,
-      description: m.description,
-      uomId: m.uomId,
-      uom: m.uom,
       requiredQty: m.quantity,
-      pickedQty: Number(pickedQuantities?.[index] || 0),
+      pickedQty: Number(pickedQuantities[index] || 0),
+      uomId: m.uomId,
       storageLocation: m.storageLocation,
     }));
 
-    // ---------------- INVENTORY DEDUCTION ----------------
-    for (let i = 0; i < materials.length; i++) {
-      const material = materials[i];
+    // --------------------------------------------------
+    // 📦 INVENTORY DEDUCTION (ONLY PICKING)
+    // --------------------------------------------------
 
-      const pickedQty = Number(pickedQuantities?.[i] || 0);
-      if (pickedQty <= 0) continue;
+    if (processKey === "PICKING") {
+      for (let i = 0; i < materials.length; i++) {
+        const material = materials[i];
+        const pickedQty = Number(pickedQuantities[i] || 0);
+        if (!pickedQty) continue;
 
-      // 1️⃣ Find inventory by MPN
-      const inventory = await Inventory.findOne({
-        mpnId: material.mpnId,
-      }).populate("mpnId");
+        const inventory = await Inventory.findOne({
+          mpnId: material.mpnId,
+        }).populate("mpnId");
 
-      if (!inventory) {
-        return res.status(400).json({
-          success: false,
-          message: `Inventory not found for MPN ${material.mpn}`,
-        });
-      }
+        if (!inventory) {
+          return res.status(400).json({
+            success: false,
+            message: `Inventory not found for ${material.mpn}`,
+          });
+        }
 
-      const masterUomId = inventory.mpnId?.UOM;
-
-      let baseAdjustmentQty;
-
-      try {
-        // 3️⃣ Convert Production UOM → Master UOM
-        baseAdjustmentQty = await convertToInventoryUom({
+        const baseQty = await convertToInventoryUom({
           qty: pickedQty,
-          fromUom: material.uomId,   // e.g. FT / MM / IN
-          toUom: masterUomId,       // MPN Base UOM
+          fromUom: material.uomId,
+          toUom: inventory.mpnId.UOM,
         });
-      } catch (err) {
-        return res.status(400).json({
-          success: false,
-          message: `UOM conversion failed for ${material.mpn}: ${err.message}`,
-        });
-      }
 
-      // 3️⃣ Stock validation
-      if (inventory.balanceQuantity < baseAdjustmentQty) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient stock for MPN ${material.mpn}`,
-        });
-      }
+        if (inventory.balanceQuantity < baseQty) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient stock for ${material.mpn}`,
+          });
+        }
 
-      // 4️⃣ Deduct stock
-      inventory.balanceQuantity -= baseAdjustmentQty;
-      await inventory.save();
+        inventory.balanceQuantity -= baseQty;
+        await inventory.save();
+      }
     }
 
+    // --------------------------------------------------
+    // 🧠 PROCESS HISTORY UPDATE
+    // --------------------------------------------------
 
-    // ---------------- Stage Update Logic ----------------
-    if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
+    if (!Array.isArray(wo.processHistory)) {
+      wo.processHistory = [];
+    }
 
-    const index = wo.processHistory.findIndex((p) => p.process === processKey);
-    let entry;
+    const existing = wo.processHistory.find(p => p.process === processKey);
 
-    if (index !== -1) {
-      entry = wo.processHistory[index];
-      entry.qty = Number(entry.qty || 0) + qty;
-      entry.completedBy = userId;
-      entry.completedAt = new Date();
-      entry.comments.push({
+    if (existing) {
+      existing.qty += qty;
+      existing.completedBy = userId;
+      existing.completedAt = new Date();
+      existing.comments.push({
         comment: comments,
         commentedBy: userId,
       });
-      entry.details = {
-        ...(entry.details || {}),
+      existing.details = {
         materials: materialLines,
         pickedQuantities,
-        lastUpdateAt: new Date(),
         lastStageQty: qty,
       };
-      wo.processHistory[index] = entry;
     } else {
-      entry = {
+      wo.processHistory.push({
         process: processKey,
         qty,
         completedBy: userId,
         completedAt: new Date(),
         createdAt: new Date(),
-        notes: comments || "",
+        comments: [{
+          comment: comments,
+          commentedBy: userId,
+        }],
         details: {
           stage,
           materials: materialLines,
           pickedQuantities,
         },
-      };
-      wo.processHistory.push(entry);
+      });
     }
 
-    // ---------------- Auto-start Next Stage (Picking → Assembly) ----------------
-    const nextStage = getNextStageForProject(wo, processKey);
-    if (nextStage) {
-      const exists = wo.processHistory.some((p) => p.process === nextStage.processKey);
-      if (!exists) {
-        wo.processHistory.push({
-          process: nextStage.processKey,
-          qty: 0,
-          completedBy: null,
-          completedAt: null,
-          createdAt: new Date(),
-          notes: `${nextStage.stageLabel} started`,
-          details: { stage: nextStage.stageLabel, autoStarted: true },
-        });
-      }
-    }
+    // --------------------------------------------------
+    // 📊 STATUS ENGINE
+    // --------------------------------------------------
 
-    // ---------------- UPDATE STATUS ENGINE ----------------
     updateWorkOrderStatus(wo);
 
     await wo.save();
 
     return res.json({
       success: true,
-      message: "Stage updated successfully",
+      message: `${stage} completed successfully`,
       data: wo,
     });
+
   } catch (err) {
-    console.error("Error saving stage:", err);
+    console.error(err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };

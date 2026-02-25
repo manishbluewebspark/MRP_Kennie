@@ -42,15 +42,13 @@ const PickingDetailModal = ({
     materials = [], // agar backend se aayega to yaha pass kar dena
 }) => {
 
-    console.log('-------selectWorkOrderData', selectWorkOrderData)
-
     const normalize = (str = "") =>
         str.toLowerCase().replace(/[\s_]+/g, "");
 
     const processStageData =
         selectWorkOrderData?.processHistory?.find(
             (r) =>
-                normalize(r.process) === normalize(stage)
+                normalize(r.process) === normalize(stage !== "Picking/Assembly" ? stage : "picking_assembly")
         ) || [];
 
 
@@ -219,7 +217,7 @@ const [shortageChecked, setShortageChecked] = useState({});
                     layout: "triple",
                     labels: {
                         left: "Work Order Quantity",
-                        middle: `QC Qty * (Max: ${wo.remainingQcQty ?? workQty} from Assembly completion)`,
+                        middle: `QC Qty * (Max: ${wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)} from Assembly completion)`,
                         right: "Balance Qty",
                     },
                     helpers: {
@@ -307,7 +305,7 @@ const [shortageChecked, setShortageChecked] = useState({});
                     layout: "triple",
                     labels: {
                         left: "Work Order Quantity",
-                        middle: `Assembly Qty * (Max: ${wo.remainingAssemblyQty ?? workQty} remaining)`,
+                        middle: `Assembly Qty * (Max: ${wo.remainingAssemblyQty ?? workQty - (processStageData?.qty || 0)} remaining)`,
                         right: "Balance Qty:",
                     },
                     helpers: {
@@ -636,6 +634,7 @@ const [shortageChecked, setShortageChecked] = useState({});
                             </div>
                         </div>
 
+    {/* mmstageQty */}
                         <div>
                             <Text strong>{stageConfig.labels.right}</Text>
                             <InputNumber
@@ -643,7 +642,7 @@ const [shortageChecked, setShortageChecked] = useState({});
                                 disabled
                                 value={Math.max(
                                     0,
-                                    (wo.remainingQtyAfterStage ?? workQty) - (stageQty || 0)
+                                    (wo.remainingQtyAfterStage ?? workQty) - (processStageData?.qty || 0)
                                 )}
                                 style={{ width: "100%", marginTop: 4 }}
                             />
