@@ -86,46 +86,43 @@ export const STATUS_META = {
 
 // Badge render helper
 export const renderBadge = (status) => {
-    // safety
-    if (!status) return <Tag>No Status</Tag>;
+  if (!status) return <Tag>No Status</Tag>;
 
-    // If status contains "%" → (e.g. “Picking: 50% Done”)
-    if (status.includes("%")) {
-        let color = "blue";
+  const lower = status.toLowerCase();
 
-        if (status.toLowerCase().includes("picking")) color = "blue";
-        if (status.toLowerCase().includes("assembly") || status.toLowerCase().includes("harness"))
-            color = "purple";
-        if (status.toLowerCase().includes("labelling")) color = "orange";
-        if (status.toLowerCase().includes("quality") || status.toLowerCase().includes("qc"))
-            color = "cyan";
+  let color = "default";
 
-        return (
-            <Tag
-                color={color}
-                style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
-            >
-                <LoadingOutlined />
-                {status}
-            </Tag>
-        );
-    }
+  if (lower === "assembly done") {
+    color = "purple";
+  } else if (lower === "cable harness done") {
+    color = "purple";
+  } else if (lower === "labelling done") {
+    color = "orange";
+  } else if (lower === "quality check done") {
+    color = "cyan";
+  } else if (lower === "picking & assembly done") {
+    color = "geekblue";
+  } else if (lower === "picking done") {
+    color = "blue";
+  } else if (lower === "completed") {
+    color = "green";
+  }
 
-    // Static statuses from META
-    const meta = STATUS_META[status] || {
-        color: "default",
-        icon: <LoadingOutlined />,
-    };
-
-    return (
-        <Tag
-            color={meta.color}
-            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
-        >
-            {meta.icon}
-            {status}
-        </Tag>
-    );
+  return (
+    <Tag
+      color={color}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        fontWeight: 500,
+        width: 200,
+      }}
+    >
+      <CheckCircleOutlined />
+      {status}
+    </Tag>
+  );
 };
 
 const renderQyoteTypeBadge = (type) => {

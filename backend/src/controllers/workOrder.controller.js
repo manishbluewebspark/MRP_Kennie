@@ -6300,40 +6300,239 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     return res.status(500).json({ success: false, message: err.message });
 //   }
 // };
+// export const saveWorkOrderStage = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { stage, comments, stageQty, pickedQuantities = {}, materials = [] } = req.body;
+
+//     const wo = await WorkOrder.findById(id);
+//     if (!wo) {
+//       return res.status(404).json({ success: false, message: "Work order not found" });
+//     }
+
+//     const processKey = mapStageToProcessKey(stage);
+//     if (!processKey) {
+//       return res.status(400).json({ success: false, message: "Invalid stage" });
+//     }
+
+//     const qty = Number(stageQty);
+//     if (!qty || qty <= 0) {
+//       return res.status(400).json({ success: false, message: "Invalid quantity" });
+//     }
+
+//     const userId = req.user?._id;
+
+//     // --------------------------------------------------
+//     // 🔎 STAGE VALIDATION
+//     // --------------------------------------------------
+
+//     const getStageQty = (key) =>
+//       wo.processHistory?.find(p => p.process === key)?.qty || 0;
+
+//     const pickingDone = getStageQty("PICKING");
+//     const assemblyDone = getStageQty("ASSEMBLY");
+//     const qcDone = getStageQty("QUALITY_CHECK");
+
+//     if (processKey === "PICKING") {
+//       if (pickingDone + qty > wo.quantity) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Picking quantity exceeds work order quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "ASSEMBLY") {
+//       if (assemblyDone + qty > pickingDone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Assembly cannot exceed picked quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "QUALITY_CHECK") {
+//       if (qcDone + qty > assemblyDone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "QC cannot exceed assembly completed",
+//         });
+//       }
+//     }
+
+//     if (processKey === "LABELLING") {
+//       if (qty !== wo.quantity) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Labelling must match full work order quantity",
+//         });
+//       }
+//     }
+
+//     // --------------------------------------------------
+//     // 🧾 MATERIAL LINES
+//     // --------------------------------------------------
+
+//     const materialLines = materials.map((m, index) => ({
+//       itemNumber: m.itemNumber,
+//       mpnId: m.mpnId,
+//       mpn: m.mpn,
+//       requiredQty: m.quantity,
+//       pickedQty: Number(pickedQuantities[index] || 0),
+//       uomId: m.uomId,
+//       storageLocation: m.storageLocation,
+//     }));
+
+//     // --------------------------------------------------
+//     // 📦 INVENTORY DEDUCTION (ONLY PICKING)
+//     // --------------------------------------------------
+
+//     if (processKey === "PICKING") {
+//       for (let i = 0; i < materials.length; i++) {
+//         const material = materials[i];
+//         const pickedQty = Number(pickedQuantities[i] || 0);
+//         if (!pickedQty) continue;
+
+//         const inventory = await Inventory.findOne({
+//           mpnId: material.mpnId,
+//         }).populate("mpnId");
+
+//         if (!inventory) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Inventory not found for ${material.mpn}`,
+//           });
+//         }
+
+//         const baseQty = await convertToInventoryUom({
+//           qty: pickedQty,
+//           fromUom: material.uomId,
+//           toUom: inventory.mpnId.UOM,
+//         });
+
+//         if (inventory.balanceQuantity < baseQty) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Insufficient stock for ${material.mpn}`,
+//           });
+//         }
+
+//         inventory.balanceQuantity -= baseQty;
+//         await inventory.save();
+//       }
+//     }
+
+//     // --------------------------------------------------
+//     // 🧠 PROCESS HISTORY UPDATE
+//     // --------------------------------------------------
+
+//     if (!Array.isArray(wo.processHistory)) {
+//       wo.processHistory = [];
+//     }
+
+//     const existing = wo.processHistory.find(p => p.process === processKey);
+
+//     if (existing) {
+//       existing.qty += qty;
+//       existing.completedBy = userId;
+//       existing.completedAt = new Date();
+//       existing.comments.push({
+//         comment: comments,
+//         commentedBy: userId,
+//       });
+//       existing.details = {
+//         materials: materialLines,
+//         pickedQuantities,
+//         lastStageQty: qty,
+//       };
+//     } else {
+//       wo.processHistory.push({
+//         process: processKey,
+//         qty,
+//         completedBy: userId,
+//         completedAt: new Date(),
+//         createdAt: new Date(),
+//         comments: [{
+//           comment: comments,
+//           commentedBy: userId,
+//         }],
+//         details: {
+//           stage,
+//           materials: materialLines,
+//           pickedQuantities,
+//         },
+//       });
+//     }
+
+//     // --------------------------------------------------
+//     // 📊 STATUS ENGINE
+//     // --------------------------------------------------
+
+//     updateWorkOrderStatus(wo);
+
+//     await wo.save();
+
+//     return res.json({
+//       success: true,
+//       message: `${stage} completed successfully`,
+//       data: wo,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 export const saveWorkOrderStage = async (req, res) => {
   try {
     const { id } = req.params;
-    const { stage, comments, stageQty, pickedQuantities = {}, materials = [] } = req.body;
+    const {
+      stage,
+      comments,
+      stageQty,
+      pickedQuantities = {},
+      materials = [],
+    } = req.body;
 
     const wo = await WorkOrder.findById(id);
     if (!wo) {
-      return res.status(404).json({ success: false, message: "Work order not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Work order not found",
+      });
     }
 
-    const processKey = mapStageToProcessKey(stage);
+    const processKey = mapStageToProcessKey(stage)?.toLowerCase();
     if (!processKey) {
-      return res.status(400).json({ success: false, message: "Invalid stage" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid stage",
+      });
     }
 
     const qty = Number(stageQty);
     if (!qty || qty <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid quantity" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quantity",
+      });
     }
 
     const userId = req.user?._id;
 
     // --------------------------------------------------
-    // 🔎 STAGE VALIDATION
+    // 🔎 STAGE VALIDATION (LOWERCASE FIXED)
     // --------------------------------------------------
 
     const getStageQty = (key) =>
       wo.processHistory?.find(p => p.process === key)?.qty || 0;
 
-    const pickingDone = getStageQty("PICKING");
-    const assemblyDone = getStageQty("ASSEMBLY");
-    const qcDone = getStageQty("QUALITY_CHECK");
+    const pickingDone = getStageQty("picking");
+    const assemblyDone = getStageQty("assembly");
+    const qcDone = getStageQty("quality_check");
+    const labellingDone = getStageQty("labelling");
 
-    if (processKey === "PICKING") {
+    if (processKey === "picking") {
       if (pickingDone + qty > wo.quantity) {
         return res.status(400).json({
           success: false,
@@ -6342,7 +6541,7 @@ export const saveWorkOrderStage = async (req, res) => {
       }
     }
 
-    if (processKey === "ASSEMBLY") {
+    if (processKey === "assembly") {
       if (assemblyDone + qty > pickingDone) {
         return res.status(400).json({
           success: false,
@@ -6351,7 +6550,7 @@ export const saveWorkOrderStage = async (req, res) => {
       }
     }
 
-    if (processKey === "QUALITY_CHECK") {
+    if (processKey === "quality_check") {
       if (qcDone + qty > assemblyDone) {
         return res.status(400).json({
           success: false,
@@ -6360,34 +6559,20 @@ export const saveWorkOrderStage = async (req, res) => {
       }
     }
 
-    if (processKey === "LABELLING") {
-      if (qty !== wo.quantity) {
+    if (processKey === "labelling") {
+      if (labellingDone + qty > assemblyDone) {
         return res.status(400).json({
           success: false,
-          message: "Labelling must match full work order quantity",
+          message: "Labelling cannot exceed assembly completed",
         });
       }
     }
 
     // --------------------------------------------------
-    // 🧾 MATERIAL LINES
-    // --------------------------------------------------
-
-    const materialLines = materials.map((m, index) => ({
-      itemNumber: m.itemNumber,
-      mpnId: m.mpnId,
-      mpn: m.mpn,
-      requiredQty: m.quantity,
-      pickedQty: Number(pickedQuantities[index] || 0),
-      uomId: m.uomId,
-      storageLocation: m.storageLocation,
-    }));
-
-    // --------------------------------------------------
     // 📦 INVENTORY DEDUCTION (ONLY PICKING)
     // --------------------------------------------------
 
-    if (processKey === "PICKING") {
+    if (processKey === "picking") {
       for (let i = 0; i < materials.length; i++) {
         const material = materials[i];
         const pickedQty = Number(pickedQuantities[i] || 0);
@@ -6430,21 +6615,22 @@ export const saveWorkOrderStage = async (req, res) => {
       wo.processHistory = [];
     }
 
-    const existing = wo.processHistory.find(p => p.process === processKey);
+    let existing = wo.processHistory.find(
+      p => p.process === processKey
+    );
 
     if (existing) {
       existing.qty += qty;
       existing.completedBy = userId;
       existing.completedAt = new Date();
+
+      existing.comments = existing.comments || [];
       existing.comments.push({
         comment: comments,
         commentedBy: userId,
       });
-      existing.details = {
-        materials: materialLines,
-        pickedQuantities,
-        lastStageQty: qty,
-      };
+      existing.details = materials
+
     } else {
       wo.processHistory.push({
         process: processKey,
@@ -6456,11 +6642,7 @@ export const saveWorkOrderStage = async (req, res) => {
           comment: comments,
           commentedBy: userId,
         }],
-        details: {
-          stage,
-          materials: materialLines,
-          pickedQuantities,
-        },
+       details:materials
       });
     }
 
@@ -6474,13 +6656,16 @@ export const saveWorkOrderStage = async (req, res) => {
 
     return res.json({
       success: true,
-      message: `${stage} completed successfully`,
+      message: `${stage} saved successfully`,
       data: wo,
     });
 
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 
@@ -6534,92 +6719,165 @@ const calculateStagePercentages = (wo) => {
 };
 
 // --------------------- UPDATE STATUS ---------------------
+// const updateWorkOrderStatus = (wo) => {
+//   const p = calculateStagePercentages(wo);
+//   const type = wo.projectType;
+
+//   const isComplete = (key) => Number(p[key] || 0) >= 100;
+
+//   // ---------------- REQUIRED STAGES ----------------
+//   let requiredStages = [];
+//   if (type === "other") {
+//     requiredStages = ["picking_assembly", "quality_check"];
+//   } else if (type === "box_build") {
+//     requiredStages = ["picking", "assembly", "quality_check"];
+//   } else {
+//     requiredStages = ["picking", "assembly", "labelling", "quality_check"];
+//   }
+
+//   // ---------------- STATUS LOGIC ----------------
+//   if (type === "other") {
+//     if (!isComplete("picking_assembly")) {
+//       wo.status =
+//         p.picking_assembly === 0
+//           ? "Picking & Assembly Started"
+//           : `Picking & Assembly: ${p.picking_assembly}% Done`;
+//       return;
+//     }
+
+//     if (!isComplete("quality_check")) {
+//       wo.status =
+//         p.quality_check === 0
+//           ? "QC Started"
+//           : `Quality Check: ${p.quality_check}% Done`;
+//       return;
+//     }
+
+//     // ✅ FINAL COMPLETE
+//     wo.status = "Completed";
+//     wo.isProductionComplete = true;
+//     wo.isInProduction = false;
+//     wo.completeDate = new Date();
+//     return;
+//   }
+
+//   // ---------------- PICKING ----------------
+//   if (!isComplete("picking")) {
+//     wo.status =
+//       p.picking === 0 ? "Picking Started" : `Picking: ${p.picking}% Done`;
+//     return;
+//   }
+
+//   // ---------------- ASSEMBLY ----------------
+//   if (!isComplete("assembly")) {
+//     const label = type === "box_build" ? "Assembly" : "Cable Harness";
+//     wo.status =
+//       p.assembly === 0 ? `${label} Started` : `${label}: ${p.assembly}% Done`;
+//     return;
+//   }
+
+//   // ---------------- LABELLING (only cable_harness) ----------------
+//   if (type === "cable_harness") {
+//     if (!isComplete("labelling")) {
+//       wo.status =
+//         p.labelling === 0
+//           ? "Labelling Started"
+//           : `Labelling: ${p.labelling}% Done`;
+//       return;
+//     }
+//   }
+
+//   // ---------------- QUALITY CHECK ----------------
+//   if (!isComplete("quality_check")) {
+//     wo.status =
+//       p.quality_check === 0
+//         ? "QC Started"
+//         : `Quality Check: ${p.quality_check}% Done`;
+//     return;
+//   }
+
+//   // ---------------- FINAL COMPLETE ----------------
+//   const allDone = requiredStages.every(isComplete);
+
+//   if (allDone) {
+//     wo.status = "Completed";
+//     wo.isProductionComplete = true;
+//     wo.isInProduction = false;
+//     wo.completeDate = new Date();
+//   }
+// };
+
 const updateWorkOrderStatus = (wo) => {
-  const p = calculateStagePercentages(wo);
   const type = wo.projectType;
 
-  const isComplete = (key) => Number(p[key] || 0) >= 100;
+  const getStageQty = (key) =>
+    wo.processHistory?.find(p => p.process === key)?.qty || 0;
 
-  // ---------------- REQUIRED STAGES ----------------
-  let requiredStages = [];
+  const totalQty = Number(wo.quantity || 0);
+
+  const formatStageName = (key) => {
+    switch (key) {
+      case "picking":
+        return "Picking";
+      case "assembly":
+        return type === "box_build" ? "Assembly" : "Cable Harness";
+      case "labelling":
+        return "Labelling";
+      case "quality_check":
+        return "Quality Check";
+      case "picking_assembly":
+        return "Picking & Assembly";
+      default:
+        return key;
+    }
+  };
+
+  let stages = [];
+
   if (type === "other") {
-    requiredStages = ["picking_assembly", "quality_check"];
+    stages = ["picking_assembly", "quality_check"];
   } else if (type === "box_build") {
-    requiredStages = ["picking", "assembly", "quality_check"];
+    stages = ["picking", "assembly", "quality_check"];
   } else {
-    requiredStages = ["picking", "assembly", "labelling", "quality_check"];
+    stages = ["picking", "assembly", "labelling", "quality_check"];
   }
 
-  // ---------------- STATUS LOGIC ----------------
-  if (type === "other") {
-    if (!isComplete("picking_assembly")) {
-      wo.status =
-        p.picking_assembly === 0
-          ? "Picking & Assembly Started"
-          : `Picking & Assembly: ${p.picking_assembly}% Done`;
-      return;
+  let lastCompletedStage = null;
+
+  for (let i = 0; i < stages.length; i++) {
+    const key = stages[i];
+    const doneQty = getStageQty(key);
+
+    // Stage complete
+    if (doneQty >= totalQty && totalQty > 0) {
+      lastCompletedStage = key;
+      continue;
     }
 
-    if (!isComplete("quality_check")) {
-      wo.status =
-        p.quality_check === 0
-          ? "QC Started"
-          : `Quality Check: ${p.quality_check}% Done`;
-      return;
+    // Stage not complete
+    break;
+  }
+
+  if (lastCompletedStage) {
+    // Check if all stages complete
+    const allComplete = stages.every(
+      (key) => getStageQty(key) >= totalQty && totalQty > 0
+    );
+
+    if (allComplete) {
+      wo.status = "Completed";
+      wo.isProductionComplete = true;
+      wo.isInProduction = false;
+      wo.completeDate = new Date();
+    } else {
+      wo.status = `${formatStageName(lastCompletedStage)} Done`;
     }
 
-    // ✅ FINAL COMPLETE
-    wo.status = "Completed";
-    wo.isProductionComplete = true;
-    wo.isInProduction = false;
-    wo.completeDate = new Date();
     return;
   }
 
-  // ---------------- PICKING ----------------
-  if (!isComplete("picking")) {
-    wo.status =
-      p.picking === 0 ? "Picking Started" : `Picking: ${p.picking}% Done`;
-    return;
-  }
-
-  // ---------------- ASSEMBLY ----------------
-  if (!isComplete("assembly")) {
-    const label = type === "box_build" ? "Assembly" : "Cable Harness";
-    wo.status =
-      p.assembly === 0 ? `${label} Started` : `${label}: ${p.assembly}% Done`;
-    return;
-  }
-
-  // ---------------- LABELLING (only cable_harness) ----------------
-  if (type === "cable_harness") {
-    if (!isComplete("labelling")) {
-      wo.status =
-        p.labelling === 0
-          ? "Labelling Started"
-          : `Labelling: ${p.labelling}% Done`;
-      return;
-    }
-  }
-
-  // ---------------- QUALITY CHECK ----------------
-  if (!isComplete("quality_check")) {
-    wo.status =
-      p.quality_check === 0
-        ? "QC Started"
-        : `Quality Check: ${p.quality_check}% Done`;
-    return;
-  }
-
-  // ---------------- FINAL COMPLETE ----------------
-  const allDone = requiredStages.every(isComplete);
-
-  if (allDone) {
-    wo.status = "Completed";
-    wo.isProductionComplete = true;
-    wo.isInProduction = false;
-    wo.completeDate = new Date();
-  }
+  // Nothing started
+  wo.status = "Not Started";
 };
 
 

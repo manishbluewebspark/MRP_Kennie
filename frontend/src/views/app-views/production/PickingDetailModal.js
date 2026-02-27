@@ -72,16 +72,64 @@ const PickingDetailModal = ({
     const workQty = Number(wo.quantity || 0);
 
     const [shortageInputs, setShortageInputs] = useState({});
-const [shortageChecked, setShortageChecked] = useState({});
+    const [shortageChecked, setShortageChecked] = useState({});
 
+    // useEffect(() => {
+    //     if (!visible) return; // Run only when modal opened
+    //     form.resetFields();
+    //     setPickedQuantities({});
+    //     setStageQty(null);
+
+    //     const drawingId = getDrawingId(selectWorkOrderData);
+    //     console.log("FINAL DRAWING ID:", drawingId);
+
+    //     if (!drawingId) {
+    //         console.warn("⚠ No drawingId found inside work order");
+    //         return;
+    //     }
+
+    //     WorkOrderService.getAllChilPartByDrawingId({ drawingId })
+    //         .then((res) => {
+    //             console.log("Child Part Response:", res);
+    //             setChildParts(res?.data || []);
+    //         })
+    //         .catch((err) => {
+    //             console.error("Error loading child parts", err);
+    //         });
+    // }, [visible]);   // RUN ONLY WHEN MODAL OPENS
     useEffect(() => {
-        if (!visible) return; // Run only when modal opened
+        if (!visible) return;
+
         form.resetFields();
         setPickedQuantities({});
         setStageQty(null);
+        setShortageChecked({});
+        setShortageInputs({});
 
         const drawingId = getDrawingId(selectWorkOrderData);
         console.log("FINAL DRAWING ID:", drawingId);
+
+        // 🔥 Restore previously saved stage data
+        if (processStageData && processStageData.details?.length > 0) {
+
+            const restoredPicked = {};
+            const restoredShortageChecked = {};
+            const restoredShortageInputs = {};
+
+            processStageData.details.forEach((item) => {
+                restoredPicked[item.key] = item.pickedQty || 0;
+
+                if (item.shortage) {
+                    restoredShortageChecked[item.key] = true;
+                    restoredShortageInputs[item.key] = item.shortageQty || 0;
+                }
+            });
+
+            setPickedQuantities(restoredPicked);
+            setShortageChecked(restoredShortageChecked);
+            setShortageInputs(restoredShortageInputs);
+            setStageQty(processStageData.qty || null);
+        }
 
         if (!drawingId) {
             console.warn("⚠ No drawingId found inside work order");
@@ -96,8 +144,8 @@ const [shortageChecked, setShortageChecked] = useState({});
             .catch((err) => {
                 console.error("Error loading child parts", err);
             });
-    }, [visible]);   // RUN ONLY WHEN MODAL OPENS
 
+    }, [visible]);
 
     const handleShortageToggle = async (checked, record, workOrder) => {
         try {
@@ -140,42 +188,42 @@ const [shortageChecked, setShortageChecked] = useState({});
     };
 
     const handleShortageSave = async (record, workOrder) => {
-  try {
-    const shortageQty = Number(shortageInputs[record.key] || 0);
+        try {
+            const shortageQty = Number(shortageInputs[record.key] || 0);
 
-    if (shortageQty <= 0) {
-      message.warning("Shortage quantity must be greater than 0");
-      return;
-    }
+            if (shortageQty <= 0) {
+                message.warning("Shortage quantity must be greater than 0");
+                return;
+            }
 
-    const payload = {
-      mpnId: record.mpnId,
-      workOrderId: workOrder?.workOrderId,
-      drawingId: workOrder?.drawingId,
-      requiredQty: shortageQty,
-      pickedQty: Number(pickedQuantities[record.key] || 0),
-      needDate: workOrder?.needDate,
-      workOrderNo: workOrder?.workOrderNo,
+            const payload = {
+                mpnId: record.mpnId,
+                workOrderId: workOrder?.workOrderId,
+                drawingId: workOrder?.drawingId,
+                requiredQty: shortageQty,
+                pickedQty: Number(pickedQuantities[record.key] || 0),
+                needDate: workOrder?.needDate,
+                workOrderNo: workOrder?.workOrderNo,
+            };
+
+            const res = await InventoryService.addShortage(payload);
+
+            if (res?.success) {
+                message.success("Shortage saved");
+
+                // lock input after success (optional but recommended)
+                setShortageInputs((prev) => ({
+                    ...prev,
+                    [record.key]: shortageQty,
+                }));
+            } else {
+                message.error(res?.message || "Failed to save shortage");
+            }
+        } catch (err) {
+            console.error(err);
+            message.error("Error saving shortage");
+        }
     };
-
-    const res = await InventoryService.addShortage(payload);
-
-    if (res?.success) {
-      message.success("Shortage saved");
-
-      // lock input after success (optional but recommended)
-      setShortageInputs((prev) => ({
-        ...prev,
-        [record.key]: shortageQty,
-      }));
-    } else {
-      message.error(res?.message || "Failed to save shortage");
-    }
-  } catch (err) {
-    console.error(err);
-    message.error("Error saving shortage");
-  }
-};
 
 
 
@@ -295,7 +343,7 @@ const [shortageChecked, setShortageChecked] = useState({});
                     // ✅ max limit for assembly qty
                     maxQty: Number(wo.remainingAssemblyQty ?? workQty),
                 };
-                case "Picking/Assembly":
+            case "Picking/Assembly":
                 return {
                     // ...base,
                     modalTitle: `Assembly Process - ${wo.projectName || ""}`,
@@ -353,147 +401,124 @@ const [shortageChecked, setShortageChecked] = useState({});
 
     const dataSource = multipliedParts.length ? multipliedParts : dummyData;
 
-    const columns = [
-        { title: "Item", dataIndex: "itemNumber", key: "itemNumber", width: 70 },
-        { title: "Child Part", dataIndex: "ChildPartNo", key: "ChildPartNo", width: 120 },
-        { title: "Description", dataIndex: "description", key: "description", width: 150 },
-        { title: "MPN", dataIndex: "mpn", key: "mpn", width: 100 },
-        { title: "UOM", dataIndex: "uom", key: "uom", width: 80 },
-        { title: "Qty", dataIndex: "quantity", key: "quantity", width: 80 },
-        { title: "Location", dataIndex: "storageLocation", key: "storageLocation", width: 110 },
-        // {
-        //     title: "Picked Qty",
-        //     dataIndex: "pickedQty",
-        //     key: "pickedQty",
-        //     width: 120,
-        //     render: (_, record) => (
-        //         <InputNumber
-        //             min={0}
-        //             // max={record.maxQty}
-        //             placeholder={`Max: ${record.maxQty}`}
-        //             style={{ width: "100%" }}
-        //             value={pickedQuantities[record.key]}
-        //             onChange={(value) =>
-        //                 setPickedQuantities((prev) => ({
-        //                     ...prev,
-        //                     [record.key]: value,
-        //                 }))
-        //             }
-        //         />
-        //     ),
-        // },
+const baseColumns = [
+  { title: "Item", dataIndex: "itemNumber", key: "itemNumber", width: 70 },
+  { title: "Child Part", dataIndex: "ChildPartNo", key: "ChildPartNo", width: 120 },
+  { title: "Description", dataIndex: "description", key: "description", width: 150 },
+  { title: "MPN", dataIndex: "mpn", key: "mpn", width: 100 },
+  { title: "UOM", dataIndex: "uom", key: "uom", width: 80 },
+  { title: "Qty", dataIndex: "quantity", key: "quantity", width: 80 },
+  { title: "Location", dataIndex: "storageLocation", key: "storageLocation", width: 110 },
+];
+
+const pickedColumn =
+  stage?.toLowerCase() === "picking"
+    ? [
         {
-            title: "Picked Qty",
-            dataIndex: "pickedQty",
-            key: "pickedQty",
-            width: 120,
-            render: (_, record) => {
-                // ✅ Only show input in Picking stage
-                if (stage?.toLowerCase() !== "picking") {
-                    return record.pickedQty ?? "-";
-                }
+          title: "Picked Qty",
+          dataIndex: "pickedQty",
+          key: "pickedQty",
+          width: 120,
+          render: (_, record) => (
+            <InputNumber
+              min={0}
+              max={record.maxQty}
+              placeholder={`Max: ${record.maxQty}`}
+              style={{ width: "100%" }}
+              value={pickedQuantities[record.key]}
+              onChange={(value) =>
+                setPickedQuantities((prev) => ({
+                  ...prev,
+                  [record.key]: value,
+                }))
+              }
+            />
+          ),
+        },
+      ]
+    : [];
 
-                return (
-                    <InputNumber
-                        min={0}
-                        max={record.maxQty}
-                        placeholder={`Max: ${(record.maxQty || 0) - (processStageData?.qty || 0) * (record?.quantity || 0)}`}
-                        style={{ width: "100%" }}
-                        value={pickedQuantities[record.key]}
-                        onChange={(value) =>
-                            setPickedQuantities((prev) => ({
-                                ...prev,
-                                [record.key]: value,
-                            }))
-                        }
-                    />
-                );
-            },
-        }
-        ,
-        // {
-        //     title: "Shortage",
-        //     dataIndex: "shortage",
-        //     key: "shortage",
-        //     width: 90,
-        //     render: (_, record) => (
-        //         <Checkbox
-        //             checked={!!record.shortage}
-        //             onChange={(e) => handleShortageToggle(e.target.checked, record, wo)}
-        //         />
-        //     ),
-        // }
+    const shortageColumn =
+  stage?.toLowerCase() !== "picking"
+    ? [
         {
-  title: "Shortage",
-  key: "shortage",
-  width: 160,
-  render: (_, record) => {
-    const isChecked = shortageChecked[record.key];
-    const maxQty = Math.max(
-      Number(record.quantity || 0) -
-      Number(pickedQuantities[record.key] || 0),
-      0
-    );
+          title: "Shortage",
+          key: "shortage",
+          width: 160,
+          render: (_, record) => {
+            const isChecked = shortageChecked[record.key];
 
-    return (
-      <Space>
-        <Checkbox
-          checked={isChecked}
-          onChange={(e) => {
-            const checked = e.target.checked;
+            return (
+              <Space>
+                <Checkbox
+                  checked={isChecked}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
 
-            setShortageChecked((prev) => ({
-              ...prev,
-              [record.key]: checked,
-            }));
+                    setShortageChecked((prev) => ({
+                      ...prev,
+                      [record.key]: checked,
+                    }));
 
-            if (!checked) {
-              // reset input on uncheck
-              setShortageInputs((prev) => {
-                const copy = { ...prev };
-                delete copy[record.key];
-                return copy;
-              });
-            }
-          }}
-        />
+                    if (!checked) {
+                      setShortageInputs((prev) => {
+                        const copy = { ...prev };
+                        delete copy[record.key];
+                        return copy;
+                      });
+                    }
+                  }}
+                />
 
-        {isChecked && (
-          <InputNumber
-            min={0}
-            max={maxQty}
-            placeholder="Qty"
-            size="small"
-            value={shortageInputs[record.key]}
-            onChange={(val) =>
-              setShortageInputs((prev) => ({
-                ...prev,
-                [record.key]: val,
-              }))
-            }
-            onBlur={() =>
-              handleShortageSave(record, wo)
-            }
-            style={{ width: 70 }}
-          />
-        )}
-      </Space>
-    );
-  },
-}
+                {isChecked && (
+                  <InputNumber
+                    min={0}
+                    placeholder="Qty"
+                    size="small"
+                    value={shortageInputs[record.key]}
+                    onChange={(val) =>
+                      setShortageInputs((prev) => ({
+                        ...prev,
+                        [record.key]: val,
+                      }))
+                    }
+                    onBlur={() => handleShortageSave(record, wo)}
+                    style={{ width: 70 }}
+                  />
+                )}
+              </Space>
+            );
+          },
+        },
+      ]
+    : [];
 
-
-    ];
-
+const columns = [...baseColumns, ...pickedColumn, ...shortageColumn];
     // ---------- SAVE ----------
     const handleSave = () => {
+
         form.validateFields().then((values) => {
+            const formattedMaterials = dataSource.map((item) => {
+                const pickedQty = Number(pickedQuantities[item.key] || 0);
+                const isShortage = !!shortageChecked[item.key];
+                const shortageQty = isShortage
+                    ? Number(shortageInputs[item.key] || 0)
+                    : 0;
+
+                return {
+                    ...item,
+                    pickedQty,
+                    shortage: isShortage,
+                    shortageQty,
+                };
+            });
+
             const payload = {
                 stage,
                 comments: values.comments || "",
                 stageQty: stageQty,
                 pickedQuantities,
-                materials: childParts
+                materials: formattedMaterials
             };
 
             console.log("MODAL FINAL OUTPUT:", payload);
@@ -634,7 +659,7 @@ const [shortageChecked, setShortageChecked] = useState({});
                             </div>
                         </div>
 
-    {/* mmstageQty */}
+                        {/* mmstageQty */}
                         <div>
                             <Text strong>{stageConfig.labels.right}</Text>
                             <InputNumber
