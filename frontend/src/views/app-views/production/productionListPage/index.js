@@ -184,17 +184,29 @@ const CableAssemblyCard = ({
 
     const stages = STAGE_CONFIG.map((stage) => {
       const entry = history.find((p) => p.process === stage.key);
-      const doneRaw = Number(entry?.qty || 0);
 
-      const doneQty =
-        qtyRequired > 0 ? Math.min(doneRaw, qtyRequired) : doneRaw;
-      const outstandingQty =
-        qtyRequired > 0 ? Math.max(qtyRequired - doneQty, 0) : 0;
+const doneRaw = Number(entry?.qty || 0);
 
-      let status = "new"; // new | in_progress | completed
-      if (doneQty <= 0) status = "new";
-      else if (doneQty > 0 && doneQty < qtyRequired) status = "in_progress";
-      else if (qtyRequired > 0 && doneQty >= qtyRequired) status = "completed";
+const doneQty =
+  qtyRequired > 0 ? Math.min(doneRaw, qtyRequired) : doneRaw;
+
+const outstandingQty =
+  qtyRequired > 0 ? Math.max(qtyRequired - doneQty, 0) : 0;
+
+// ✅ stage exist check
+const stageStarted = !!entry;
+
+let status = "new";
+
+if (!stageStarted) {
+  status = "new";
+}
+else if (doneQty >= qtyRequired && qtyRequired > 0) {
+  status = "completed";
+}
+else {
+  status = "in_progress";
+}
 
       return {
         ...stage,

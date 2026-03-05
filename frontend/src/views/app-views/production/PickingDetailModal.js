@@ -42,13 +42,15 @@ const PickingDetailModal = ({
     materials = [], // agar backend se aayega to yaha pass kar dena
 }) => {
 
+    console.log('----stage',stage)
+
     const normalize = (str = "") =>
         str.toLowerCase().replace(/[\s_]+/g, "");
 
     const processStageData =
         selectWorkOrderData?.processHistory?.find(
             (r) =>
-                normalize(r.process) === normalize(stage !== "Picking/Assembly" ? stage : "picking_assembly")
+                normalize(r.process) === normalize(stage)
         ) || [];
 
 
@@ -107,7 +109,7 @@ const PickingDetailModal = ({
         setShortageInputs({});
 
         const drawingId = getDrawingId(selectWorkOrderData);
-        console.log("FINAL DRAWING ID:", drawingId);
+        // console.log("FINAL DRAWING ID:", drawingId);
 
         // 🔥 Restore previously saved stage data
         if (processStageData && processStageData.details?.length > 0) {
@@ -138,7 +140,7 @@ const PickingDetailModal = ({
 
         WorkOrderService.getAllChilPartByDrawingId({ drawingId })
             .then((res) => {
-                console.log("Child Part Response:", res);
+                // console.log("Child Part Response:", res);
                 setChildParts(res?.data || []);
             })
             .catch((err) => {
@@ -246,7 +248,7 @@ const PickingDetailModal = ({
                     typeKey: "Cable Harness",
                     layout: "single", // ✅ ONLY ONE QTY FIELD
                     labels: {
-                        single: "Produce Qty * (Must equal Work Order Qty)",
+                        single: `Produce Qty * (Must equal Work Order Qty ${wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)})`,
                     },
                     helpers: {
                         single: " Production quantity must exactly match work order quantity - no more, no less",
@@ -265,7 +267,7 @@ const PickingDetailModal = ({
                     layout: "triple",
                     labels: {
                         left: "Work Order Quantity",
-                        middle: `QC Qty * (Max: ${wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)} from Assembly completion)`,
+                        middle: `QC Qty * (Max: ${workQty - (processStageData?.qty || 0)} from Assembly completion)`,
                         right: "Balance Qty",
                     },
                     helpers: {
@@ -438,9 +440,7 @@ const pickedColumn =
       ]
     : [];
 
-    const shortageColumn =
-  stage?.toLowerCase() !== "picking"
-    ? [
+    const shortageColumn = [
         {
           title: "Shortage",
           key: "shortage",
@@ -491,12 +491,13 @@ const pickedColumn =
           },
         },
       ]
-    : [];
+  
 
 const columns = [...baseColumns, ...pickedColumn, ...shortageColumn];
     // ---------- SAVE ----------
     const handleSave = () => {
 
+    
         form.validateFields().then((values) => {
             const formattedMaterials = dataSource.map((item) => {
                 const pickedQty = Number(pickedQuantities[item.key] || 0);
@@ -521,7 +522,7 @@ const columns = [...baseColumns, ...pickedColumn, ...shortageColumn];
                 materials: formattedMaterials
             };
 
-            console.log("MODAL FINAL OUTPUT:", payload);
+            // console.log("MODAL FINAL OUTPUT:", payload);
             onSave?.(payload); // send to parent
         });
     };

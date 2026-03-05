@@ -2094,18 +2094,37 @@ export const getAllCostingItems = async (req, res) => {
           { path: "currency", select: "name symbol" }, // populate currency type details
         ],
       })
+    .populate({
+    path: "drawingId",
+    select: "drawingNo projectId",
+    populate: {
+      path: "projectId",
+      select: "projectName currency",
+      populate: {
+        path: "currency",
+        select: "symbol"
+      }
+    }})
       // .populate("mpn", "MPN RFQUnitPrice currency")
       .populate('childPart', "ChildPartNo")
       .populate("uom", "code")
       .populate("lastEditedBy", "name")
-      .sort({ itemNumber: 1 });
+      .sort({ itemNumber: 1 }).lean()
+
+
+      const result = items.map(item => ({
+  ...item,
+  drawingId: item.drawingId?._id,
+  currencySymbol: item.drawingId?.projectId?.currency?.symbol
+}));
+
 
     res.json({
       success: true,
       message: "Costing items fetched successfully",
       data: {
         drawing,
-        costingItems: items,
+        costingItems: result,
       },
     });
   } catch (err) {
@@ -5803,7 +5822,7 @@ export const updateLatestPrice = async (req, res) => {
     // -----------------------------
     // 5️⃣ Recalculate Pricing
     // -----------------------------
-    costingItem.unitPrice = incomingUnitPrice;
+    costingItem.unitPrice = convertedUnitPrice;
     costingItem.currency = drawingCurrency;
     costingItem.sourceCurrency = sourceCurrency;
     costingItem.sourcePrice = round2(incomingUnitPrice);
