@@ -53,7 +53,7 @@ const PurchaseOrdersReceivePage = () => {
 
     // 🔹 Modal ka submit (tumhara purana handleReceiveSubmit)
     const handleReceiveSubmit = async (formData) => {
-        console.log('Received Materials Data:', formData);
+        // console.log('Received Materials Data:', formData);
 
         try {
             const response = await ReceiveMaterialService.takeReceiveMaterial(

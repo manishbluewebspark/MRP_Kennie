@@ -42,7 +42,7 @@ const PickingDetailModal = ({
     materials = [], // agar backend se aayega to yaha pass kar dena
 }) => {
 
-    console.log('----stage',stage)
+    // console.log('----stage',stage)
 
     const normalize = (str = "") =>
         str.toLowerCase().replace(/[\s_]+/g, "");
@@ -54,7 +54,7 @@ const PickingDetailModal = ({
         ) || [];
 
 
-    console.log('--------processStageData', processStageData)
+    // console.log('--------processStageData', processStageData)
 
     const getDrawingId = (workOrder) => {
         return (

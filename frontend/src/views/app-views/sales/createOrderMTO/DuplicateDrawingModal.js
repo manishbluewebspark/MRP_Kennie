@@ -14,7 +14,7 @@ const DuplicateDrawingModal = ({ visible, onClose, onDuplicate }) => {
   const handleDuplicate = () => {
     form.validateFields()
       .then(values => {
-        console.log('Duplicate drawing with number:', values.newDrawingNumber);
+        // console.log('Duplicate drawing with number:', values.newDrawingNumber);
         onDuplicate(values.newDrawingNumber);
         handleCancel();
       })

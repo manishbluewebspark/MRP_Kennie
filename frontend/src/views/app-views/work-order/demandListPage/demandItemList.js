@@ -54,7 +54,7 @@ const DemandListItemsPage = () => {
       const res = await DemandListService.getDemandListById(id, {
         search: params.search ?? search,
       });
-      console.log('----res',res)
+      // console.log('----res',res)
 
       setData(res?.items || []);
     } catch (err) {

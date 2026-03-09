@@ -31,8 +31,8 @@ const AddProjectModal = ({
   useEffect(() => {
     if (formData) {
       // Debug logs
-      console.log('Editing project:', formData);
-      console.log('Customer ID to set:', formData.customerId?._id);
+      // console.log('Editing project:', formData);
+      // console.log('Customer ID to set:', formData.customerId?._id);
 
       // Set form values
       form.setFieldsValue({

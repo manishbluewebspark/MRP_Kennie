@@ -240,7 +240,7 @@ const LoginForm = (props) => {
 	};
 
 	const onLogin = (values) => {
-		console.log('✅ onLogin triggered with values:', values);
+		// console.log('✅ onLogin triggered with values:', values);
 		showLoading();
 		signIn(values);
 	};

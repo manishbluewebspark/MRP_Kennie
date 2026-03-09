@@ -607,13 +607,13 @@ export const importMpn = async (req, res) => {
     const workbook = XLSX.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
-    console.log('-----row', rows)
+    // console.log('-----row', rows)
     let results = { inserted: 0, updated: 0, errors: [] };
 
     for (const [index, row] of rows.entries()) {
       try {
         const mappedRow = mapRowToSchemaforMPN(row);
-        console.log('-------mappedRow', mappedRow);
+        // console.log('-------mappedRow', mappedRow);
 
         if (!mappedRow.MPN) {
           results.errors.push({ row: index + 2, error: "Missing MPN" }); // +2 for header row and 1-based index
@@ -663,14 +663,14 @@ export const importMpn = async (req, res) => {
           mappedRow.Category = null;
         }
 
-        console.log('-------purchaseHistory-mappedRow', mappedRow.purchaseHistory);
+        // console.log('-------purchaseHistory-mappedRow', mappedRow.purchaseHistory);
 
         const purchaseHistory = [];
 
         for (let i = 0; i < (mappedRow.purchaseHistory?.length || 0); i++) {
           const poData = mappedRow.purchaseHistory[i];
 
-          console.log('-----poData', poData);
+          // console.log('-----poData', poData);
 
           let supplierId = null;
           let currencyId = null;
@@ -709,7 +709,7 @@ export const importMpn = async (req, res) => {
         // ✅ override mappedRow.purchaseHistory with DB-ready data
         mappedRow.purchaseHistory = purchaseHistory;
 
-        console.log('-------FINAL purchaseHistory', purchaseHistory);
+        // console.log('-------FINAL purchaseHistory', purchaseHistory);
 
 
         const existing = await MPN.findOne({ MPN: mappedRow.MPN });

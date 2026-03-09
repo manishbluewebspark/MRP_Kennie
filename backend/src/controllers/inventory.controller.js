@@ -1147,7 +1147,7 @@ export const getLowStockAlerts = async (req, res) => {
 
     // ✅ 0) Load system thresholds (fallback values)
     const settings = await SystemSettings.findOne({}).lean();
-    console.log('-----settings', settings?.inventoryAlerts)
+    // console.log('-----settings', settings?.inventoryAlerts)
     const criticalWeeksLeft = settings?.inventoryAlerts?.criticalWeeksLeft ?? 2;
     const urgentWeeksLeft = settings?.inventoryAlerts?.urgentWeeksLeft ?? 3;
     const normalWeeksLeft = settings?.inventoryAlerts?.normalWeeksLeft ?? 6;
@@ -1474,7 +1474,7 @@ export const exportExcel = async (req, res) => {
   try {
     const { search = "" } = req.query;
 
-    console.log("Exporting inventory data to Excel...");
+    // console.log("Exporting inventory data to Excel...");
 
     const invFilter = {};
 
@@ -1655,7 +1655,7 @@ export const exportExcel = async (req, res) => {
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
 
-    console.log(`Inventory exported. Total records: ${exportData.length}`);
+    // console.log(`Inventory exported. Total records: ${exportData.length}`);
     return res.send(excelBuffer);
   } catch (error) {
     console.error("Export Excel Error:", error);

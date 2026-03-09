@@ -910,7 +910,7 @@ const filtered = useMemo(() => {
             <List
               dataSource={filtered}
               renderItem={(d) => {
-                console.log('-------d',d)
+                // console.log('-------d',d)
                 const checked = selectedIds.includes(d.id);
                 const qty = safeNumber(qtyMap[d.id], d.baseQty || 1);
                 const price = safeNumber(priceMap[d.id], d.unitPriceDefault || 0);

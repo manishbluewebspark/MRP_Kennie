@@ -4,7 +4,7 @@ import { Modal, Descriptions, Typography, Tag } from 'antd';
 const { Title, Text } = Typography;
 
 const DeliveryOrderInformationModal = ({ visible, onCancel, data }) => {
-  console.log('-----data',data)
+  // console.log('-----data',data)
   return (
     <Modal
       title="Delivery Order Information"

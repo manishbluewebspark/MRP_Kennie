@@ -465,7 +465,7 @@ const DeliveryOrderPage = () => {
     };
 
     const handleExport = async (filter) => {
-        console.log("-------filter", filter);
+        // console.log("-------filter", filter);
 
         try {
             const resp = await WorkOrderService.exportWorkOrders({
@@ -624,7 +624,7 @@ const DeliveryOrderPage = () => {
             produtionSettings: settings
         }
         const res = await SystemSettingsService.addOrUpdateSystemSettings(payload);
-        console.log('------produtionSettings', res)
+        // console.log('------produtionSettings', res)
         if (res.data?.success) {
             dispatch(fetchSystemSettings())
         }
@@ -638,7 +638,7 @@ const DeliveryOrderPage = () => {
 
     const handleQuoteTypeSelect = async (data) => {
         try {
-            console.log("Quote type selected:", data);
+            // console.log("Quote type selected:", data);
             const { type, file } = data;
 
             if (!file) {
@@ -682,7 +682,7 @@ const DeliveryOrderPage = () => {
     };
 
     const handleFilterSubmit = async (filterData) => {
-        console.log("---------filterData", filterData);
+        // console.log("---------filterData", filterData);
 
         // ✅ save filters in state
         setFilters(filterData);

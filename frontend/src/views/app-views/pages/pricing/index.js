@@ -8,7 +8,7 @@ const { useBreakpoint } = Grid;
 const Pricing = () => {
 	const isMobile = !utils.getBreakPoint(useBreakpoint()).includes('lg')
 	const colCount = pricingData.length
-	console.log('isMobile', isMobile)
+	// console.log('isMobile', isMobile)
 	return (
 		<Card>
 			<div className="container">

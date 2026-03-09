@@ -215,9 +215,9 @@ async function runAlertsJob() {
 }
 
 
-    console.log(
-      `[ALERT-CRON] Done. WOs=${workOrders.length}, POs=${purchaseOrders.length}, time=${new Date().toISOString()}`
-    );
+    // console.log(
+    //   `[ALERT-CRON] Done. WOs=${workOrders.length}, POs=${purchaseOrders.length}, time=${new Date().toISOString()}`
+    // );
   } catch (err) {
     console.error("[ALERT-CRON] Error:", err?.message || err);
   }
@@ -235,5 +235,5 @@ export const startAlertsCron = () => {
     timezone: "Asia/Kolkata",
   });
 
-  console.log("[ALERT-CRON] Scheduled: every 3 hours (Asia/Kolkata)");
+  // console.log("[ALERT-CRON] Scheduled: every 3 hours (Asia/Kolkata)");
 };

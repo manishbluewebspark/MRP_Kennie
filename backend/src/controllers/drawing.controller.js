@@ -246,7 +246,7 @@ export const getAllDrawings = async (req, res) => {
       quoteStatus, quoteType, projectId, customerId, drawingDate, drawingRange, showOnlyQuoted
     } = req.query;
 
-    console.log('-------drawingDate', drawingDate)
+    // console.log('-------drawingDate', drawingDate)
 
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
@@ -481,7 +481,7 @@ export const getAllDrawings = async (req, res) => {
       const packingWith = sums.packing * (1 + packingMarkup / 100);
 
       const markupPrice = materialWith + manhourWith + packingWith;
-      console.log('-----markupPrice', markupPrice)
+      // console.log('-----markupPrice', markupPrice)
       return {
         ...d,
         costingSummary: {
@@ -1298,7 +1298,7 @@ export const duplicateDrawing = async (req, res) => {
       });
     }
 
-    console.log("Duplicating drawing:", id, "with new number:", newDrawingNumber);
+    // console.log("Duplicating drawing:", id, "with new number:", newDrawingNumber);
 
     // 1️⃣ Find original drawing
     const originalDrawing = await Drawing.findById(id);
@@ -1364,7 +1364,7 @@ export const duplicateDrawing = async (req, res) => {
     // 5️⃣ Find all costing items of original drawing
     const originalCostingItems = await CostingItems.find({ drawingId: id });
 
-    console.log(`Found ${originalCostingItems.length} costing items to duplicate`);
+    // console.log(`Found ${originalCostingItems.length} costing items to duplicate`);
 
     // 6️⃣ Duplicate all costing items with new drawing ID
     if (originalCostingItems.length > 0) {
@@ -1379,7 +1379,7 @@ export const duplicateDrawing = async (req, res) => {
       });
 
       await CostingItems.insertMany(duplicateCostingItems);
-      console.log(`Duplicated ${duplicateCostingItems.length} costing items`);
+      // console.log(`Duplicated ${duplicateCostingItems.length} costing items`);
     }
 
     // 7️⃣ Send response
@@ -1543,12 +1543,14 @@ export const addCostingItem = async (req, res) => {
     const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
     const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
 
+    // console.log('-----drawingCurrency-----sourceCurrency',drawingCurrency,sourceCurrency)
     // ✅ Convert only when needed
     const salesPriceInDrawingCurrency =
       sourceCurrency === drawingCurrency
         ? round2(incomingPrice)
         : convertCurrency(incomingPrice, sourceCurrency, drawingCurrency, settings, { decimals: 2 });
 
+        // console.log('-----salesPriceInDrawingCurrency',salesPriceInDrawingCurrency)
     // 2) Create item (attach drawingId + converted price)
     const costingData = {
       ...req.body,
@@ -1557,6 +1559,8 @@ export const addCostingItem = async (req, res) => {
       sourceCurrency,                       // store original
       sourcePrice: round2(incomingPrice),   // original amount
       salesPrice: salesPriceInDrawingCurrency, // ✅ converted
+      unitPrice:salesPriceInDrawingCurrency,
+      extPrice:salesPriceInDrawingCurrency
     };
 
     const newItem = await CostingItems.create(costingData);
@@ -1683,7 +1687,7 @@ export const updateCostingItem = async (req, res) => {
       currency: drawingCurrency,                  // store final currency
       sourceCurrency,                             // original currency
       sourcePrice: round2(incomingPrice),         // original amount
-      salesPrice: salesPriceInDrawingCurrency,    // ✅ converted
+      salesPrice: round2(incomingPrice),    // ✅ converted
       lastEditedBy: req.user?._id,
       updatedAt: new Date(),
     };
@@ -2270,7 +2274,7 @@ export const importCostingItems = async (req, res) => {
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }); // defval important
 
 
-    console.log('------rows', rows)
+    // console.log('------rows', rows)
     const lastItem = await CostingItems.findOne({ drawingId, quoteType })
       .sort({ itemNumber: -1 })
       .lean();
@@ -2491,7 +2495,7 @@ export const importCostingItems = async (req, res) => {
           });
 
 
-          console.log('------childPart', childPart)
+          // console.log('------childPart', childPart)
 
 
           if (!childPart || !childPart.mpn) {
@@ -4264,7 +4268,7 @@ export const importDrawings = async (req, res) => {
     // Drawing.currency must be ObjectId (Currency ref)
     const projectCurrencyId = projectData?.currency?._id || null;
     const projectCurrencyCode = normCur(projectData?.currency?.code) || "USD";
-    console.log('------projectCurrencyCode', projectCurrencyCode)
+    // console.log('------projectCurrencyCode', projectCurrencyCode)
     if (!projectCurrencyId) {
       try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({
@@ -4412,7 +4416,7 @@ export const importDrawings = async (req, res) => {
             populate: { path: "currency", select: "code" },
           });
 
-          console.log('------childPart', childPart)
+          // console.log('------childPart', childPart)
 
           if (!childPart) {
             results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "Child Part", value: childParts, message: `Child Part not found in system: ${childParts}` });
@@ -5750,10 +5754,22 @@ export const updateLatestPrice = async (req, res) => {
     // -----------------------------
     // 1️⃣ Load costing item + MPN
     // -----------------------------
-    const costingItem = await CostingItems.findById(id)
-      .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM")
-      .lean(false);
+    // const costingItem = await CostingItems.findById(id)
+    //   .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM")
+    //   .lean(false);
 
+    const costingItem = await CostingItems.findById(id)
+  .populate({
+    path: "mpn",
+    select:
+      "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
+    populate: {
+      path: "currency",
+      select: "code symbol name"
+    }
+  })
+  .lean(false);
+  
     if (!costingItem) {
       return res.status(404).json({ success: false, message: "Costing item not found" });
     }
@@ -5784,6 +5800,8 @@ export const updateLatestPrice = async (req, res) => {
     const drawingCurrency = (drawing.currency?.code || "SGD").toUpperCase();
     const sourceCurrency = (costingItem.mpn.currency?.code || "USD").toUpperCase();
 
+
+    // console.log('------drawingCurrency----sourceCurrency',costingItem)
     // -----------------------------
     // 3️⃣ Get & Convert Unit Price
     // -----------------------------
@@ -5807,6 +5825,8 @@ export const updateLatestPrice = async (req, res) => {
           settings,
           { decimals: 2 }
         );
+
+        // console.log('------convertedUnitPrice',convertedUnitPrice)
 
     // -----------------------------
     // 4️⃣ Sync fields from MPN
@@ -5961,9 +5981,25 @@ export const updateLatestPriceBulk = async (req, res) => {
     };
 
     // Load all items
+    // const items = await CostingItems.find({ _id: { $in: validIds } })
+    //   .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM")
+    //   .lean(false);
+
+    
+
     const items = await CostingItems.find({ _id: { $in: validIds } })
-      .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM")
-      .lean(false);
+  .populate({
+    path: "mpn",
+    select:
+      "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
+    populate: {
+      path: "currency",
+      select: "code symbol name"
+    }
+  })
+  .lean(false);
+
+  // console.log('------items',items)
 
     if (!items.length) {
       return res.status(404).json({ success: false, message: "No costing items found" });
@@ -5995,14 +6031,16 @@ export const updateLatestPriceBulk = async (req, res) => {
           continue;
         }
 
-        const drawing = await Drawing.findById(costingItem?.drawingId);
+        const drawing = await Drawing.findById(costingItem?.drawingId).populate("currency", "code symbol");
         if (!drawing) {
           return res.status(404).json({ success: false, message: "Drawing not found" });
         }
 
+        // console.log('------drawing',drawing)
+
         const drawingCurrency = (drawing.currency?.code || "SGD").toUpperCase();
         const sourceCurrency = (costingItem.mpn.currency?.code || "USD").toUpperCase();
-
+        // console.log('--------drawingCurrency----sourceCurrency',drawingCurrency,sourceCurrency)
 
         const newUnitPrice = toNum(costingItem.mpn.RFQUnitPrice);
         if (!(newUnitPrice > 0)) {
@@ -6020,6 +6058,8 @@ export const updateLatestPriceBulk = async (req, res) => {
               settings,
               { decimals: 2 }
             );
+
+            // console.log('------convertedUnitPrice',convertedUnitPrice)
 
         // sync fields from mpn
         const moq = toNum(costingItem.mpn.MOQ, toNum(costingItem.moq));

@@ -20,7 +20,7 @@ const isLength = (code) => !!LENGTH_TO_METER[norm(code)];
 /* ------------------ RESOLVE UOM CODE ------------------ */
 
 const resolveUomCode = async (uomInput) => {
-  console.log('-----uomInput',uomInput)
+  // console.log('-----uomInput',uomInput)
   if (typeof uomInput === "string" && !mongoose.Types.ObjectId.isValid(uomInput)) {
     return norm(uomInput);
   }
@@ -45,7 +45,7 @@ export const convertQty = async ({
   qty,
   fromUomId,
 }) => {
-   console.log('-----qty',qty, fromUomId)
+  //  console.log('-----qty',qty, fromUomId)
   const q = Number(qty);
   if (!Number.isFinite(q) || q === 0) return 0;
 
@@ -70,9 +70,9 @@ export const convertToInventoryUom = async ({
   fromUom,     // supplier UOM (FT / M / CM etc)
   toUom,       // MPN Master UOM
 }) => {
-  console.log('----ccc',qty,
-  fromUom,     // supplier UOM (FT / M / CM etc)
-  toUom,)
+  // console.log('----ccc',qty,
+  // fromUom,     // supplier UOM (FT / M / CM etc)
+  // toUom,)
   const quantity = Number(qty);
   if (!Number.isFinite(quantity) || quantity === 0) return 0;
 

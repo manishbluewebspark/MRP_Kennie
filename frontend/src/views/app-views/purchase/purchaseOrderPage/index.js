@@ -411,7 +411,7 @@ const PurchaseOrderPage = () => {
                     {/* RIGHT BUTTON */}
                     <div style={{ display: "flex", alignItems: "flex-start" }}>
                         <button
-                            onClick={() => console.log("Receive Goods clicked")}
+                            // onClick={() => console.log("Receive Goods clicked")}
                             style={{
                                 border: "1px solid #F97316",
                                 color: "#F97316",
@@ -960,7 +960,7 @@ const PurchaseShortageCard = ({ record }) => {
 
         const uniqueSuppliers = [...new Set(supplierList)];
 
-        console.log('------uniqueSuppliers', uniqueSuppliers)
+        // console.log('------uniqueSuppliers', uniqueSuppliers)
 
         // if (uniqueSuppliers.length > 1) {
         //     return message.error(
@@ -1077,7 +1077,7 @@ const PurchaseShortageCard = ({ record }) => {
 
     const handleImport = async (file) => {
         try {
-            console.log("Importing file:", file);
+            // console.log("Importing file:", file);
             message.success("Work orders imported successfully");
             fetchWorkOrders();
         } catch (err) {
@@ -1092,7 +1092,7 @@ const PurchaseShortageCard = ({ record }) => {
     }, 500);
 
     const handleFilterSubmit = async (data) => {
-        console.log("----- FILTER SUBMIT DATA -----", data);
+        // console.log("----- FILTER SUBMIT DATA -----", data);
 
         const { supplier, manufacturer } = data;
 

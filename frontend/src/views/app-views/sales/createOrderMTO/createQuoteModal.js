@@ -9,23 +9,23 @@ const CreateSalesQuoteModal = ({ visible, onClose, selectedQuoteType, onCreateQu
   const [form] = Form.useForm();
   const [calculatedValues, setCalculatedValues] = useState({ totalPrice: 0.0, salesPrice: 0 });
 
-  console.log('------projectData', projectData);
-  console.log('------editingRecord', editingRecord);
+  // console.log('------projectData', projectData);
+  // console.log('------editingRecord', editingRecord);
 
 
 
 
   useEffect(() => {
     if (editingRecord && visible) {
-      console.log('Setting form values for edit:', {
-        project: editingRecord.projectId?._id,
-        quantity: editingRecord.qty || 1,
-        unitPrice: editingRecord.costingSummary?.grandTotalWithMarkup,
-        currency: editingRecord.currency,
-        leadTime: editingRecord.costingSummary?.maxLeadTimeFromItems || 0,
-        drawingNumber: editingRecord.drawingNo,
-        description: editingRecord.description,
-      });
+      // console.log('Setting form values for edit:', {
+      //   project: editingRecord.projectId?._id,
+      //   quantity: editingRecord.qty || 1,
+      //   unitPrice: editingRecord.costingSummary?.grandTotalWithMarkup,
+      //   currency: editingRecord.currency,
+      //   leadTime: editingRecord.costingSummary?.maxLeadTimeFromItems || 0,
+      //   drawingNumber: editingRecord.drawingNo,
+      //   description: editingRecord.description,
+      // });
 
       form.setFieldsValue({
         project: editingRecord.projectId?._id,

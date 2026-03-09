@@ -4,7 +4,7 @@ import { Calendar, Select, Radio, Col, Row } from "antd";
 const { Group, Button } = Radio;
 
 function onPanelChange(value, mode) {
-  console.log(value, mode);
+  // console.log(value, mode);
 }
 
 export class CustomizeHeader extends Component {

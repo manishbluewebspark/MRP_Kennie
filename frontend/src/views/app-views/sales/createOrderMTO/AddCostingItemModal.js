@@ -245,7 +245,7 @@ const AddCostingItemModal = ({
 
   // ---------- SKILL LEVEL change (manhour) ----------
   const handleSkillLevelChange = (value, option) => {
-    console.log('-----option',option)
+    // console.log('-----option',option)
     const selectedSkill = option?.data;
     if (!selectedSkill) return;
 
@@ -353,9 +353,9 @@ const AddCostingItemModal = ({
 
     // If material & childPart present, populate dependent fields via handler
     if (selectedQuoteType === 'material' && raw.childPart) {
-      console.log('-------opt', raw.childPart)
+      // console.log('-------opt', raw.childPart)
       const opt = childPartOptions.find(o => o.value === raw.childPart);
-      console.log('-------opt', opt)
+      // console.log('-------opt', opt)
       if (opt) handleChildPartChange(raw.childPart, opt);
       else setChildPartData(null);
       setTimeout(() => recalcMaterial(), 0);

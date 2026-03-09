@@ -122,7 +122,7 @@ const CustomerList = () => {
   const dispatch = useDispatch()
   const { currencies } = useSelector((state) => state.currency);
 
-  console.log('Full Redux Statecurrencies:', currencies);
+  // console.log('Full Redux Statecurrencies:', currencies);
 
 
   const [data, setData] = useState([]);

@@ -371,7 +371,7 @@ const handleDeleteSelected = () => {
     const handleDelete = async (id) => {
         try {
             const res = await LibraryService.deleteMpn(id);
-            console.log("MPN Deleted:", res);
+            // console.log("MPN Deleted:", res);
             fetchMpn({ page, limit, search });
         } catch (err) {
             console.error("Error deleting MPN:", err);

@@ -5,7 +5,7 @@ const { Option } = Select;
 const EditQuoteModal = ({ visible, onCancel, onUpdate, loading = false, initialData,projectData }) => {
     const [form] = Form.useForm();
 
-    console.log('-------initialData',initialData)
+    // console.log('-------initialData',initialData)
     // Set initial values when modal opens or initialData changes
     useEffect(() => {
         if (visible) {

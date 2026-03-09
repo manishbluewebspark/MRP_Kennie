@@ -5,7 +5,7 @@ import { InfoCircleOutlined } from '@ant-design/icons';
 const { Title, Text, Paragraph } = Typography;
 
 const WorkOrderSettingsModal = ({ visible, onCancel, onSave, produtionSettings }) => {
-    console.log('------produtionSettings',produtionSettings)
+    // console.log('------produtionSettings',produtionSettings)
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
 

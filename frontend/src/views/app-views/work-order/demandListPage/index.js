@@ -203,7 +203,7 @@ const handleImport = async (file) => {
               style={{ color: "#1677ff", cursor: "pointer" }}
               onClick={() => {
                 navigate(`/app/work-order/demand-item-list/${record._id}`)
-                console.log("VIEW", record._id);
+                // console.log("VIEW", record._id);
               }}
             />
           </Tooltip>

@@ -107,7 +107,7 @@ const PurchaseHistoryByPeriod = () => {
             };
 
             const response = await PurchaseOrderService.getPurchaseOrdersSummaryByPeriod(summaryParams);
-            console.log('Summary API Response:', response);
+            // console.log('Summary API Response:', response);
 
             if (response?.data?.success) {
                 setSummary(response.data.summary);
@@ -147,7 +147,7 @@ const PurchaseHistoryByPeriod = () => {
         setLoading(true);
         try {
             const response = await PurchaseOrderService.getPurchaseOrdersHistory(params);
-            console.log('History API Response:', response);
+            // console.log('History API Response:', response);
 
             // Handle different response structures safely
             let data = response?.data;

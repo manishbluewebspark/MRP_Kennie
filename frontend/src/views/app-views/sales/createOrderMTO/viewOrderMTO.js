@@ -326,7 +326,7 @@ const DrawingDetails = () => {
             values.extPrice = Number(values.quantity) * Number(values.unitPrice);
         }
 
-        console.log('------values',values)
+        // console.log('------values',values)
 
         if (editingItem) {
             await DrawingService.updateCostingItem(
@@ -377,12 +377,12 @@ const DrawingDetails = () => {
 
     const handleUpdateLatestPrice = async (id) => {
         try {
-            console.log('-----handleUpdateLatestPrice', id);
+            // console.log('-----handleUpdateLatestPrice', id);
 
             // API call to update latest price
             const response = await DrawingService.updateLatestPrice(id);
 
-            console.log('Price updated successfully:', response.data);
+            // console.log('Price updated successfully:', response.data);
             fetchCostingItems();
             getDrawingData();
             // Show success message

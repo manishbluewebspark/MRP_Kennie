@@ -60,7 +60,7 @@ export const uploadDemandExcel = async (req, res) => {
     const workbook = XLSX.readFile(req.file.path);
     const sheetName = workbook.SheetNames[0];
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-     console.log('----rows',rows)
+    //  console.log('----rows',rows)
     if (!rows.length) {
       return res.status(400).json({ message: "Excel is empty" });
     }

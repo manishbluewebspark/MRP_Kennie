@@ -264,7 +264,7 @@ const DeliveryOrderPage = () => {
         })),
       };
 
-      console.log('----payload',payload)
+      // console.log('----payload',payload)
 
       const res = await WorkOrderService.exportWorkOrdersPDF(payload);
 

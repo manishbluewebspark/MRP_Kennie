@@ -380,7 +380,7 @@ const { Text } = Typography;
 const { TextArea } = Input;
 
 const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryItem }) => {
-  console.log('-----inventoryItem', inventoryItem)
+  // console.log('-----inventoryItem', inventoryItem)
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [adjustmentQuantity, setAdjustmentQuantity] = useState(0);

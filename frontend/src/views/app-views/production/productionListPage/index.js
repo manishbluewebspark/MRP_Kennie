@@ -122,7 +122,7 @@ const CableAssemblyCard = ({
   setSelectWorkOrderData,
   setActiveStage,
 }) => {
-  console.log('-----record', record)
+  // console.log('-----record', record)
   const need = formatDate(record?.needDate);
   const commit = formatDate(record?.commitDate);
   const statusColor = statusTagColor(record?.status, record?.isInProduction);
@@ -433,7 +433,7 @@ else {
                 stage.permission
               );
 
-              console.log('-----permissionAllowed', stage.permission, permissionAllowed)
+              // console.log('-----permissionAllowed', stage.permission, permissionAllowed)
 
               const canClick =
                 permissionAllowed &&
@@ -607,7 +607,7 @@ const SkillLevelCostingList = () => {
 
   const { state } = useLocation();
 const workOrderId = state?.workOrderId;
-console.log('------workOrderId',workOrderId)
+// console.log('------workOrderId',workOrderId)
 
 
   // useEffect(() => {
@@ -692,7 +692,7 @@ console.log('------workOrderId',workOrderId)
         limit,
         search
       });
-      console.log("-------complete res", res);
+      // console.log("-------complete res", res);
       setCompleteWorkOrders(res?.data || []);
     } catch (err) {
       message.error("Failed to fetch complete work orders");
@@ -752,7 +752,7 @@ console.log('------workOrderId',workOrderId)
   ];
 
   const handleFilterSubmit = async (filterData) => {
-    console.log("---------filterData", filterData);
+    // console.log("---------filterData", filterData);
 
     setFilters(filterData);
     setFilterVisible(false);
@@ -829,7 +829,7 @@ console.log('------workOrderId',workOrderId)
 
       const res = await WorkOrderService.getAllProductionWorkOrders(payload);
 
-      console.log("-------production res", res);
+      // console.log("-------production res", res);
 
       setAllWordOrders(res?.data || []);
       // if pagination comes from backend, store it too
@@ -851,7 +851,7 @@ console.log('------workOrderId',workOrderId)
         page,
         limit,
       });
-      console.log("-------active res", res);
+      // console.log("-------active res", res);
       setMaterialShortages(res.data || []);
     } catch (err) {
       message.error("Failed to fetch work orders");
@@ -962,7 +962,7 @@ console.log('------workOrderId',workOrderId)
 
   const handleSave = async (data) => {
     try {
-      console.log("Saved data:", data);
+      // console.log("Saved data:", data);
 
       const workOrderId = selectWorkOrderData?.workOrderId;
       if (!workOrderId) {

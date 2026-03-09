@@ -1,78 +1,61 @@
 // utils/currency.js
+
 export const toNum = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
 
-export const round2 = (n) => Math.round((toNum(n) + Number.EPSILON) * 100) / 100;
+export const round2 = (n) =>
+  Math.round((toNum(n) + Number.EPSILON) * 100) / 100;
 
 /**
  * settings.currencySettings expects:
- * exchangeRatesToUSD: { SGD: 0.77, EUR: 1.16, RMB: 0.14 }  // 1 UNIT => USD
- * exchangeRatesToSGD: { USD: 1.3, EUR: 1.5, RMB: 0.18 }   // 1 UNIT => SGD
+ * exchangeRatesToUSD: {
+ *   SGD: 0.77,
+ *   EUR: 1.16,
+ *   RMB: 0.14
+ * }
  *
- * NOTE: We'll handle any pair using USD as bridge if needed.
+ * Meaning:
+ * 1 UNIT of currency = X USD
  */
+
 export const getRate = (from, to, settings) => {
   const cs = settings?.currencySettings || {};
+  const toUSD = cs.exchangeRatesToUSD || {};
+
   const fromCur = (from || "USD").toUpperCase();
   const toCur = (to || "USD").toUpperCase();
 
   if (fromCur === toCur) return 1;
 
-  // normalize maps
-  const toUSD = cs.exchangeRatesToUSD || {}; // 1 FROM => USD
-  const toSGD = cs.exchangeRatesToSGD || {}; // 1 FROM => SGD
+  const getToUSD = (cur) => {
+    if (cur === "USD") return 1;
 
-  // helper: convert 1 unit of currency X to USD
-  const oneToUSD = (cur) => {
-    const c = cur.toUpperCase();
-    if (c === "USD") return 1;
-
-    // if direct exists
-    if (toUSD[c] != null) return toNum(toUSD[c]);
-
-    // if we have toSGD for this currency and also SGD->USD
-    // 1 cur -> SGD (toSGD[cur]) -> USD (toUSD["SGD"])
-    if (toSGD[c] != null && toUSD["SGD"] != null) {
-      return toNum(toSGD[c]) * toNum(toUSD["SGD"]);
+    if (toUSD[cur] != null) {
+      return toNum(toUSD[cur]);
     }
 
-    throw new Error(`Missing exchange rate for ${c} -> USD`);
+    throw new Error(`Missing exchange rate for ${cur} -> USD`);
   };
 
-  // helper: convert 1 USD to currency Y
-  const usdToOne = (cur) => {
-    const c = cur.toUpperCase();
-    if (c === "USD") return 1;
+  const fromToUSD = getToUSD(fromCur);
+  const toToUSD = getToUSD(toCur);
 
-    // if we know 1 unit -> USD, then USD->unit = 1/(unit->USD)
-    if (toUSD[c] != null) return 1 / toNum(toUSD[c]);
-
-    // if we can go USD->SGD and SGD->currency using derived
-    // USD->SGD is exchangeRatesToSGD["USD"]
-    if (toSGD["USD"] != null && oneToUSD(c) != null && toUSD["SGD"] != null) {
-      // easiest is: USD -> currency = 1 / (currency -> USD)
-      return 1 / oneToUSD(c);
-    }
-
-    throw new Error(`Missing exchange rate for USD -> ${c}`);
-  };
-
-  // rate: 1 from -> USD -> to
-  const fromToUSD = oneToUSD(fromCur);
-  const USDToTo = usdToOne(toCur);
-
-  return fromToUSD * USDToTo;
+  // convert using USD bridge
+  return fromToUSD / toToUSD;
 };
 
 export const convertCurrency = (amount, from, to, settings, opts = {}) => {
-  console.log('----------coevyr',amount, from, to, settings, opts = {})
   const n = toNum(amount);
+
   const rate = getRate(from, to, settings);
+
   const converted = n * rate;
 
   const decimals = Number.isFinite(opts.decimals) ? opts.decimals : 2;
+
   const factor = Math.pow(10, decimals);
+
   return Math.round((converted + Number.EPSILON) * factor) / factor;
 };

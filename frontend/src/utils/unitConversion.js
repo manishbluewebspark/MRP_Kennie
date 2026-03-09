@@ -73,7 +73,7 @@ export const toMeter = (qty, fromUom) => {
 ============================ */
 
 export const fromMeter = (meterQty, toUom) => {
-    console.log('----',meterQty,toUom)
+    // console.log('----',meterQty,toUom)
   const unit = normalizeUnit(toUom);
 
   // ✅ PCS / EA → return same value

@@ -8,7 +8,7 @@ const { Option } = Select;
 const AddChildPartModal = ({ visible, onCancel, onSubmit, formData, mpnOptions, categories = [] }) => {
   const [form] = Form.useForm();
   const [category, setCategory] = useState("");
-  console.log('-----formData',formData)
+  // console.log('-----formData',formData)
   // Prefill form for edit
   useEffect(() => {
     if (formData) {
@@ -28,7 +28,7 @@ const AddChildPartModal = ({ visible, onCancel, onSubmit, formData, mpnOptions, 
   // Update category when MPN changes
   const handleMpnChange = (mpnId) => {
     const selectedMpn = mpnOptions.find(m => m.value === mpnId);
-    console.log('------LinkedMPNCategory',selectedMpn)
+    // console.log('------LinkedMPNCategory',selectedMpn)
     if (selectedMpn) {
       setCategory(selectedMpn.category || "");
       form.setFieldsValue({ LinkedMPNCategory: selectedMpn.category || "" });

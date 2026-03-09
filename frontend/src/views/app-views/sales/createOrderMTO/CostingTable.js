@@ -50,7 +50,7 @@ const handleUpdateAllLatestPrice = async () => {
 
 
 const handleShowInfoModal = (record) => {
-  console.log('--------info',record)
+  // console.log('--------info',record)
   setInfoRecord(record);
   setInfoOpen(true);
 };

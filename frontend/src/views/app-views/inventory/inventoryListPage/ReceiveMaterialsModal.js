@@ -237,7 +237,7 @@ const handleSubmit = async () => {
       receiveDate: new Date()
     };
 
-    console.log('Final Submission Data:', JSON.stringify(submissionData, null, 2));
+    // console.log('Final Submission Data:', JSON.stringify(submissionData, null, 2));
 
     if (onSubmit) {
       await onSubmit(submissionData);

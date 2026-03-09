@@ -12,7 +12,7 @@ const connectDB = async () => {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
-    console.log("✅ MongoDB Connected for Seeding");
+    // console.log("✅ MongoDB Connected for Seeding");
   } catch (error) {
     console.error("❌ DB Connection Failed:", error.message);
     process.exit(1);
@@ -88,7 +88,7 @@ const seed = async () => {
     { $setOnInsert: roleData }, // only insert if not exist
     { upsert: true, new: true }
   );
-  console.log(`✅ Role exists or created: ${roleData.name}`);
+  // console.log(`✅ Role exists or created: ${roleData.name}`);
 }
 
 
@@ -169,13 +169,13 @@ if (!adminExists) {
     "settings.uomManagment:create_edit_delete"
   ]
   });
-  console.log("✅ Admin user created: admin@example.com / Admin@123");
+  // console.log("✅ Admin user created: admin@example.com / Admin@123");
 } else {
-  console.log("ℹ️ Admin user already exists");
+  // console.log("ℹ️ Admin user already exists");
 }
 
 
-    console.log("🎉 Seeding completed!");
+    // console.log("🎉 Seeding completed!");
     process.exit(0);
   } catch (error) {
     console.error("❌ Seeding error:", error.message);

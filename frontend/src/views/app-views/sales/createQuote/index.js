@@ -386,7 +386,7 @@ const CreateQuote = () => {
     const { page = 1, limit = 10, ...filters } = params;
     try {
       const res = await QuoteService.getAllQuotes({ page, limit, ...filters });
-      console.log('=====', res)
+      // console.log('=====', res)
       if (res.success) {
         setQuotesData(res.data)
         setPagination(res?.pagination)
@@ -446,7 +446,7 @@ const CreateQuote = () => {
 
       let payload;
       let result;
-      console.log('Updating quote with editingQuote:', editingQuote);
+      // console.log('Updating quote with editingQuote:', editingQuote);
       if (isEditMode) {
         // UPDATE MODE - data is the full updated quote object
         payload = {
@@ -456,9 +456,9 @@ const CreateQuote = () => {
           status: data.status || 'pending',
         };
 
-        console.log('Updating quote with payload:', payload);
+        // console.log('Updating quote with payload:', payload);
         result = await dispatch(updateQuote({ quoteId: payload._id, data: payload })).unwrap();
-        console.log('Quote updated:', result);
+        // console.log('Quote updated:', result);
 
       } else {
         // ADD MODE - data is array of selected drawings
@@ -479,9 +479,9 @@ const CreateQuote = () => {
           status: 'pending',
         };
 
-        console.log('Creating quote with payload:', payload);
+        // console.log('Creating quote with payload:', payload);
         result = await dispatch(createQuote(payload)).unwrap();
-        console.log('Quote created:', result);
+        // console.log('Quote created:', result);
       }
 
       // Common success handling
@@ -510,7 +510,7 @@ const CreateQuote = () => {
 
   const handleUpdateQuote = (updatedQuoteData) => {
     // Your update logic here
-    console.log('Updating quote:', updatedQuoteData);
+    // console.log('Updating quote:', updatedQuoteData);
     // Call your update API
     setIsEditModalOpen(false);
     setEditingQuote(null);
@@ -526,7 +526,7 @@ const CreateQuote = () => {
 
 
   const handleFilterSubmit = async (data) => {
-    console.log('-------filter', data)
+    // console.log('-------filter', data)
   }
 
   const doSearch = useDebounce(async (val) => {
@@ -545,7 +545,7 @@ const CreateQuote = () => {
   }, 400);
 
   const handleEdit = async (record) => {
-    console.log('--------sss', record)
+    // console.log('--------sss', record)
     setEditingQuote(record);
 
     try {
@@ -557,14 +557,14 @@ const CreateQuote = () => {
 
 
   const handleCustomerSelect = async (customer) => {
-    console.log('--------cucc',customer)
+    // console.log('--------cucc',customer)
     setShowAddModal(false);
     setSelectedCustomer(customer);
     setIsQuoteModalOpen(true);
 
     try {
       const res = await DrawingService.getAllDrawings({ customerId: customer._id });
-      console.log('------res',res)
+      // console.log('------res',res)
       setCustomerDrawings(res.data);
     } catch (err) { console.error(err); }
   };

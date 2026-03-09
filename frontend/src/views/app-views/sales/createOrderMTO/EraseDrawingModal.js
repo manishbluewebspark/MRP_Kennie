@@ -18,7 +18,7 @@ const EraseDrawingModal = ({
   };
 
   const handleErase = () => {
-    console.log('Erasing drawing:', drawingName);
+    // console.log('Erasing drawing:', drawingName);
     onErase();
     onClose();
   };

@@ -15,7 +15,7 @@ const AssignProjectModal = ({ visible, onClose, onAssign, projects }) => {
   const handleAssign = () => {
     form.validateFields()
       .then(values => {
-        console.log('Assigned project:', values.project);
+        // console.log('Assigned project:', values.project);
         onAssign(values.project);
         handleCancel();
       })

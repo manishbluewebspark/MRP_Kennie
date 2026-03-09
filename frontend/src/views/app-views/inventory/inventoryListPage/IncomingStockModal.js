@@ -31,7 +31,7 @@ const parseCommittedDate = (raw) => {
 const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
   // Extract the purchaseData array from the inventory item object
   const safePurchaseData = purchaseData?.purchaseData || [];
-  console.log('-----safePurchaseData',purchaseData)
+  // console.log('-----safePurchaseData',purchaseData)
   // If no purchase data, show empty state
   if (safePurchaseData.length === 0) {
     return (

@@ -27,7 +27,7 @@ const GlobalFilterModal = ({
     try {
       setLoading(true);
       const values = await form.validateFields();
-      console.log('----values', values);
+      // console.log('----values', values);
       onSubmit(values); // ✅ Final submit
     } catch (error) {
       console.error('Validation failed:', error);

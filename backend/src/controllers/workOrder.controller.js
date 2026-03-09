@@ -1107,7 +1107,7 @@ export const importWorkOrders = async (req, res) => {
         .json({ success: false, message: "Sheet is empty" });
     }
 
-    console.log("🔍 Sample Row:", rows);
+    // console.log("🔍 Sample Row:", rows);
 
     // ✅ 3) Existing WO numbers (uniqueness)
     const existingWOs = await WorkOrder.find({})
@@ -3098,7 +3098,7 @@ export const getAllProductionWordOrders = async (req, res) => {
       workOrderId
     } = req.query;
 
-    console.log('----workOrderId', workOrderId)
+    // console.log('----workOrderId', workOrderId)
 
     page = Number(page) || 1;
     limit = Number(limit) || 20;

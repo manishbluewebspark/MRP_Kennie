@@ -81,7 +81,7 @@ const PurchaseOrderForm = () => {
   const shortageItems = location.state?.shortageItems || [];
   const shortageSupplierId = location.state?.supplier || null;
 
-  console.log('-------location.state', location?.state);
+  // console.log('-------location.state', location?.state);
 
   const dispatch = useDispatch();
   const [form] = Form.useForm();
@@ -107,7 +107,7 @@ const PurchaseOrderForm = () => {
     (state) => state.systemSettings
   );
 
-  console.log('---workOrderSettings', workOrderSettings)
+  // console.log('---workOrderSettings', workOrderSettings)
   /** ---------- totals as numbers ---------- */
   const calcTotals = () => {
     const sub = orderItems.reduce((sum, it) => {
@@ -291,7 +291,7 @@ const PurchaseOrderForm = () => {
     try {
       const res = await PurchaseOrderService.getLastPurachseOrderNumber();
       if (res?.data) {
-        console.log('Last PO Number:', res.data);
+        // console.log('Last PO Number:', res.data);
         setLastPOOrderNumber([res.data]); // store as array
       }
     } catch (e) {

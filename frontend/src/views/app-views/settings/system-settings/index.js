@@ -36,7 +36,7 @@ const SystemSettings = () => {
   const fetchSettings = async () => {
     try {
       const res = await SystemSettingsService.getSystemSettings();
-      console.log('-------res', res)
+      // console.log('-------res', res)
       if (res.success && res.data) {
         const settings = res.data; // latest settings
         form.setFieldsValue({
@@ -88,7 +88,7 @@ const SystemSettings = () => {
 
   const saveSection = async (values) => {
 
-    console.log('-----values',values)
+    // console.log('-----values',values)
     try {
       setLoading(true);
 

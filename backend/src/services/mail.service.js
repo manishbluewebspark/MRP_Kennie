@@ -23,5 +23,5 @@ export const sendEmail = async (to, subject, template, data) => {
     html,
   });
 
-  console.log(`📩 Email sent to ${to}`);
+  // console.log(`📩 Email sent to ${to}`);
 };

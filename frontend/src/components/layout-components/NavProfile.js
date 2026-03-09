@@ -92,7 +92,7 @@ const items = [
 
 export const NavProfile = ({ mode }) => {
 	const user = useSelector(state => state.auth.user); // auth slice ka user
-	console.log('Logged in user:', user);
+	// console.log('Logged in user:', user);
 
 	return (
 		<Dropdown placement="bottomRight" menu={{ items }} trigger={["click"]}>

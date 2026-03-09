@@ -23,7 +23,7 @@ router.get("/workOrder/getAllChilPartByDrawingId", authenticate, getAllChilPartB
 router.get(
   "/workOrder/totalMPNNeeded",
   (req, res, next) => {
-    console.log("🔥 Route /workOrder/totalMPNNeeded HIT");
+    // console.log("🔥 Route /workOrder/totalMPNNeeded HIT");
     next();
   },
   authenticate,

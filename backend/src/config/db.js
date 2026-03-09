@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 dotenv.config();
 
-console.log("🔍 MONGO_URI from env:", process.env.MONGO_URI); // debug
+// console.log("🔍 MONGO_URI from env:", process.env.MONGO_URI); // debug
 
 const connectDB = async () => {
   try {
