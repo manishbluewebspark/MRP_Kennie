@@ -146,6 +146,7 @@ if (!adminExists) {
     "purchase.purchase_order:edit_delete",
     "purchase.purchase_order:send_mail",
     "purchase.purchase_history:view",
+    "purchase.purchase_order_approval:view",
     "purchase.supplier_managment:view",
     "purchase.supplier_managment:edit_delete_add",
     "purchase.purchase_settings:view",

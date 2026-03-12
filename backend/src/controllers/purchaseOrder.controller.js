@@ -51,52 +51,94 @@ function buildFilter({ year, month, supplier, status }) {
 /**
  * Add Purchase Order
  */
+
 export const addPurchaseOrder = async (req, res) => {
   try {
     const data = req.body || {};
 
-    // --- helpers ------------------------------------------------------------
+    // -------------------- helpers --------------------
     const num = (v, def = 0) => {
       const n = Number(v);
       return Number.isFinite(n) ? n : def;
     };
+
     const isId = (v) => typeof v === "string" && v.trim().length > 0;
 
-    // --- basic payload guards ----------------------------------------------
+    // -------------------- validation --------------------
     if (!Array.isArray(data.items) || data.items.length === 0) {
-      return res.status(400).json({ success: false, error: "At least one item is required." });
-    }
-    if (!isId(data.supplier)) {
-      return res.status(400).json({ success: false, error: "Supplier is required." });
+      return res.status(400).json({
+        success: false,
+        error: "At least one item is required.",
+      });
     }
 
-    // Some clients send freight at root; some send inside totals.
+    if (!isId(data.supplier)) {
+      return res.status(400).json({
+        success: false,
+        error: "Supplier is required.",
+      });
+    }
+
+    // -------------------- freight --------------------
     const freightAmount =
       data.totals && data.totals.freightAmount !== undefined
         ? num(data.totals.freightAmount, 0)
         : num(data.freightAmount, 0);
 
-    // --- normalize + compute line items ------------------------------------
+    // -------------------- inventory lookup --------------------
+    const mpnIds = data.items.map((item) => item.mpn).filter((id) => isId(id));
+
+    const inventories = await Inventory.find({
+      mpnId: { $in: mpnIds },
+    })
+      .populate("mpnId", "moq")
+      .lean();
+
+    // inventory map for fast lookup
+    const inventoryMap = new Map();
+
+    inventories.forEach((inv) => {
+      if (inv.mpnId) {
+        inventoryMap.set(inv.mpnId._id.toString(), inv);
+      }
+    });
+
+    // -------------------- process items --------------------
     let subTotal = 0;
+    let requiresSecondLevelApproval = false;
 
     const items = data.items.map((raw, idx) => {
       const idNumber = (raw.idNumber || "").trim();
       const description = (raw.description || "").trim();
-      const mpn = raw.mpn;           // expected ObjectId string
-      const uom = raw.uom;           // expected ObjectId string
+      const mpn = raw.mpn;
+      const uom = raw.uom;
       const manufacturer = (raw.manufacturer || "").trim();
 
       const qty = num(raw.qty, 0);
       const unitPrice = num(raw.unitPrice, 0);
-      const discount = num(raw.discount ?? raw.discPercentage, 0); // accept either name
-      // extPrice = qty * unitPrice * (1 - discount/100)
+      const discount = num(raw.discount ?? raw.discPercentage, 0);
+
       const extPrice = +(qty * unitPrice * (1 - discount / 100));
 
-      // validate required line fields as per your schema
+      // required field validation
       if (!idNumber || !description || !isId(mpn) || !isId(uom) || qty <= 0) {
         throw new Error(
           `Invalid item at index ${idx}. Required: idNumber, description, mpn(ObjectId), uom(ObjectId), qty>0`
         );
+      }
+
+      // -------------------- inventory check --------------------
+      const inventory = inventoryMap.get(mpn);
+
+      if (inventory) {
+        const balanceQuantity = num(inventory.balanceQuantity);
+        const incomingQuantity = num(inventory.incomingQuantity);
+
+        const allowedQty = balanceQuantity + incomingQuantity;
+
+        if (qty > allowedQty) {
+          requiresSecondLevelApproval = true;
+        }
       }
 
       subTotal += extPrice;
@@ -109,26 +151,24 @@ export const addPurchaseOrder = async (req, res) => {
         uom,
         qty,
         unitPrice,
-        discount,    // schema expects "discount"
-        extPrice,    // schema requires number
+        discount,
+        extPrice,
       };
     });
 
-    // --- compute totals (all NUMBERS) --------------------------------------
-    const ostTax = +(subTotal * 0.09); // 9% OST
+    // -------------------- totals --------------------
+    const ostTax = +(subTotal * 0.09);
     const finalAmount = +(subTotal + freightAmount + ostTax);
 
-    // Build clean totals object with numbers only and expected keys
     const totals = {
       subTotalAmount: subTotal,
       ostTax,
       finalAmount,
-      freightAmount, // keep for reference if your schema stores it here
+      freightAmount,
     };
 
-    // --- create PO ----------------------------------------------------------
+    // -------------------- create purchase order --------------------
     const purchaseOrder = await PurchaseOrders.create({
-      // pass through top-level known fields (sanitize as needed)
       poNumber: data.poNumber,
       poDate: data.poDate,
       referenceNo: data.referenceNo,
@@ -137,28 +177,148 @@ export const addPurchaseOrder = async (req, res) => {
       supplier: data.supplier,
       shipToAddress: data.shipToAddress || "",
       termsConditions: data.termsConditions || "",
-      freightAmount, // if your schema keeps it at root as well
+      freightAmount,
+
+      requiresSecondLevelApproval,
+      status:requiresSecondLevelApproval ? "Pending Approval" : "",
       items,
       totals,
     });
 
-    return res.status(201).json({ success: true, data: purchaseOrder });
+    return res.status(201).json({
+      success: true,
+      data: purchaseOrder,
+    });
   } catch (error) {
-    // ValidationError from our checks
-    if (error.message && /Invalid item|At least one item|Supplier is required/.test(error.message)) {
-      return res.status(400).json({ success: false, error: error.message });
+    if (
+      error.message &&
+      /Invalid item|At least one item|Supplier is required/.test(error.message)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+      });
     }
 
-    // Mongoose validation or other errors
     console.error("addPurchaseOrder error:", error);
-    return res.status(500).json({ success: false, error: error.message || "Internal Server Error" });
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Internal Server Error",
+    });
   }
 };
+
+
+// export const addPurchaseOrder = async (req, res) => {
+//   try {
+//     const data = req.body || {};
+
+//     // --- helpers ------------------------------------------------------------
+//     const num = (v, def = 0) => {
+//       const n = Number(v);
+//       return Number.isFinite(n) ? n : def;
+//     };
+//     const isId = (v) => typeof v === "string" && v.trim().length > 0;
+
+//     // --- basic payload guards ----------------------------------------------
+//     if (!Array.isArray(data.items) || data.items.length === 0) {
+//       return res.status(400).json({ success: false, error: "At least one item is required." });
+//     }
+//     if (!isId(data.supplier)) {
+//       return res.status(400).json({ success: false, error: "Supplier is required." });
+//     }
+
+//     // Some clients send freight at root; some send inside totals.
+//     const freightAmount =
+//       data.totals && data.totals.freightAmount !== undefined
+//         ? num(data.totals.freightAmount, 0)
+//         : num(data.freightAmount, 0);
+
+//     // --- normalize + compute line items ------------------------------------
+//     let subTotal = 0;
+
+//     const items = data.items.map((raw, idx) => {
+//       const idNumber = (raw.idNumber || "").trim();
+//       const description = (raw.description || "").trim();
+//       const mpn = raw.mpn;           // expected ObjectId string
+//       const uom = raw.uom;           // expected ObjectId string
+//       const manufacturer = (raw.manufacturer || "").trim();
+
+//       const qty = num(raw.qty, 0);
+//       const unitPrice = num(raw.unitPrice, 0);
+//       const discount = num(raw.discount ?? raw.discPercentage, 0); // accept either name
+//       // extPrice = qty * unitPrice * (1 - discount/100)
+//       const extPrice = +(qty * unitPrice * (1 - discount / 100));
+
+//       // validate required line fields as per your schema
+//       if (!idNumber || !description || !isId(mpn) || !isId(uom) || qty <= 0) {
+//         throw new Error(
+//           `Invalid item at index ${idx}. Required: idNumber, description, mpn(ObjectId), uom(ObjectId), qty>0`
+//         );
+//       }
+
+//       subTotal += extPrice;
+
+//       return {
+//         idNumber,
+//         description,
+//         mpn,
+//         manufacturer,
+//         uom,
+//         qty,
+//         unitPrice,
+//         discount,    // schema expects "discount"
+//         extPrice,    // schema requires number
+//       };
+//     });
+
+//     // --- compute totals (all NUMBERS) --------------------------------------
+//     const ostTax = +(subTotal * 0.09); // 9% OST
+//     const finalAmount = +(subTotal + freightAmount + ostTax);
+
+//     // Build clean totals object with numbers only and expected keys
+//     const totals = {
+//       subTotalAmount: subTotal,
+//       ostTax,
+//       finalAmount,
+//       freightAmount, // keep for reference if your schema stores it here
+//     };
+
+//     // --- create PO ----------------------------------------------------------
+//     const purchaseOrder = await PurchaseOrders.create({
+//       // pass through top-level known fields (sanitize as needed)
+//       poNumber: data.poNumber,
+//       poDate: data.poDate,
+//       referenceNo: data.referenceNo,
+//       workOrderNo: data.workOrderNo,
+//       needDate: data.needDate,
+//       supplier: data.supplier,
+//       shipToAddress: data.shipToAddress || "",
+//       termsConditions: data.termsConditions || "",
+//       freightAmount, // if your schema keeps it at root as well
+//       items,
+//       totals,
+//     });
+
+//     return res.status(201).json({ success: true, data: purchaseOrder });
+//   } catch (error) {
+//     // ValidationError from our checks
+//     if (error.message && /Invalid item|At least one item|Supplier is required/.test(error.message)) {
+//       return res.status(400).json({ success: false, error: error.message });
+//     }
+
+//     // Mongoose validation or other errors
+//     console.error("addPurchaseOrder error:", error);
+//     return res.status(500).json({ success: false, error: error.message || "Internal Server Error" });
+//   }
+// };
 
 
 /**
  * Update Purchase Order
  */
+
 
 export const updatePurchaseOrder = async (req, res) => {
   try {
@@ -171,23 +331,24 @@ export const updatePurchaseOrder = async (req, res) => {
         .json({ success: false, error: "Missing purchase order ID" });
     }
 
-    // 1️⃣ SPECIAL CASE:
-    // Agar sirf ek item ka committedDate update aaya hai
-    // payload: { idNumber, mpn, committedDate }
+    // --------------------------------------------------
+    // 1️⃣ SPECIAL CASE: committedDate update
+    // --------------------------------------------------
+
     if (
-      !Array.isArray(data.items) &&               // full items update nahi hai
+      !Array.isArray(data.items) &&
       data.idNumber &&
       data.mpn &&
       data.committedDate
     ) {
       const po = await PurchaseOrders.findById(id);
+
       if (!po) {
         return res
           .status(404)
           .json({ success: false, error: "Purchase order not found" });
       }
 
-      // Item find by idNumber + mpn
       const idx = po.items.findIndex(
         (it) =>
           String(it.idNumber) === String(data.idNumber) &&
@@ -201,10 +362,8 @@ export const updatePurchaseOrder = async (req, res) => {
         });
       }
 
-      // ✅ committedDate update
       po.items[idx].committedDate = new Date(data.committedDate);
 
-      // Agar status / koi aur field bhi aai ho to optionally update kar sakte ho:
       if (data.status) {
         po.status = data.status;
       }
@@ -218,16 +377,41 @@ export const updatePurchaseOrder = async (req, res) => {
       });
     }
 
-    // 2️⃣ DEFAULT FLOW (tumhara existing full PO update) – YE WAISA HI RHEGA
+    // --------------------------------------------------
+    // 2️⃣ DEFAULT FULL UPDATE FLOW
+    // --------------------------------------------------
 
-    // helper to force numeric values
     const num = (v, def = 0) => {
       const n = Number(v);
       return Number.isFinite(n) ? n : def;
     };
 
-    // compute extPrice for each item and subtotal
+    const isId = (v) => typeof v === "string" && v.trim().length > 0;
+
+    let requiresSecondLevelApproval = false;
+
+    // --------------------------------------------------
+    // Inventory lookup
+    // --------------------------------------------------
+
+    const mpnIds = (data.items || []).map((i) => i.mpn).filter((id) => isId(id));
+
+    const inventories = await Inventory.find({
+      mpnId: { $in: mpnIds },
+    }).lean();
+
+    const inventoryMap = new Map();
+
+    inventories.forEach((inv) => {
+      inventoryMap.set(String(inv.mpnId), inv);
+    });
+
+    // --------------------------------------------------
+    // Items processing
+    // --------------------------------------------------
+
     let subTotal = 0;
+
     const items = (data.items || []).map((item) => {
       const qty = num(item.qty);
       const unitPrice = num(item.unitPrice);
@@ -235,7 +419,19 @@ export const updatePurchaseOrder = async (req, res) => {
 
       const extPrice = +(qty * unitPrice * (1 - discount / 100));
 
-      // accumulate subtotal
+      const inventory = inventoryMap.get(String(item.mpn));
+
+      if (inventory) {
+        const balanceQuantity = num(inventory.balanceQuantity);
+        const incomingQuantity = num(inventory.incomingQuantity);
+
+        const allowedQty = balanceQuantity + incomingQuantity;
+
+        if (qty > allowedQty) {
+          requiresSecondLevelApproval = true;
+        }
+      }
+
       subTotal += extPrice;
 
       return {
@@ -247,18 +443,28 @@ export const updatePurchaseOrder = async (req, res) => {
       };
     });
 
-    // compute totals
+    // --------------------------------------------------
+    // Totals calculation
+    // --------------------------------------------------
+
     const freightAmount = num(
       data.totals?.freightAmount ?? data.freightAmount
     );
+
     const ostTax = +(subTotal * 0.09);
+
     const finalAmount = +(subTotal + freightAmount + ostTax);
 
-    // perform update
+    // --------------------------------------------------
+    // Update purchase order
+    // --------------------------------------------------
+
     const updated = await PurchaseOrders.findByIdAndUpdate(
       id,
       {
         ...data,
+        requiresSecondLevelApproval,
+        status:requiresSecondLevelApproval ? "Pending Approval" : "",
         items,
         totals: {
           freightAmount,
@@ -276,12 +482,142 @@ export const updatePurchaseOrder = async (req, res) => {
         .json({ success: false, error: "Purchase order not found" });
     }
 
-    res.json({ success: true, data: updated });
+    return res.json({
+      success: true,
+      data: updated,
+    });
   } catch (error) {
     console.error("❌ updatePurchaseOrder error:", error);
-    res.status(500).json({ success: false, error: error.message });
+
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 };
+
+// export const updatePurchaseOrder = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const data = req.body || {};
+
+//     if (!id) {
+//       return res
+//         .status(400)
+//         .json({ success: false, error: "Missing purchase order ID" });
+//     }
+
+//     // 1️⃣ SPECIAL CASE:
+//     // Agar sirf ek item ka committedDate update aaya hai
+//     // payload: { idNumber, mpn, committedDate }
+//     if (
+//       !Array.isArray(data.items) &&               // full items update nahi hai
+//       data.idNumber &&
+//       data.mpn &&
+//       data.committedDate
+//     ) {
+//       const po = await PurchaseOrders.findById(id);
+//       if (!po) {
+//         return res
+//           .status(404)
+//           .json({ success: false, error: "Purchase order not found" });
+//       }
+
+//       // Item find by idNumber + mpn
+//       const idx = po.items.findIndex(
+//         (it) =>
+//           String(it.idNumber) === String(data.idNumber) &&
+//           String(it.mpn) === String(data.mpn)
+//       );
+
+//       if (idx === -1) {
+//         return res.status(404).json({
+//           success: false,
+//           error: "PO item not found for given idNumber + mpn",
+//         });
+//       }
+
+//       // ✅ committedDate update
+//       po.items[idx].committedDate = new Date(data.committedDate);
+
+//       // Agar status / koi aur field bhi aai ho to optionally update kar sakte ho:
+//       if (data.status) {
+//         po.status = data.status;
+//       }
+
+//       await po.save();
+
+//       return res.json({
+//         success: true,
+//         message: "Committed date updated successfully",
+//         data: po,
+//       });
+//     }
+
+//     // 2️⃣ DEFAULT FLOW (tumhara existing full PO update) – YE WAISA HI RHEGA
+
+//     // helper to force numeric values
+//     const num = (v, def = 0) => {
+//       const n = Number(v);
+//       return Number.isFinite(n) ? n : def;
+//     };
+
+//     // compute extPrice for each item and subtotal
+//     let subTotal = 0;
+//     const items = (data.items || []).map((item) => {
+//       const qty = num(item.qty);
+//       const unitPrice = num(item.unitPrice);
+//       const discount = num(item.discount ?? item.discPercentage);
+
+//       const extPrice = +(qty * unitPrice * (1 - discount / 100));
+
+//       // accumulate subtotal
+//       subTotal += extPrice;
+
+//       return {
+//         ...item,
+//         qty,
+//         unitPrice,
+//         discount,
+//         extPrice,
+//       };
+//     });
+
+//     // compute totals
+//     const freightAmount = num(
+//       data.totals?.freightAmount ?? data.freightAmount
+//     );
+//     const ostTax = +(subTotal * 0.09);
+//     const finalAmount = +(subTotal + freightAmount + ostTax);
+
+//     // perform update
+//     const updated = await PurchaseOrders.findByIdAndUpdate(
+//       id,
+//       {
+//         ...data,
+//         items,
+//         totals: {
+//           freightAmount,
+//           subTotalAmount: subTotal,
+//           ostTax,
+//           finalAmount,
+//         },
+//       },
+//       { new: true, runValidators: true }
+//     );
+
+//     if (!updated) {
+//       return res
+//         .status(404)
+//         .json({ success: false, error: "Purchase order not found" });
+//     }
+
+//     res.json({ success: true, data: updated });
+//   } catch (error) {
+//     console.error("❌ updatePurchaseOrder error:", error);
+//     res.status(500).json({ success: false, error: error.message });
+//   }
+// };
 
 // export const updatePurchaseOrder = async (req, res) => {
 //   try {

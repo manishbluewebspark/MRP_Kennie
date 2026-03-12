@@ -66,7 +66,7 @@ const PurchaseOrderPage = () => {
         try {
             const statusFilter =
                 tab === "opening_orders"
-                    ? ["Pending", "Emailed","Acknowledged"]
+                    ? ["Pending", "Emailed","Acknowledged","Rejected"]
                     : tab === "closed_orders"
                         ? "Closed"
                         : undefined;

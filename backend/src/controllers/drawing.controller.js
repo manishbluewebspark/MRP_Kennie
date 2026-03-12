@@ -14,7 +14,7 @@ import SkillLevelCosting from "../models/SkillLevelCosting.js";
 import MarkupParameter from "../models/MarkupParameters.js";
 import SystemSettings from "../models/SystemSettings.js";
 import { convertCurrency } from "../utils/currency.js";
-import { convertToInventoryUom } from "../utils/uomController.js";
+import { convertLengthUnitPrice, convertToInventoryUom } from "../utils/uomController.js";
 
 // 🟢 GET ALL DRAWINGS (with pagination, filters, sorting)
 // export const getAllDrawings = async (req, res) => {
@@ -1538,7 +1538,9 @@ export const addCostingItem = async (req, res) => {
 
     // ✅ Price fields (adjust according to your schema)
     // Example: req.body.salesPrice is coming from UI in USD
-    const incomingPrice = toNum(req.body.salesPrice);
+    const salesPrice = toNum(req.body.salesPrice);
+    const unitPrice = toNum(req.body.unitPrice);
+    const extPrice = toNum(req.body.extPrice);
 
     const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
     const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
@@ -1547,20 +1549,30 @@ export const addCostingItem = async (req, res) => {
     // ✅ Convert only when needed
     const salesPriceInDrawingCurrency =
       sourceCurrency === drawingCurrency
-        ? round2(incomingPrice)
-        : convertCurrency(incomingPrice, sourceCurrency, drawingCurrency, settings, { decimals: 2 });
+        ? round2(salesPrice)
+        : convertCurrency(salesPrice, sourceCurrency, drawingCurrency, settings, { decimals: 2 });
 
-        // console.log('-----salesPriceInDrawingCurrency',salesPriceInDrawingCurrency)
+    const unitPriceInDrawingCurrency =
+      sourceCurrency === drawingCurrency
+        ? round2(unitPrice)
+        : convertCurrency(unitPrice, sourceCurrency, drawingCurrency, settings, { decimals: 2 });
+
+    const extInDrawingCurrency =
+      sourceCurrency === drawingCurrency
+        ? round2(extPrice)
+        : convertCurrency(extPrice, sourceCurrency, drawingCurrency, settings, { decimals: 2 });
+
+    // console.log('-----salesPriceInDrawingCurrency',salesPriceInDrawingCurrency)
     // 2) Create item (attach drawingId + converted price)
     const costingData = {
       ...req.body,
       drawingId,
       currency: drawingCurrency,            // store final currency
       sourceCurrency,                       // store original
-      sourcePrice: round2(incomingPrice),   // original amount
+      sourcePrice: round2(unitPrice),   // original amount
       salesPrice: salesPriceInDrawingCurrency, // ✅ converted
-      unitPrice:salesPriceInDrawingCurrency,
-      extPrice:salesPriceInDrawingCurrency
+      unitPrice: unitPriceInDrawingCurrency,
+      extPrice: extInDrawingCurrency
     };
 
     const newItem = await CostingItems.create(costingData);
@@ -2098,17 +2110,18 @@ export const getAllCostingItems = async (req, res) => {
           { path: "currency", select: "name symbol" }, // populate currency type details
         ],
       })
-    .populate({
-    path: "drawingId",
-    select: "drawingNo projectId",
-    populate: {
-      path: "projectId",
-      select: "projectName currency",
-      populate: {
-        path: "currency",
-        select: "symbol"
-      }
-    }})
+      .populate({
+        path: "drawingId",
+        select: "drawingNo projectId",
+        populate: {
+          path: "projectId",
+          select: "projectName currency",
+          populate: {
+            path: "currency",
+            select: "symbol"
+          }
+        }
+      })
       // .populate("mpn", "MPN RFQUnitPrice currency")
       .populate('childPart', "ChildPartNo")
       .populate("uom", "code")
@@ -2116,11 +2129,11 @@ export const getAllCostingItems = async (req, res) => {
       .sort({ itemNumber: 1 }).lean()
 
 
-      const result = items.map(item => ({
-  ...item,
-  drawingId: item.drawingId?._id,
-  currencySymbol: item.drawingId?.projectId?.currency?.symbol
-}));
+    const result = items.map(item => ({
+      ...item,
+      drawingId: item.drawingId?._id,
+      currencySymbol: item.drawingId?.projectId?.currency?.symbol
+    }));
 
 
     res.json({
@@ -2491,11 +2504,14 @@ export const importCostingItems = async (req, res) => {
             ChildPartNo: childKey,
           }).populate({
             path: "mpn",
-            populate: { path: "currency", select: "code" },
+            populate: [
+              { path: "currency", select: "code" },   // currency ka code
+              { path: "UOM", select: "code" },        // UOM ka code
+            ],
           });
 
 
-          // console.log('------childPart', childPart)
+          console.log('------childPart', childPart)
 
 
           if (!childPart || !childPart.mpn) {
@@ -2527,18 +2543,9 @@ export const importCostingItems = async (req, res) => {
             continue;
           }
 
-          const uomRaw = (row["UOM"] ?? "").toString().trim();
+          const uomRaw = (row["UOM"] ?? "").toString().trim() || childPart?.mpn?.UOM?.code?.trim();
           const uomId = await getUomId(uomRaw);
-          if (!uomId) {
-            errors.push({
-              row: rowNumber,
-              type: "material",
-              field: "UOM",
-              value: uomRaw,
-              message: `UOM not found: ${uomRaw}`,
-            });
-            continue;
-          }
+         
 
           const quantity = toNum(row["Qty"]);
           if (!(quantity > 0)) {
@@ -2577,25 +2584,16 @@ export const importCostingItems = async (req, res) => {
           ).toUpperCase();
 
           // ✅ Convert ONLY if needed
-          const unitPrice =
-            mpnCurrencyCode === drawingCurrencyCode
-              ? round2(unitPriceRaw)
-              : convertCurrency(
-                unitPriceRaw,
-                mpnCurrencyCode,
-                drawingCurrencyCode,
-                settings,
-                { decimals: 2 }
-              );
+         
 
-          let convertedQty;
+          let newPrice;
           let masterUomId = childPart.mpn?.UOM
           try {
-            convertedQty = await convertToInventoryUom({
-              qty: quantity,
-              fromUom: uomId,
-              toUom: masterUomId,
-            });
+            newPrice = await convertLengthUnitPrice(
+              unitPriceRaw,
+               childPart?.mpn?.UOM?.code,
+               uomRaw,
+            );
           } catch (convErr) {
             errors.push({
               row: rowNumber,
@@ -2607,6 +2605,17 @@ export const importCostingItems = async (req, res) => {
             continue;
           }
 
+           const unitPrice =
+            mpnCurrencyCode === drawingCurrencyCode
+              ? round2(newPrice)
+              : convertCurrency(
+                newPrice,
+                mpnCurrencyCode,
+                drawingCurrencyCode,
+                settings,
+                { decimals: 2 }
+              );
+
 
           // ==========================================================
 
@@ -2616,8 +2625,8 @@ export const importCostingItems = async (req, res) => {
           const freightPercent = toNum(row["Freight Cost %"] || 0);
           const fixedFreightCost = toNum(row["Fixed Freight Cost"] || 0);
 
-          const actualQty = round2(convertedQty + (convertedQty * tolerance) / 100);
-          const extPrice = round2(convertedQty * unitPrice);
+          const actualQty = round2(quantity + (quantity * tolerance) / 100);
+          const extPrice = round2(quantity * unitPrice);
           const salesPrice = round2(
             extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) +
             fixedFreightCost
@@ -4411,9 +4420,19 @@ export const importDrawings = async (req, res) => {
         if (childParts) {
           let materialHasError = false;
 
-          const childPart = await Child.findOne({ ChildPartNo: childParts }).populate({
+          // const childPart = await Child.findOne({ ChildPartNo: childParts }).populate({
+          //   path: "mpn",
+          //   populate: { path: "currency", select: "code" },
+          // });
+
+           const childPart = await Child.findOne({
+            ChildPartNo: childParts,
+          }).populate({
             path: "mpn",
-            populate: { path: "currency", select: "code" },
+            populate: [
+              { path: "currency", select: "code" },   // currency ka code
+              { path: "UOM", select: "code" },        // UOM ka code
+            ],
           });
 
           // console.log('------childPart', childPart)
@@ -4456,16 +4475,36 @@ export const importDrawings = async (req, res) => {
             const freightPct = toNum(pick(r, "Freight cost-% (10)", "Freight cost-%", "Freight Cost %"), 0);
             const fixedFreight = toNum(pick(r, "Fixed Freight cost", "Fixed Freight", "Fixed Freight Cost"), 0);
 
+
+             let qtyInMasterUom = toNum(ChildQty);
+            let drawingUomId = uomId;
+            let mpnMasterUomId = childPart?.mpn?.UOM
+            let newPrice;
+            try {
+               newPrice = await convertLengthUnitPrice(
+              unitPriceRaw,
+               childPart?.mpn?.UOM?.code,
+               uomCell,
+            );
+            } catch (convErr) {
+              results.errors.push({
+                row: rowIndex,
+                message: "UOM conversion failed",
+              });
+              continue;
+            }
+
+
             // ✅ Source currency from excel column OR default USD
             // const rowCurrency = normCur(pick(r, "Currency", "CUR", "Row Currency")) || defaultSourceCurrency;
             const rowCurrency = childPart?.mpn?.currency?.code || "USD"
             // ✅ Convert to drawing currency code
-            let unitPrice = unitPriceRaw;
+           let unitPrice = unitPriceRaw;
             try {
               unitPrice =
                 rowCurrency === drawingCurrencyCode
-                  ? roundTo(unitPriceRaw, 2)
-                  : convertCurrency(unitPriceRaw, rowCurrency, drawingCurrencyCode, settings, 2);
+                  ? roundTo(newPrice)
+                  : convertCurrency(newPrice, rowCurrency, drawingCurrencyCode, settings, 2);
             } catch (ce) {
               results.errors.push({
                 drawingNo,
@@ -4478,27 +4517,15 @@ export const importDrawings = async (req, res) => {
               materialHasError = true;
             }
 
-            let qtyInMasterUom = toNum(ChildQty);
-            let drawingUomId = uomId;
-            let mpnMasterUomId = childPart?.mpn?.UOM
-            try {
-              qtyInMasterUom = await convertToInventoryUom({
-                qty: toNum(ChildQty),
-                fromUom: drawingUomId,
-                toUom: mpnMasterUomId,
-              });
-            } catch (convErr) {
-              results.errors.push({
-                row: rowIndex,
-                message: "UOM conversion failed",
-              });
-              continue;
-            }
+           
+
+             
+
 
 
             if (!materialHasError) {
               const quantity = toNum(ChildQty);
-              const extPrice = round2(qtyInMasterUom * unitPrice);
+              const extPrice = round2(quantity * unitPrice);
               const salesPrice = round2(extPrice * (1 + (sgaPct + matBurdenPct + freightPct) / 100) + fixedFreight);
 
               materialItems.push({
@@ -5759,17 +5786,17 @@ export const updateLatestPrice = async (req, res) => {
     //   .lean(false);
 
     const costingItem = await CostingItems.findById(id)
-  .populate({
-    path: "mpn",
-    select:
-      "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
-    populate: {
-      path: "currency",
-      select: "code symbol name"
-    }
-  })
-  .lean(false);
-  
+      .populate({
+        path: "mpn",
+        select:
+          "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
+        populate: {
+          path: "currency",
+          select: "code symbol name"
+        }
+      })
+      .lean(false);
+
     if (!costingItem) {
       return res.status(404).json({ success: false, message: "Costing item not found" });
     }
@@ -5826,7 +5853,7 @@ export const updateLatestPrice = async (req, res) => {
           { decimals: 2 }
         );
 
-        // console.log('------convertedUnitPrice',convertedUnitPrice)
+    // console.log('------convertedUnitPrice',convertedUnitPrice)
 
     // -----------------------------
     // 4️⃣ Sync fields from MPN
@@ -5985,21 +6012,21 @@ export const updateLatestPriceBulk = async (req, res) => {
     //   .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM")
     //   .lean(false);
 
-    
+
 
     const items = await CostingItems.find({ _id: { $in: validIds } })
-  .populate({
-    path: "mpn",
-    select:
-      "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
-    populate: {
-      path: "currency",
-      select: "code symbol name"
-    }
-  })
-  .lean(false);
+      .populate({
+        path: "mpn",
+        select:
+          "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
+        populate: {
+          path: "currency",
+          select: "code symbol name"
+        }
+      })
+      .lean(false);
 
-  // console.log('------items',items)
+    // console.log('------items',items)
 
     if (!items.length) {
       return res.status(404).json({ success: false, message: "No costing items found" });
@@ -6059,7 +6086,7 @@ export const updateLatestPriceBulk = async (req, res) => {
               { decimals: 2 }
             );
 
-            // console.log('------convertedUnitPrice',convertedUnitPrice)
+        // console.log('------convertedUnitPrice',convertedUnitPrice)
 
         // sync fields from mpn
         const moq = toNum(costingItem.mpn.MOQ, toNum(costingItem.moq));

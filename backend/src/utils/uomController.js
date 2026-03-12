@@ -118,3 +118,67 @@ export const convertToInventoryUom = async ({
     `Cannot convert between different UOM types: ${fromCode} → ${toCode}`
   );
 };
+
+
+
+// export const convertLengthUnitPrice = (pricePerMeter, uomCode) => {
+//   if (!uomCode) return pricePerMeter;
+
+//   const code = String(uomCode).toLowerCase();
+
+//   const lengthUnits = ["mm", "cm", "m", "meter", "ft", "inch", "in"];
+
+//   // non length unit bypass
+//   if (!lengthUnits.includes(code)) {
+//     return pricePerMeter;
+//   }
+
+//   switch (code) {
+//     case "mm":
+//       return pricePerMeter / 1000;
+
+//     case "cm":
+//       return pricePerMeter / 100;
+
+//     case "ft":
+//       return pricePerMeter * 0.3048;
+
+//     case "inch":
+//     case "in":
+//       return pricePerMeter * 0.0254;
+
+//     case "m":
+//     case "meter":
+//     default:
+//       return pricePerMeter;
+//   }
+// };
+
+
+export const convertLengthUnitPrice = (price, from, to) => {
+  console.log('------price',price,from,to)
+  // agar price ya unit missing ho, return price
+  if (!price || !from || !to) return price;
+
+  // agar dono unit same hai, price wapas do
+  if (from === to) return price;
+
+  // length conversion map
+  const lengthMap = {
+    M: 1,
+    MM: 1000,
+    CM: 100,
+    FT: 3.28084,
+    INCH: 39.3701,
+    IN: 39.3701
+  };
+
+  // agar koi bhi unit length map me nahi hai, original price wapas do
+  if (!(from in lengthMap) || !(to in lengthMap)) {
+    return price;
+  }
+
+  // convert price
+  const base = price / lengthMap[from];
+  return base * lengthMap[to];
+};

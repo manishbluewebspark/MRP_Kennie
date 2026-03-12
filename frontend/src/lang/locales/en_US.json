@@ -139,6 +139,7 @@
 	"inventory.recieve-material":"Receive Material",
 	"purchase.purchase":"Purchase",
 	"purchase.purchase-order":"Purchase Order",
+	"purchase.purchase-order-approval":"Purchase Order Approval",
 	"purchase.purchase-history":"Purchase History",
 	"purchase.purchase-managment":"Supplier Managment",
 	"purchase.purchase-settings":"Purchase Settings",

@@ -275,6 +275,15 @@ const purchaseNavTree = [{
       permissions: ["purchase.purchase_order:view"],
       submenu: []
     },
+     {
+      key: 'purchase-order-approval',
+      path: `${APP_PREFIX_PATH}/purchase/purchase-order-approval`,
+      title: 'purchase.purchase-order-approval',
+      icon: PlusOutlined,
+      breadcrumb: false,
+      permissions: ["purchase.purchase_order_approval:view"],
+      submenu: []
+    },
     {
       key: 'purchase-history',
       path: `${APP_PREFIX_PATH}/purchase/purchase-history`,

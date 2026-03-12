@@ -127,7 +127,7 @@ const totalCost = basePrice + sgaAmount + freightAmount;
       key: 'quantity',
       width: 80,
       align: 'right',
-      render: (v) => (Number(v || 0)).toFixed(2),
+      render: (v) => Number(v || 0),
     },
     {
       title: 'Unit Price',
@@ -135,7 +135,7 @@ const totalCost = basePrice + sgaAmount + freightAmount;
       key: 'unitPrice',
       width: 110,
       align: 'right',
-      render: (v,record) => `${record?.currencySymbol} ${(Number(v || 0)).toFixed(2)}`,
+      render: (v,record) => `${record?.currencySymbol} ${(Number(v || 0))}`,
     },
     {
       title: 'Latest P. Price',

@@ -121,6 +121,11 @@ export const protectedRoutes = [
         component: React.lazy(() => import('views/app-views/purchase/purchaseOrderPage/index')),
     },
     {
+        key: 'purchase-order-approval',
+        path: `${APP_PREFIX_PATH}/purchase/purchase-order-approval`,
+        component: React.lazy(() => import('views/app-views/purchase/purchaseOrderApprovalPage/index')),
+    },
+    {
         key: 'create-purchase-order',
         path: `${APP_PREFIX_PATH}/purchase/create-purchase-order`,
         component: React.lazy(() => import('views/app-views/purchase/createPurchaseOrder/index')),

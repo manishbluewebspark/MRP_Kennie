@@ -421,7 +421,13 @@ export const getAllChild = async (req, res) => {
 
     const children = await Child.find(query)
       .collation(collation)
-      .populate("mpn")
+      .populate({
+    path: "mpn",
+    populate: {
+      path: "UOM",
+      select: "code"
+    }
+  })
       .populate("LinkedMPNCategory", "name")
       .sort({ createdAt: -1 })
       .skip((safePage - 1) * limitNum)

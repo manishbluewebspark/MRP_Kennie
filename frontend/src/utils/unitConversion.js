@@ -51,6 +51,7 @@ const isCountUnit = (uom) =>
 ============================ */
 
 export const toMeter = (qty, fromUom) => {
+  console.log('----fromUom',qty, fromUom)
   const unit = normalizeUnit(fromUom);
 
   // ✅ PCS / EA → return same value
@@ -73,7 +74,7 @@ export const toMeter = (qty, fromUom) => {
 ============================ */
 
 export const fromMeter = (meterQty, toUom) => {
-    // console.log('----',meterQty,toUom)
+    console.log('----',meterQty,toUom)
   const unit = normalizeUnit(toUom);
 
   // ✅ PCS / EA → return same value
@@ -97,3 +98,20 @@ export const fromMeter = (meterQty, toUom) => {
 
 export const formatQty = (qty, decimals = 2) =>
   Number(qty).toFixed(decimals);
+
+
+export const categorizeUOMs = (allUOMs, selectedCode) => {
+  if(!selectedCode) return allUOMs
+  const lengthUnits = ["M", "MM", "CM", "KM", "FT", "IN", "INCH", "YD"];
+  const pieceUnits = ["PCS", "PC", "PK", "LOT", "EA"];
+  const timeUnits = ["DAY", "HR", "MIN"];
+
+  let category = [];
+
+  if (lengthUnits.includes(selectedCode)) category = lengthUnits;
+  else if (pieceUnits.includes(selectedCode)) category = pieceUnits;
+  else if (timeUnits.includes(selectedCode)) category = timeUnits;
+  else category = []; // agar unknown type
+
+  return allUOMs.filter(uom => category.includes(uom.code));
+};

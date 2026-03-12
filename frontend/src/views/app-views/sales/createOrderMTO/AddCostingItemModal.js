@@ -9,10 +9,40 @@ import SkillLevelCostingService from 'services/SkillLevelCostingService';
 import dayjs from 'dayjs';
 import moment from 'moment';
 import useDebounce from 'utils/debouce';
+import { categorizeUOMs } from 'utils/unitConversion';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
+
+
+export const convertLengthUnitPrice = (price, from, to) => {
+  // agar price ya unit missing ho, return price
+  if (!price || !from || !to) return price;
+
+  // agar dono unit same hai, price wapas do
+  if (from === to) return price;
+
+  // length conversion map
+  const lengthMap = {
+    M: 1,
+    MM: 1000,
+    CM: 100,
+    FT: 3.28084,
+    INCH: 39.3701,
+    IN: 39.3701
+  };
+
+  // agar koi bhi unit length map me nahi hai, original price wapas do
+  if (!(from in lengthMap) || !(to in lengthMap)) {
+    return price;
+  }
+
+  // convert price
+  const base = price / lengthMap[from];
+  return base * lengthMap[to];
+};
+
 
 const AddCostingItemModal = ({
   visible,
@@ -35,7 +65,12 @@ const AddCostingItemModal = ({
   const [childOpen, setChildOpen] = useState(false);
   const [skillLevelOptions, setSkillLevelOptions] = useState([]); // [{value, label, data}]
   const [loadingSkill, setLoadingSkill] = useState(false);
+  const [baseUom, setBaseUom] = useState(null);
+  const [packingUOM, setPackingUOM] = useState(null)
 
+
+  
+ 
   // ---------- helpers ----------
   const S = (v) => (v === null || v === undefined ? '' : String(v));
   const N = (v) => {
@@ -133,6 +168,7 @@ const AddCostingItemModal = ({
   // ---------- auto-calc: MATERIAL ----------
   const recalcMaterial = useCallback(() => {
     const quantity = N(form.getFieldValue('quantity'));
+    const uom = N(form.getFieldValue('uom'));
     const tolerance = N(form.getFieldValue('tolerance'));
     const unitPrice = N(form.getFieldValue('unitPrice'));
 
@@ -148,6 +184,7 @@ const AddCostingItemModal = ({
     const salesPrice = extPrice + (extPrice * pct) + fixedFreight;
 
     form.setFieldsValue({
+      tolerance: tolerance,
       actualQty: Number.isFinite(actualQty) ? Number(actualQty.toFixed(4)) : 0,
       extPrice: Number.isFinite(extPrice) ? Number(extPrice.toFixed(4)) : 0,
       salesPrice: Number.isFinite(salesPrice) ? Number(salesPrice.toFixed(4)) : 0
@@ -224,13 +261,18 @@ const AddCostingItemModal = ({
 
     if (selected) {
       const unitPrice = Number(selected?.mpn?.RFQUnitPrice || 0);
+      const mpnUom = selected?.mpn?.UOM?.code;
+
+      setBaseUom(mpnUom);
 
       form.setFieldsValue({
+        baseunitPrice:unitPrice,
+        uom: mpnUom,
         childPart: value,                 // 👈 object, not id
         description: selected?.mpn?.Description || "",
         mpn: selected?.mpn?._id || "",
         manufacturer: selected?.mpn?.Manufacturer || "",
-        uom: selected?.mpn?.UOM,
+        uom: selected?.mpn?.UOM?._id,
         unitPrice,
         moq: selected?.mpn?.MOQ || 0,
         supplier: selected?.mpn?.Supplier || "",
@@ -279,17 +321,37 @@ const AddCostingItemModal = ({
   //   });
   // };
 
+  const handleUomChange = (uomId) => {
+
+    const selectedUom = uoms.find(u => u._id === uomId);
+
+    const currentPrice = Number(form.getFieldValue("baseunitPrice"));
+
+    const from = baseUom;
+    const to = selectedUom?.code;
+
+    const newPrice = convertLengthUnitPrice(currentPrice, from, to);
+
+    form.setFieldsValue({
+      unitPrice: Number(newPrice.toFixed(6))
+    });
+
+    setTimeout(recalcMaterial, 0);
+  };
+
   const handleMpnChange = (mpnId) => {
     const selected = mpnList.find((m) => String(m._id) === String(mpnId));
     if (!selected) return;
 
+    console.log('-------selected',selected)
+    setPackingUOM(selected?.UOM?.code)
     const uomId =
       selected?.UOM?._id ||
       selected?.UOM ||               // if already id
       form.getFieldValue("uom");
-
+   
     const unitPrice = Number(selected?.RFQUnitPrice || 0);
-
+   
     // quantity agar blank ho to 1 set kar do
     const qty = Number(form.getFieldValue("quantity") || 1);
 
@@ -484,7 +546,7 @@ const AddCostingItemModal = ({
       {childPartData && (
         <div style={{ marginBottom: 16, padding: 8, backgroundColor: '#f0f9ff', border: '1px solid #91d5ff', borderRadius: 4 }}>
           <Text type="success" style={{ fontSize: 12 }}>
-            ✓ Loaded: {childPartData.mpn?.Description} | MPN: {childPartData.mpn?.MPN} | Manufacturer: {childPartData.mpn?.Manufacturer} | UOM: {childPartData.mpn?.UOM} | Price: ${childPartData.mpn?.RFQUnitPrice}
+            ✓ Loaded: {childPartData.mpn?.Description} | MPN: {childPartData.mpn?.MPN} | Manufacturer: {childPartData.mpn?.Manufacturer} | UOM: {childPartData.mpn?.UOM?.code} | Price: ${childPartData.mpn?.RFQUnitPrice}
           </Text>
         </div>
       )}
@@ -565,10 +627,23 @@ const AddCostingItemModal = ({
 
       <Row gutter={16}>
         <Col span={8}>
-          <Form.Item label={<Text strong>UOM</Text>} name="uom" rules={[{ required: true, message: 'Please select UOM' }]}>
-            <Select placeholder="Select UOM" disabled>
+          {/* <Form.Item label={<Text strong>UOM</Text>} name="uom" rules={[{ required: true, message: 'Please select UOM' }]}>
+            <Select placeholder="Select UOM">
               {uoms.map((u) => (
                 <Option key={u._id} value={u._id}>{u.code}</Option>
+              ))}
+            </Select>
+          </Form.Item> */}
+          <Form.Item
+            label="UOM"
+            name="uom"
+            rules={[{ required: true }]}
+          >
+            <Select onChange={handleUomChange} disabled={editData}>
+              {categorizeUOMs(uoms, childPartData?.mpn?.UOM?.code).map((u) => (
+                <Option key={u._id} value={u._id}>
+                  {u.code}
+                </Option>
               ))}
             </Select>
           </Form.Item>
@@ -804,7 +879,7 @@ const AddCostingItemModal = ({
         <Col span={12}>
           <Form.Item label={<Text strong>UOM</Text>} name="uom" rules={[{ required: true }]}>
             <Select placeholder="Select">
-              {uoms.map((u) => (
+              {categorizeUOMs(uoms, packingUOM).map((u) => (
                 <Option key={u._id} value={u._id}>{u.code}</Option>
               ))}
             </Select>

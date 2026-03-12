@@ -183,6 +183,13 @@ const modules = [
         ],
       },
       {
+        key: "purchase_order_approval",
+        label: "Purchase Order Approval",
+        actions: [
+          { key: "view", label: "View Only" },
+        ],
+      },
+      {
         key: "supplier_managment",
         label: "Supplier Managment",
         actions: [

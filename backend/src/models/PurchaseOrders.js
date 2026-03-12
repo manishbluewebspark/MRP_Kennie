@@ -95,10 +95,10 @@ const PurchaseOrderItemSchema = new Schema({
   // 🔹 Receiving tracking fields (PO line level)
   receivedQtyTotal: { type: Number, default: 0 },   // total received so far (all GRNs)
   rejectedQtyTotal: { type: Number, default: 0 },   // total rejected so far
-  pendingQty:       { type: Number, default: 0 },   // remaining to be accepted = qty - acceptedTotal
-  committedDate:{type:Date},
+  pendingQty: { type: Number, default: 0 },   // remaining to be accepted = qty - acceptedTotal
+  committedDate: { type: Date },
   remarks: { type: String, default: "" },           // last/overall remarks for this PO line
-  acceptedAt:{type:Date},
+  acceptedAt: { type: Date },
   status: {
     type: String,
     enum: ["Pending", "Accepted", "Rejected", "Partially Accepted"],
@@ -148,12 +148,35 @@ const PurchaseOrderSchema = new Schema(
         "Draft",
         "Closed",
         "Partially Received",  // receiving ke liye
-        "Completed",  
-        "Acknowledged"         // fully received
+        "Completed",
+        "Acknowledged",         // fully received
+        "Pending Approval",
+        "Rejected"
       ],
       default: "Pending",
     },
-
+    reason: {
+      type: String
+    },
+    priceOverrideDetected: { type: Boolean, default: false },
+    requiresSecondLevelApproval: { type: Boolean, default: false },
+    secondLevelApprovalStatus: {
+      type: String,
+      enum: ['Pending', 'Approved', 'Rejected'],
+      default: 'Pending'
+    },
+    secondLevelApprovedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    secondLevelApprovedAt: Date,
+    secondLevelRejectionReason: String,
+    secondLevelRequestReason: String,
+    overPurchaseDetected: { type: Boolean, default: false },
+      overPurchaseDetails: {
+      totalRequiredQty: { type: Number, default: 0 },
+      totalBalanceQty: { type: Number, default: 0 },
+      totalIncomingQty: { type: Number, default: 0 },
+      totalMaxPurchaseQty: { type: Number, default: 0 },
+      totalOrderedQty: { type: Number, default: 0 }
+    },
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }
