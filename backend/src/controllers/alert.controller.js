@@ -103,6 +103,42 @@ export const getAlertById = async (req, res) => {
   }
 };
 
+export const deleteAlert = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Alert ID is required",
+      });
+    }
+
+    const alert = await Alert.findById(id);
+
+    if (!alert) {
+      return res.status(404).json({
+        success: false,
+        message: "Alert not found",
+      });
+    }
+
+    await Alert.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Alert deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete Alert Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error deleting alert",
+      error: error.message,
+    });
+  }
+};
+
 // POST /alerts  (manual create – optional, but useful)
 export const createAlert = async (req, res) => {
   try {

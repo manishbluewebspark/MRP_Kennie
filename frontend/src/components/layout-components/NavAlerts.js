@@ -263,6 +263,7 @@ export const NavNotification = ({ mode }) => {
             trigger="click"
             overlayClassName="nav-notification"
             overlayInnerStyle={{ padding: 0 }}
+               autoAdjustOverflow={false} 
         >
             <NavItem mode={mode}>
                 <Badge count={unreadCount}>

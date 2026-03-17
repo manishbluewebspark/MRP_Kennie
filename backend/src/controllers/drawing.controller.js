@@ -4192,6 +4192,543 @@ const fmtNo4 = (n) => String(n).padStart(4, "0");
 // ✅ Add this global converter util somewhere common and import it:
 // import { convertCurrency } from "../utils/currency.js";
 
+// export const importDrawings = async (req, res) => {
+//   let filePath = null;
+
+//   // ---------------- Currency Helpers ----------------
+//   const normCur = (c) => (c || "").toString().trim().toUpperCase();
+
+//   const roundTo = (num, decimals = 2) => {
+//     const p = Math.pow(10, decimals);
+//     const n = Number(num || 0);
+//     return Math.round((n + Number.EPSILON) * p) / p;
+//   };
+
+//   // ---------------- Main ----------------
+//   try {
+//     // 1) Basic file & input checks
+//     if (!req.file?.path) {
+//       return res.status(400).json({ success: false, message: "No file uploaded" });
+//     }
+//     filePath = req.file.path;
+
+//     const incomingQuoteType = toStr(req.body?.quoteType);
+//     if (!incomingQuoteType) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({ success: false, message: "quoteType is required" });
+//     }
+
+//     const incomingProject = toStr(req.body?.project);
+//     if (!incomingProject) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({ success: false, message: "Project is required" });
+//     }
+
+//     const name = (req.file.originalname || "").toLowerCase();
+//     if (!name.endsWith(".xlsx") && !name.endsWith(".xls")) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({ success: false, message: "Only .xlsx / .xls files are supported" });
+//     }
+
+//     // 2) Read Excel
+//     let workbook;
+//     try {
+//       workbook = XLSX.readFile(filePath);
+//     } catch (e) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({ success: false, message: "Invalid Excel file", error: e.message });
+//     }
+
+//     if (!workbook.SheetNames?.length) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({ success: false, message: "Excel has no sheets" });
+//     }
+
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     if (!sheet) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({ success: false, message: "First sheet is missing" });
+//     }
+
+//     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+//     if (!Array.isArray(rows) || rows.length === 0) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({ success: false, message: "Sheet is empty" });
+//     }
+
+//     // 3) Load project (✅ populate currency) & markups
+//     const projectData = await Project.findById(incomingProject)
+//       .populate("currency", "code")   // ✅ currency = {_id, code}
+//       .lean();
+
+//     if (!projectData) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({ success: false, message: "Project Data missing" });
+//     }
+
+//     // ✅ Currency settings
+//     const settings = await SystemSettings.findOne({}).lean();
+//     if (!settings?.currencySettings) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(500).json({ success: false, message: "Currency settings missing in SystemSettings" });
+//     }
+
+//     // ✅ IMPORTANT:
+//     // Drawing.currency must be ObjectId (Currency ref)
+//     const projectCurrencyId = projectData?.currency?._id || null;
+//     const projectCurrencyCode = normCur(projectData?.currency?.code) || "USD";
+//     // console.log('------projectCurrencyCode', projectCurrencyCode)
+//     if (!projectCurrencyId) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({
+//         success: false,
+//         message: "Project currency is missing (currency reference not set on project)",
+//       });
+//     }
+
+//     // Default source currency if excel doesn't provide
+//     const defaultSourceCurrency = normCur(req.body?.sourceCurrency) || "USD";
+
+//     const master = await MarkupParameter.findOne({})
+//       .sort({ updatedAt: -1 })
+//       .select("materialsMarkup manhourMarkup packingMarkup")
+//       .lean();
+
+//     const masterMaterial = clampPct(master?.materialsMarkup, 0);
+//     const masterManhour = clampPct(master?.manhourMarkup, 0);
+//     const masterPacking = clampPct(master?.packingMarkup, 0);
+
+//     const results = { drawingsAdded: [], itemsAdded: 0, manhourAdded: 0, errors: [] };
+
+//     // 4) Group rows by Drawing no
+//     const groupRowsByDrawing = (rows) => {
+//       const groups = new Map();
+//       let current = null;
+
+//       for (let i = 0; i < rows.length; i++) {
+//         const r = rows[i];
+//         const rowIndex = i + 2;
+
+//         const drawingNo = toStr(pick(r, "Drawing no", "Drawing No", "drawingNo", "Drawing", "Drawing_no"));
+//         if (drawingNo) {
+//           current = drawingNo;
+//           if (!groups.has(drawingNo)) groups.set(drawingNo, []);
+//           groups.get(drawingNo).push({ r, rowIndex });
+//         } else {
+//           if (!current) {
+//             results.errors.push({
+//               drawingNo: null,
+//               row: rowIndex,
+//               type: "header",
+//               field: "Drawing no",
+//               value: "",
+//               message: "Row found before any 'Drawing no' header",
+//             });
+//             continue;
+//           }
+//           groups.get(current).push({ r, rowIndex });
+//         }
+//       }
+//       return groups;
+//     };
+
+//     const getDrawingHeadValues = (list) => {
+//       const headEntry =
+//         list.find(({ r }) => {
+//           const hasDesc = toStr(pick(r, "Description", "drawingDescription"));
+//           const hasQty = toStr(pick(r, "Qty", "Quantity", "qty"));
+//           return hasDesc || hasQty;
+//         }) || list[0];
+
+//       const head = headEntry?.r || {};
+//       const drawingDesc = toStr(pick(head, "Description", "drawingDescription"));
+//       const drawingQty = toNum(pick(head, "Qty", "Quantity", "qty"), 1);
+//       return { drawingDesc, drawingQty };
+//     };
+
+//     // 5) quoteType validation
+//     if (!["other", "cable_harness"].includes(incomingQuoteType)) {
+//       try { fs.unlinkSync(filePath); } catch { }
+//       return res.status(400).json({
+//         success: false,
+//         message: `Unsupported quoteType "${incomingQuoteType}". Use "other" or "cable_harness".`,
+//       });
+//     }
+
+//     const groups = groupRowsByDrawing(rows);
+
+//     // 6) Process each drawing
+//     for (const [drawingNo, list] of groups.entries()) {
+//       const { drawingDesc, drawingQty } = getDrawingHeadValues(list);
+
+//       const exists = await Drawing.findOne({ drawingNo }).lean();
+//       if (exists) {
+//         results.errors.push({
+//           drawingNo,
+//           row: null,
+//           type: "drawing",
+//           field: "drawingNo",
+//           value: drawingNo,
+//           message: "Duplicate drawing number (already exists)",
+//         });
+//         continue;
+//       }
+
+//       // ✅ Drawing currency: store ObjectId ref
+//       const drawingCurrencyId = projectCurrencyId;
+//       const drawingCurrencyCode = projectCurrencyCode;
+
+//       const drawingDoc = await Drawing.create({
+//         drawingNo,
+//         description: drawingDesc,
+//         qty: drawingQty || 1,
+//         projectId: projectData?._id || null,
+//         customerId: projectData?.customerId || null,
+
+//         currency: drawingCurrencyId, // ✅ FIX: ObjectId save
+//         unitPrice: 0,
+//         totalPrice: 0,
+
+//         quoteType: incomingQuoteType,
+//         quoteStatus: "active",
+//         materialMarkup: masterMaterial,
+//         manhourMarkup: masterManhour,
+//         packingMarkup: masterPacking,
+//         lastEditedBy: req.user?._id || null,
+//       });
+
+//       let nextMatNo = await getNextItemNumberForType(drawingDoc._id, "material");
+//       let nextManNo = await getNextItemNumberForType(drawingDoc._id, "manhour");
+
+//       const materialItems = [];
+//       const manhourItems = [];
+
+//       for (const { r, rowIndex } of list) {
+//         const anyVal =
+//           toStr(pick(r, "Child Part", "ChildPart", "childPart")) ||
+//           toStr(pick(r, "MPN", "mpn")) ||
+//           toStr(pick(r, "Description", "Child Description", "Part Description")) ||
+//           toStr(pick(r, "UOM", "uom")) ||
+//           toStr(pick(r, "Labour Skill Level", "Skill Level", "Labour Level")) ||
+//           toStr(pick(r, "Labour Description", "Labour Remarks", "Remarks")) ||
+//           toStr(pick(r, "Labour UOM", "UOM (Labour)", "LabourUOM")) ||
+//           toStr(pick(r, "Labour Qty", "Qty (Labour)", "Labour Quantity", "Quantity"));
+//         if (!anyVal) continue;
+
+//         // ---------- MATERIAL ----------
+//         const childParts = toStr(pick(r, "Child Part", "ChildPart", "childPart"));
+//         if (childParts) {
+//           let materialHasError = false;
+
+//           // const childPart = await Child.findOne({ ChildPartNo: childParts }).populate({
+//           //   path: "mpn",
+//           //   populate: { path: "currency", select: "code" },
+//           // });
+
+//            const childPart = await Child.findOne({
+//             ChildPartNo: childParts,
+//           }).populate({
+//             path: "mpn",
+//             populate: [
+//               { path: "currency", select: "code" },   // currency ka code
+//               { path: "UOM", select: "code" },        // UOM ka code
+//             ],
+//           });
+
+//           // console.log('------childPart', childPart)
+
+//           if (!childPart) {
+//             results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "Child Part", value: childParts, message: `Child Part not found in system: ${childParts}` });
+//             materialHasError = true;
+//           } else if (!childPart.mpn) {
+//             results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "MPN", value: childParts, message: `No MPN linked to Child Part: ${childParts}` });
+//             materialHasError = true;
+//           }
+
+//           const uomCell = toStr(pick(r, "UOM", "uom"));
+//           if (!uomCell) {
+//             results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "UOM", value: "", message: "UOM is required for material line" });
+//             materialHasError = true;
+//           }
+
+//           const uomId = uomCell ? await getUomId(uomCell) : null;
+//           if (uomCell && !uomId) {
+//             results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "UOM", value: uomCell, message: `UOM not found: ${uomCell}` });
+//             materialHasError = true;
+//           }
+
+//           const ChildQty = toNum(pick(r, "Child Qty", "child qty"), 0);
+//           if (!(ChildQty > 0)) {
+//             results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "Child Qty", value: ChildQty, message: "Child Qty must be > 0" });
+//             materialHasError = true;
+//           }
+
+//           const unitPriceRaw = toNum(childPart?.mpn?.RFQUnitPrice);
+
+//           if (!materialHasError) {
+//             const childDesc = toStr(pick(r, "Description", "Child Description", "Part Description"));
+//             const manufacturer = toStr(pick(r, "Manufacturer", "manufacturer"));
+
+//             const tolPct = toNum(pick(r, "Tol-%", "Tolerance %", "tolPct"), 0);
+//             const sgaPct = toNum(pick(r, "SGA-%", "SGA %", "sgaPct"), 0);
+//             const matBurdenPct = toNum(pick(r, "Mat Burden-% (9)", "Mat Burden-%", "Mat Burden %"), 0);
+//             const freightPct = toNum(pick(r, "Freight cost-% (10)", "Freight cost-%", "Freight Cost %"), 0);
+//             const fixedFreight = toNum(pick(r, "Fixed Freight cost", "Fixed Freight", "Fixed Freight Cost"), 0);
+
+
+//              let qtyInMasterUom = toNum(ChildQty);
+//             let drawingUomId = uomId;
+//             let mpnMasterUomId = childPart?.mpn?.UOM
+//             let newPrice;
+//             try {
+//                newPrice = await convertLengthUnitPrice(
+//               unitPriceRaw,
+//                childPart?.mpn?.UOM?.code,
+//                uomCell,
+//             );
+//             } catch (convErr) {
+//               results.errors.push({
+//                 row: rowIndex,
+//                 message: "UOM conversion failed",
+//               });
+//               continue;
+//             }
+
+
+//             // ✅ Source currency from excel column OR default USD
+//             // const rowCurrency = normCur(pick(r, "Currency", "CUR", "Row Currency")) || defaultSourceCurrency;
+//             const rowCurrency = childPart?.mpn?.currency?.code || "USD"
+//             // ✅ Convert to drawing currency code
+//            let unitPrice = unitPriceRaw;
+//             try {
+//               unitPrice =
+//                 rowCurrency === drawingCurrencyCode
+//                   ? roundTo(newPrice)
+//                   : convertCurrency(newPrice, rowCurrency, drawingCurrencyCode, settings, 2);
+//             } catch (ce) {
+//               results.errors.push({
+//                 drawingNo,
+//                 row: rowIndex,
+//                 type: "material",
+//                 field: "Currency Conversion",
+//                 value: `${rowCurrency} -> ${drawingCurrencyCode}`,
+//                 message: ce.message || "Currency conversion failed",
+//               });
+//               materialHasError = true;
+//             }
+
+           
+
+             
+
+
+
+//             if (!materialHasError) {
+//               const quantity = toNum(ChildQty);
+//               const extPrice = round2(quantity * unitPrice);
+//               const salesPrice = round2(extPrice * (1 + (sgaPct + matBurdenPct + freightPct) / 100) + fixedFreight);
+
+//               materialItems.push({
+//                 drawingId: drawingDoc._id,
+//                 quoteType: "material",
+//                 itemNumber: fmtNo4(nextMatNo),
+
+//                 childPart: childPart?._id || null,
+//                 mpn: childPart?.mpn?._id || null,
+//                 description: toStr(childPart?.mpn?.Description) || childDesc || "",
+//                 manufacturer: childPart?.mpn?.Manufacturer || manufacturer || "",
+//                 uom: uomId,
+//                 rfqDate: childPart?.mpn?.RFQDate,
+//                 supplier: childPart?.mpn?.Supplier,
+//                 leadTime: toNum(childPart?.mpn?.LeadTime_WK),
+
+//                 quantity,
+//                 tolerance: tolPct,
+//                 sgaPercent: sgaPct,
+//                 matBurden: matBurdenPct,
+//                 freightPercent: freightPct,
+//                 fixedFreightCost: fixedFreight,
+
+//                 // ✅ keep codes for reporting
+//                 currencyCode: drawingCurrencyCode,
+//                 sourceCurrency: rowCurrency,
+//                 sourceUnitPrice: round2(unitPriceRaw),
+
+//                 unitPrice: round2(unitPrice),
+//                 extPrice,
+//                 salesPrice,
+
+//                 lastEditedBy: req.user?._id || null,
+//               });
+//               nextMatNo++;
+//             }
+//           }
+//         }
+
+//         // ---------- MANHOUR ----------
+//         const labourSkill = toStr(pick(r, "Labour Skill Level", "Skill Level", "Labour Level"));
+//         const labourDesc = toStr(pick(r, "Labour Description", "Labour Remarks", "Remarks")) || labourSkill;
+//         const labourUomTx = toStr(pick(r, "Labour UOM", "UOM (Labour)", "LabourUOM"));
+//         const labourQty = toNum(pick(r, "Labour Qty", "Qty (Labour)", "Labour Quantity", "Quantity"), 0);
+
+//         const hasLabour = (labourSkill || labourDesc || labourUomTx) && labourQty > 0;
+
+//         if (hasLabour) {
+//           let labourHasError = false;
+
+//           if (!labourUomTx) {
+//             results.errors.push({ drawingNo, row: rowIndex, type: "manhour", field: "Labour UOM", value: "", message: "Labour UOM is required" });
+//             labourHasError = true;
+//           }
+
+//           const labourUomId = labourUomTx ? await getUomId(labourUomTx) : null;
+//           if (labourUomTx && !labourUomId) {
+//             results.errors.push({ drawingNo, row: rowIndex, type: "manhour", field: "Labour UOM", value: labourUomTx, message: `Labour UOM not found: ${labourUomTx}` });
+//             labourHasError = true;
+//           }
+
+//           let skillLevel = null;
+//           if (labourSkill) {
+//             skillLevel = await SkillLevelCosting
+//               .findOne({ skillLevelName: labourSkill })
+//               .select("_id skillLevelName unitPrice rate type")
+//               .populate("type")
+//               .lean();
+
+//             if (!skillLevel) {
+//               results.errors.push({ drawingNo, row: rowIndex, type: "manhour", field: "Labour Skill Level", value: labourSkill, message: `Skill Level not found: ${labourSkill}` });
+//               labourHasError = true;
+//             }
+//           }
+
+//           if (!labourHasError) {
+//             const unitRate = toNum(skillLevel?.unitPrice ?? skillLevel?.rate);
+//             const extPrice = round2(unitRate * labourQty);
+//             const salesPrice = extPrice;
+
+//             manhourItems.push({
+//               drawingId: drawingDoc._id,
+//               quoteType: "manhour",
+//               itemNumber: fmtNo4(nextManNo),
+
+//               description: labourDesc,
+//               uom: labourUomId,
+//               quantity: labourQty,
+//               skillLevel: skillLevel?._id || null,
+
+//               currencyCode: drawingCurrencyCode,
+//               unitPrice: unitRate,
+//               extPrice,
+//               salesPrice,
+
+//               lastEditedBy: req.user?._id || null,
+//             });
+//             nextManNo++;
+//           }
+//         }
+//       }
+
+//       if (materialItems.length) {
+//         await CostingItems.insertMany(materialItems);
+//         results.itemsAdded += materialItems.length;
+//       }
+//       if (manhourItems.length) {
+//         await CostingItems.insertMany(manhourItems);
+//         results.manhourAdded += manhourItems.length;
+//       }
+
+//       // Totals recompute
+//       {
+//         const oid = new mongoose.Types.ObjectId(drawingDoc._id);
+//         const grouped = await CostingItems.aggregate([
+//           { $match: { drawingId: oid } },
+//           { $group: { _id: "$quoteType", bucketTotal: { $sum: { $toDouble: "$salesPrice" } } } },
+//         ]);
+
+//         let materialTotal = 0, manhourTotal = 0, packingTotal = 0;
+
+//         for (const g of grouped) {
+//           const t = toNum(g.bucketTotal);
+//           switch ((g._id || "").toLowerCase()) {
+//             case "material": materialTotal = t; break;
+//             case "manhour": manhourTotal = t; break;
+//             case "packing": packingTotal = t; break;
+//             default: break;
+//           }
+//         }
+
+//         const materialMarkup = toNum(drawingDoc.materialMarkup);
+//         const manhourMarkup = toNum(drawingDoc.manhourMarkup);
+//         const packingMarkup = toNum(drawingDoc.packingMarkup);
+
+//         const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
+//         const manhourWithMarkup = round2(manhourTotal + (manhourTotal * manhourMarkup) / 100);
+//         const packingWithMarkup = round2(packingTotal + (packingTotal * packingMarkup) / 100);
+
+//         const totalPriceRaw = round2(materialTotal + manhourTotal + packingTotal);
+//         const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+
+//         const importedMaxLTW = Math.max(
+//           toNum(drawingDoc.leadTimeWeeks),
+//           ...materialItems.map((x) => toNum(x.leadTime)),
+//           ...manhourItems.map((x) => toNum(x.leadTime))
+//         );
+
+//         drawingDoc.materialTotal = round2(materialTotal);
+//         drawingDoc.manhourTotal = round2(manhourTotal);
+//         drawingDoc.packingTotal = round2(packingTotal);
+//         drawingDoc.totalPrice = totalPriceRaw;
+//         drawingDoc.unitPrice = totalPriceRaw;
+//         drawingDoc.totalPriceWithMarkup = totalPriceWithMarkup;
+//         drawingDoc.leadTimeWeeks = importedMaxLTW;
+//         drawingDoc.lastEditedBy = req?.user?._id || drawingDoc.lastEditedBy;
+
+//         // ✅ IMPORTANT: keep ObjectId currency
+//         drawingDoc.currency = drawingCurrencyId;
+
+//         await drawingDoc.save();
+//       }
+
+//       results.drawingsAdded.push({
+//         id: drawingDoc._id,
+//         drawingNo,
+//         rows: list.length,
+//         materialItems: materialItems.length,
+//         manhourItems: manhourItems.length,
+//         currencyCode: projectCurrencyCode,
+//       });
+//     }
+
+//     // cleanup
+//     try { fs.unlinkSync(req.file.path); } catch { }
+
+//     if (results.errors.length > 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Import completed with issues",
+//         data: results,
+//       });
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: `Import complete — Drawings: ${results.drawingsAdded.length}, Material lines: ${results.itemsAdded}, Manhour lines: ${results.manhourAdded}`,
+//       data: results,
+//     });
+//   } catch (error) {
+//     try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch { }
+//     return res.status(500).json({
+//       success: false,
+//       message: "Error importing drawings",
+//       error: error.message,
+//     });
+//   } finally {
+//     if (filePath) {
+//       try { await fs.promises.unlink(filePath); } catch { }
+//     }
+//   }
+// };
+
 export const importDrawings = async (req, res) => {
   let filePath = null;
 
@@ -4203,6 +4740,8 @@ export const importDrawings = async (req, res) => {
     const n = Number(num || 0);
     return Math.round((n + Number.EPSILON) * p) / p;
   };
+
+  const round2 = (num) => roundTo(num, 2);
 
   // ---------------- Main ----------------
   try {
@@ -4256,9 +4795,9 @@ export const importDrawings = async (req, res) => {
       return res.status(400).json({ success: false, message: "Sheet is empty" });
     }
 
-    // 3) Load project (✅ populate currency) & markups
+    // 3) Load project & currency
     const projectData = await Project.findById(incomingProject)
-      .populate("currency", "code")   // ✅ currency = {_id, code}
+      .populate("currency", "code")
       .lean();
 
     if (!projectData) {
@@ -4266,18 +4805,15 @@ export const importDrawings = async (req, res) => {
       return res.status(400).json({ success: false, message: "Project Data missing" });
     }
 
-    // ✅ Currency settings
     const settings = await SystemSettings.findOne({}).lean();
     if (!settings?.currencySettings) {
       try { fs.unlinkSync(filePath); } catch { }
       return res.status(500).json({ success: false, message: "Currency settings missing in SystemSettings" });
     }
 
-    // ✅ IMPORTANT:
-    // Drawing.currency must be ObjectId (Currency ref)
     const projectCurrencyId = projectData?.currency?._id || null;
     const projectCurrencyCode = normCur(projectData?.currency?.code) || "USD";
-    // console.log('------projectCurrencyCode', projectCurrencyCode)
+
     if (!projectCurrencyId) {
       try { fs.unlinkSync(filePath); } catch { }
       return res.status(400).json({
@@ -4286,7 +4822,6 @@ export const importDrawings = async (req, res) => {
       });
     }
 
-    // Default source currency if excel doesn't provide
     const defaultSourceCurrency = normCur(req.body?.sourceCurrency) || "USD";
 
     const master = await MarkupParameter.findOne({})
@@ -4361,41 +4896,37 @@ export const importDrawings = async (req, res) => {
     for (const [drawingNo, list] of groups.entries()) {
       const { drawingDesc, drawingQty } = getDrawingHeadValues(list);
 
-      const exists = await Drawing.findOne({ drawingNo }).lean();
-      if (exists) {
-        results.errors.push({
+      let drawingDoc = await Drawing.findOne({ drawingNo });
+      let isNew = false;
+
+      if (!drawingDoc) {
+        isNew = true;
+        drawingDoc = await Drawing.create({
           drawingNo,
-          row: null,
-          type: "drawing",
-          field: "drawingNo",
-          value: drawingNo,
-          message: "Duplicate drawing number (already exists)",
+          description: drawingDesc,
+          qty: drawingQty || 1,
+          projectId: projectData?._id || null,
+          customerId: projectData?.customerId || null,
+          currency: projectCurrencyId,
+          unitPrice: 0,
+          totalPrice: 0,
+          quoteType: incomingQuoteType,
+          quoteStatus: "active",
+          materialMarkup: masterMaterial,
+          manhourMarkup: masterManhour,
+          packingMarkup: masterPacking,
+          lastEditedBy: req.user?._id || null,
         });
-        continue;
+      } else {
+        // Update existing drawing
+        drawingDoc.description = drawingDesc;
+        drawingDoc.qty = drawingQty || 1;
+        drawingDoc.quoteType = incomingQuoteType;
+        drawingDoc.lastEditedBy = req.user?._id || drawingDoc.lastEditedBy;
+
+        // Remove old items before adding new ones
+        await CostingItems.deleteMany({ drawingId: drawingDoc._id });
       }
-
-      // ✅ Drawing currency: store ObjectId ref
-      const drawingCurrencyId = projectCurrencyId;
-      const drawingCurrencyCode = projectCurrencyCode;
-
-      const drawingDoc = await Drawing.create({
-        drawingNo,
-        description: drawingDesc,
-        qty: drawingQty || 1,
-        projectId: projectData?._id || null,
-        customerId: projectData?.customerId || null,
-
-        currency: drawingCurrencyId, // ✅ FIX: ObjectId save
-        unitPrice: 0,
-        totalPrice: 0,
-
-        quoteType: incomingQuoteType,
-        quoteStatus: "active",
-        materialMarkup: masterMaterial,
-        manhourMarkup: masterManhour,
-        packingMarkup: masterPacking,
-        lastEditedBy: req.user?._id || null,
-      });
 
       let nextMatNo = await getNextItemNumberForType(drawingDoc._id, "material");
       let nextManNo = await getNextItemNumberForType(drawingDoc._id, "manhour");
@@ -4420,22 +4951,15 @@ export const importDrawings = async (req, res) => {
         if (childParts) {
           let materialHasError = false;
 
-          // const childPart = await Child.findOne({ ChildPartNo: childParts }).populate({
-          //   path: "mpn",
-          //   populate: { path: "currency", select: "code" },
-          // });
-
-           const childPart = await Child.findOne({
+          const childPart = await Child.findOne({
             ChildPartNo: childParts,
           }).populate({
             path: "mpn",
             populate: [
-              { path: "currency", select: "code" },   // currency ka code
-              { path: "UOM", select: "code" },        // UOM ka code
+              { path: "currency", select: "code" },
+              { path: "UOM", select: "code" },
             ],
           });
-
-          // console.log('------childPart', childPart)
 
           if (!childPart) {
             results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "Child Part", value: childParts, message: `Child Part not found in system: ${childParts}` });
@@ -4475,53 +4999,36 @@ export const importDrawings = async (req, res) => {
             const freightPct = toNum(pick(r, "Freight cost-% (10)", "Freight cost-%", "Freight Cost %"), 0);
             const fixedFreight = toNum(pick(r, "Fixed Freight cost", "Fixed Freight", "Fixed Freight Cost"), 0);
 
-
-             let qtyInMasterUom = toNum(ChildQty);
-            let drawingUomId = uomId;
-            let mpnMasterUomId = childPart?.mpn?.UOM
             let newPrice;
             try {
-               newPrice = await convertLengthUnitPrice(
-              unitPriceRaw,
-               childPart?.mpn?.UOM?.code,
-               uomCell,
-            );
+              newPrice = await convertLengthUnitPrice(
+                unitPriceRaw,
+                childPart?.mpn?.UOM?.code,
+                uomCell
+              );
             } catch (convErr) {
-              results.errors.push({
-                row: rowIndex,
-                message: "UOM conversion failed",
-              });
+              results.errors.push({ row: rowIndex, message: "UOM conversion failed" });
               continue;
             }
 
-
-            // ✅ Source currency from excel column OR default USD
-            // const rowCurrency = normCur(pick(r, "Currency", "CUR", "Row Currency")) || defaultSourceCurrency;
-            const rowCurrency = childPart?.mpn?.currency?.code || "USD"
-            // ✅ Convert to drawing currency code
-           let unitPrice = unitPriceRaw;
+            const rowCurrency = childPart?.mpn?.currency?.code || "USD";
+            let unitPrice = unitPriceRaw;
             try {
               unitPrice =
-                rowCurrency === drawingCurrencyCode
-                  ? roundTo(newPrice)
-                  : convertCurrency(newPrice, rowCurrency, drawingCurrencyCode, settings, 2);
+                rowCurrency === projectCurrencyCode
+                  ? round2(newPrice)
+                  : convertCurrency(newPrice, rowCurrency, projectCurrencyCode, settings, 2);
             } catch (ce) {
               results.errors.push({
                 drawingNo,
                 row: rowIndex,
                 type: "material",
                 field: "Currency Conversion",
-                value: `${rowCurrency} -> ${drawingCurrencyCode}`,
+                value: `${rowCurrency} -> ${projectCurrencyCode}`,
                 message: ce.message || "Currency conversion failed",
               });
               materialHasError = true;
             }
-
-           
-
-             
-
-
 
             if (!materialHasError) {
               const quantity = toNum(ChildQty);
@@ -4549,8 +5056,7 @@ export const importDrawings = async (req, res) => {
                 freightPercent: freightPct,
                 fixedFreightCost: fixedFreight,
 
-                // ✅ keep codes for reporting
-                currencyCode: drawingCurrencyCode,
+                currencyCode: projectCurrencyCode,
                 sourceCurrency: rowCurrency,
                 sourceUnitPrice: round2(unitPriceRaw),
 
@@ -4616,7 +5122,7 @@ export const importDrawings = async (req, res) => {
               quantity: labourQty,
               skillLevel: skillLevel?._id || null,
 
-              currencyCode: drawingCurrencyCode,
+              currencyCode: projectCurrencyCode,
               unitPrice: unitRate,
               extPrice,
               salesPrice,
@@ -4648,84 +5154,27 @@ export const importDrawings = async (req, res) => {
         let materialTotal = 0, manhourTotal = 0, packingTotal = 0;
 
         for (const g of grouped) {
-          const t = toNum(g.bucketTotal);
-          switch ((g._id || "").toLowerCase()) {
-            case "material": materialTotal = t; break;
-            case "manhour": manhourTotal = t; break;
-            case "packing": packingTotal = t; break;
-            default: break;
-          }
+          if (g._id === "material") materialTotal = g.bucketTotal;
+          if (g._id === "manhour") manhourTotal = g.bucketTotal;
         }
 
-        const materialMarkup = toNum(drawingDoc.materialMarkup);
-        const manhourMarkup = toNum(drawingDoc.manhourMarkup);
-        const packingMarkup = toNum(drawingDoc.packingMarkup);
-
-        const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
-        const manhourWithMarkup = round2(manhourTotal + (manhourTotal * manhourMarkup) / 100);
-        const packingWithMarkup = round2(packingTotal + (packingTotal * packingMarkup) / 100);
-
-        const totalPriceRaw = round2(materialTotal + manhourTotal + packingTotal);
-        const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
-
-        const importedMaxLTW = Math.max(
-          toNum(drawingDoc.leadTimeWeeks),
-          ...materialItems.map((x) => toNum(x.leadTime)),
-          ...manhourItems.map((x) => toNum(x.leadTime))
-        );
-
-        drawingDoc.materialTotal = round2(materialTotal);
-        drawingDoc.manhourTotal = round2(manhourTotal);
-        drawingDoc.packingTotal = round2(packingTotal);
-        drawingDoc.totalPrice = totalPriceRaw;
-        drawingDoc.unitPrice = totalPriceRaw;
-        drawingDoc.totalPriceWithMarkup = totalPriceWithMarkup;
-        drawingDoc.leadTimeWeeks = importedMaxLTW;
-        drawingDoc.lastEditedBy = req?.user?._id || drawingDoc.lastEditedBy;
-
-        // ✅ IMPORTANT: keep ObjectId currency
-        drawingDoc.currency = drawingCurrencyId;
+        drawingDoc.materialTotal = materialTotal;
+        drawingDoc.manhourTotal = manhourTotal;
+        drawingDoc.totalPrice = materialTotal + manhourTotal + packingTotal;
 
         await drawingDoc.save();
       }
 
-      results.drawingsAdded.push({
-        id: drawingDoc._id,
-        drawingNo,
-        rows: list.length,
-        materialItems: materialItems.length,
-        manhourItems: manhourItems.length,
-        currencyCode: projectCurrencyCode,
-      });
+      results.drawingsAdded.push(drawingNo);
     }
 
-    // cleanup
-    try { fs.unlinkSync(req.file.path); } catch { }
+    try { fs.unlinkSync(filePath); } catch { }
 
-    if (results.errors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Import completed with issues",
-        data: results,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: `Import complete — Drawings: ${results.drawingsAdded.length}, Material lines: ${results.itemsAdded}, Manhour lines: ${results.manhourAdded}`,
-      data: results,
-    });
-  } catch (error) {
-    try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch { }
-    return res.status(500).json({
-      success: false,
-      message: "Error importing drawings",
-      error: error.message,
-    });
-  } finally {
-    if (filePath) {
-      try { await fs.promises.unlink(filePath); } catch { }
-    }
+    return res.json({ success: true, results });
+  } catch (err) {
+    try { fs.unlinkSync(filePath); } catch { }
+    console.error("Import Drawing error:", err);
+    return res.status(500).json({ success: false, message: err.message, stack: err.stack });
   }
 };
 

@@ -1,6 +1,6 @@
 // routes/alertRoutes.js
 import express from "express";
-import { createAlert, getAlertById, getAllAlerts, markAlertRead, markAlertUnread, markAllAlertsRead, resolveAlert, unresolveAlert } from "../controllers/alert.controller.js";
+import { createAlert, deleteAlert, getAlertById, getAllAlerts, markAlertRead, markAlertUnread, markAllAlertsRead, resolveAlert, unresolveAlert } from "../controllers/alert.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -13,7 +13,7 @@ router.get("/alerts/:id", authenticate, getAlertById);
 
 // Manually create alert (optional, useful for admin)
 router.post("/alerts", authenticate, createAlert);
-
+router.delete("/alerts/:id", authenticate, deleteAlert);
 // Mark read / unread
 router.patch("/alerts/:id/read", authenticate, markAlertRead);
 router.patch("/alerts/:id/unread", authenticate, markAlertUnread);
