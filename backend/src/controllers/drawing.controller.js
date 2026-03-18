@@ -1545,7 +1545,7 @@ export const addCostingItem = async (req, res) => {
     const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
     const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
 
-    // console.log('-----drawingCurrency-----sourceCurrency',drawingCurrency,sourceCurrency)
+    console.log('-----drawingCurrency-----sourceCurrency',drawingCurrency,sourceCurrency)
     // ✅ Convert only when needed
     const salesPriceInDrawingCurrency =
       sourceCurrency === drawingCurrency
