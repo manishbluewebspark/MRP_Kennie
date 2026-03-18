@@ -141,7 +141,7 @@ const totalCost = basePrice + sgaAmount + freightAmount;
       title: 'Latest P. Price',
       dataIndex: 'unitPrice',
       key: 'unitPrice',
-      width: 150,
+      width: 200,
       align: 'right',
       sorter: (a, b) => a.unitPrice - b.unitPrice, // enable sorting arrow
       render: (value,record) => (
@@ -154,7 +154,7 @@ const totalCost = basePrice + sgaAmount + freightAmount;
             fontWeight: 600,
           }}
         >
-          {`${record?.mpn?.currency?.symbol || ""} ${Number(record?.mpn?.RFQUnitPrice || 0).toFixed(2)}`}
+          {`${record?.mpn?.currency?.symbol || ""} ${Number(record?.mpn?.RFQUnitPrice || 0).toFixed(2)} / ${record?.uom?.code}`}
         </div>
       ),
     }
