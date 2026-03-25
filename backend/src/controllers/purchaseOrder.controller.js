@@ -364,9 +364,9 @@ export const updatePurchaseOrder = async (req, res) => {
 
       po.items[idx].committedDate = new Date(data.committedDate);
 
-      if (data.status) {
-        po.status = data.status;
-      }
+      // if (po.status) {
+      //   po.status = po.status;
+      // }
 
       await po.save();
 
@@ -464,7 +464,7 @@ export const updatePurchaseOrder = async (req, res) => {
       {
         ...data,
         requiresSecondLevelApproval,
-        status:requiresSecondLevelApproval ? "Pending Approval" : "",
+        status:requiresSecondLevelApproval ? "Pending Approval" : undefined,
         items,
         totals: {
           freightAmount,

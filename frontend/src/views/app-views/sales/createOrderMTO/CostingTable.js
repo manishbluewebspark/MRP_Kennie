@@ -154,7 +154,7 @@ const totalCost = basePrice + sgaAmount + freightAmount;
             fontWeight: 600,
           }}
         >
-          {`${record?.mpn?.currency?.symbol || ""} ${Number(record?.mpn?.RFQUnitPrice || 0).toFixed(2)} / ${record?.uom?.code}`}
+          {`${record?.mpn?.currency?.symbol || ""} ${Number(record?.mpn?.RFQUnitPrice || 0).toFixed(2)} / ${record?.mpn?.UOM?.code}`}
         </div>
       ),
     }

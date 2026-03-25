@@ -14,16 +14,9 @@ import { categorizeUOMs } from 'utils/unitConversion';
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
+export const convertLengthUnitPrice = (pricePerBaseUnit, baseUnit, targetUnit) => {
+  if (!pricePerBaseUnit || !baseUnit || !targetUnit) return pricePerBaseUnit;
 
-
-export const convertLengthUnitPrice = (price, from, to) => {
-  // agar price ya unit missing ho, return price
-  if (!price || !from || !to) return price;
-
-  // agar dono unit same hai, price wapas do
-  if (from === to) return price;
-
-  // length conversion map
   const lengthMap = {
     M: 1,
     MM: 1000,
@@ -33,15 +26,59 @@ export const convertLengthUnitPrice = (price, from, to) => {
     IN: 39.3701
   };
 
-  // agar koi bhi unit length map me nahi hai, original price wapas do
-  if (!(from in lengthMap) || !(to in lengthMap)) {
-    return price;
+  // only for length units
+  const isLengthUnit = (unit) =>
+    ["M", "MM", "CM", "FT", "INCH", "IN"].includes(unit);
+
+  if (!isLengthUnit(baseUnit) || !isLengthUnit(targetUnit)) {
+    return pricePerBaseUnit;
   }
 
-  // convert price
-  const base = price / lengthMap[from];
-  return base * lengthMap[to];
+  if (!(baseUnit in lengthMap) || !(targetUnit in lengthMap)) {
+    return pricePerBaseUnit;
+  }
+
+  // default quantity = 1
+  const quantity = 1;
+
+  // STEP 1: target → meters
+  const targetInMeters = quantity / lengthMap[targetUnit];
+
+  // STEP 2: meters → base unit
+  const targetInBaseUnit = targetInMeters * lengthMap[baseUnit];
+
+  // STEP 3: final price (NO currency conversion here)
+  const finalPrice = targetInBaseUnit * pricePerBaseUnit;
+
+  return Number(finalPrice.toFixed(2));
 };
+
+// export const convertLengthUnitPrice = (price, from, to) => {
+//   // agar price ya unit missing ho, return price
+//   if (!price || !from || !to) return price;
+
+//   // agar dono unit same hai, price wapas do
+//   if (from === to) return price;
+
+//   // length conversion map
+//   const lengthMap = {
+//     M: 1,
+//     MM: 1000,
+//     CM: 100,
+//     FT: 3.28084,
+//     INCH: 39.3701,
+//     IN: 39.3701
+//   };
+
+//   // agar koi bhi unit length map me nahi hai, original price wapas do
+//   if (!(from in lengthMap) || !(to in lengthMap)) {
+//     return price;
+//   }
+
+//   // convert price
+//   const base = price * lengthMap[from];
+//   return base * lengthMap[to];
+// };
 
 
 const AddCostingItemModal = ({

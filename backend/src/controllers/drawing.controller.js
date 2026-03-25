@@ -2108,6 +2108,7 @@ export const getAllCostingItems = async (req, res) => {
         select: "MPN RFQUnitPrice",
         populate: [
           { path: "currency", select: "name symbol" }, // populate currency type details
+          { path: "UOM", select: "symbol code" }
         ],
       })
       .populate({

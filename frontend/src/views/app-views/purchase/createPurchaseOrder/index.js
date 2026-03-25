@@ -238,10 +238,11 @@ const PurchaseOrderForm = () => {
           size="small"
           min={0}
           step={0.01}
+                precision={3} 
           value={record.unitPrice}
           onChange={(v) => handleItemChange(record.key, 'unitPrice', n(v))}
           style={{ width: '100%' }}
-          formatter={(v) => (v === undefined || v === null ? '' : `$ ${v}`)}
+          formatter={(v) => (v === undefined || v === null ? '' : ` ${v}`)}
           parser={(v) => (v ? String(v).replace('$', '').trim() : 0)}
         />
       ),
