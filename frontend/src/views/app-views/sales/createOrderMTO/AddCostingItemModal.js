@@ -290,15 +290,18 @@ const AddCostingItemModal = ({
 
   const handleChildPartChange = (value, option) => {
     // value = { value: _id, label: ChildPartNo }
+    console.log('------------last')
     const selected = option?.data;
 
     setChildPartData(selected || null);
     setChildSearch("");
     setChildOpen(false);
-
+   
     if (selected) {
       const unitPrice = Number(selected?.mpn?.RFQUnitPrice || 0);
       const mpnUom = selected?.mpn?.UOM?.code;
+
+   
 
       setBaseUom(mpnUom);
 
@@ -363,12 +366,13 @@ const AddCostingItemModal = ({
     const selectedUom = uoms.find(u => u._id === uomId);
 
     const currentPrice = Number(form.getFieldValue("baseunitPrice"));
+    console.log('-------currentPrice',currentPrice)
 
     const from = baseUom;
     const to = selectedUom?.code;
-
+console.log('-------from',from,to)
     const newPrice = convertLengthUnitPrice(currentPrice, from, to);
-
+   console.log('-------newPrice',newPrice)
     form.setFieldsValue({
       unitPrice: Number(newPrice.toFixed(6))
     });
@@ -412,7 +416,7 @@ const AddCostingItemModal = ({
   // ---------- EFFECT: initialize form values on open / edit ----------
   useEffect(() => {
     if (!visible) return;
-
+    console.log('-------editData',editData)
     // reset for add
     if (!editData) {
       form.resetFields();
@@ -432,6 +436,7 @@ const AddCostingItemModal = ({
     }
 
     // edit mode: set raw fields directly; fix DatePicker fields
+    
     const raw = { ...editData };
     if (raw.rfqDate) raw.rfqDate = DJ(raw.rfqDate);
 
@@ -449,9 +454,12 @@ const AddCostingItemModal = ({
     if (raw.skillLevel && raw.skillLevel._id) raw.skillLevel = raw.skillLevel._id;
 
     form.setFieldsValue(raw);
-
+ 
     // If material & childPart present, populate dependent fields via handler
     if (selectedQuoteType === 'material' && raw.childPart) {
+
+    
+
       // console.log('-------opt', raw.childPart)
       const opt = childPartOptions.find(o => o.value === raw.childPart);
       // console.log('-------opt', opt)
@@ -462,6 +470,7 @@ const AddCostingItemModal = ({
 
     // If packing, ensure UOM & MPN are preselected even if only objects provided
     if (selectedQuoteType === 'packing') {
+     
       if (editData?.uom?._id) form.setFieldsValue({ uom: editData.uom._id });
       if (editData?.mpn?._id) form.setFieldsValue({ mpn: editData.mpn._id });
       setTimeout(() => recalcPacking(), 0);
@@ -469,9 +478,16 @@ const AddCostingItemModal = ({
 
     // For material, ensure UOM/MPN as well (if provided as objects)
     if (selectedQuoteType === 'material') {
+       setChildPartData(editData)
+      setBaseUom(editData?.uom?.code)
       if (editData?.uom?._id) form.setFieldsValue({ uom: editData.uom._id });
       if (editData?.mpn?._id) form.setFieldsValue({ mpn: editData.mpn._id });
       if (editData?.lastEditedBy?.name) form.setFieldsValue({ editedBy: editData?.lastEditedBy?.name });
+       if (editData?.mpn?.RFQUnitPrice) {
+    form.setFieldsValue({
+      baseunitPrice: editData.mpn.RFQUnitPrice
+    });
+  }
     }
   }, [visible, editData, selectedQuoteType, childPartOptions, form, getNextDrawingNumber, recalcMaterial, recalcPacking]);
 
@@ -676,7 +692,7 @@ const AddCostingItemModal = ({
             name="uom"
             rules={[{ required: true }]}
           >
-            <Select onChange={handleUomChange} disabled={editData}>
+            <Select onChange={handleUomChange}>
               {categorizeUOMs(uoms, childPartData?.mpn?.UOM?.code).map((u) => (
                 <Option key={u._id} value={u._id}>
                   {u.code}

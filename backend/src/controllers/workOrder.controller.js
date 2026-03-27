@@ -6448,41 +6448,62 @@ const updateWorkOrderStatus = (wo) => {
     );
   };
 
-  let lastCompletedStage = null;
+ let currentStage = null;
+let lastCompletedStage = null;
 
-  for (let i = 0; i < stages.length; i++) {
-    const key = stages[i];
+for (let i = 0; i < stages.length; i++) {
+  const key = stages[i];
 
-    const doneQty = getStageQty(key);
+  const doneQty = getStageQty(key);
+  const shortage = hasStageShortage(key);
 
-    const shortage = hasStageShortage(key);
+  // ✅ Stage Completed
+  if (doneQty >= totalQty && totalQty > 0 && !shortage) {
+    lastCompletedStage = key;
+    continue;
+  }
 
-    if (doneQty >= totalQty && totalQty > 0 && !shortage) {
-      lastCompletedStage = key;
-      continue;
-    }
-
+  // 🔄 Stage In Progress
+  if (doneQty > 0 && doneQty < totalQty) {
+    currentStage = key;
     break;
   }
 
-  if (lastCompletedStage) {
-    const allComplete = stages.every(
-      (key) => getStageQty(key) >= totalQty && totalQty > 0
-    );
+  // ❌ Not started
+  if (doneQty === 0) {
+    break;
+  }
+}
 
-    if (allComplete) {
-      wo.status = "Completed";
-      wo.isProductionComplete = true;
-      wo.isInProduction = false;
-      wo.completeDate = new Date();
-    } else {
-      wo.status = `${formatStageName(lastCompletedStage)} Done`;
-    }
+// 🔄 If current stage in progress
+if (currentStage) {
+  wo.status = `${formatStageName(currentStage)} In Progress`;
+  wo.isInProduction = true;
+  return;
+}
 
-    return;
+// ✅ If last stage completed
+if (lastCompletedStage) {
+  const allComplete = stages.every(
+    (key) => getStageQty(key) >= totalQty && totalQty > 0
+  );
+
+  if (allComplete) {
+    wo.status = "Completed";
+    wo.isProductionComplete = true;
+    wo.isInProduction = false;
+    wo.completeDate = new Date();
+  } else {
+    wo.status = `${formatStageName(lastCompletedStage)} Done`;
+    wo.isInProduction = true;
   }
 
-  wo.status = "Not Start Yet";
+  return;
+}
+
+// ❌ Not started
+wo.status = "Not Start Yet";
+wo.isInProduction = false;
 };
 
 const toNum = (v) => {

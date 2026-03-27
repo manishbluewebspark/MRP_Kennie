@@ -311,7 +311,7 @@ const PickingDetailModal = ({
                     typeKey: "Picking",
                     layout: "single",
                     labels: {
-                        single: `Picking Qty * (Max: ${wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)})`,
+                        single: `Produce Qty * (Max: ${wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)})`,
                     },
                     helpers: {
                         single:
@@ -332,7 +332,7 @@ const PickingDetailModal = ({
                     layout: "triple",
                     labels: {
                         left: "Work Order Quantity",
-                        middle: `Assembly Qty * (Max: ${wo.remainingAssemblyQty ?? workQty} remaining)`,
+                        middle: `Assembly Qty * (Max: ${wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)} remaining)`,
                         right: "Balance Qty:",
                     },
                     helpers: {
@@ -607,7 +607,7 @@ const columns = [...baseColumns, ...pickedColumn, ...shortageColumn];
                             <Text strong>{stageConfig.labels.single}</Text>
                             <InputNumber
                                 min={0}
-                                max={workQty}        // ⬅️ yaha workQty ka max limit set ho jayega
+                                max={wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)}        // ⬅️ yaha workQty ka max limit set ho jayega
                                 value={stageQty}
                                 onChange={(val) => setStageQty(val)}
                                 style={{ width: "100%", marginTop: 4 }}
@@ -649,6 +649,7 @@ const columns = [...baseColumns, ...pickedColumn, ...shortageColumn];
                             <Text strong>{stageConfig.labels.middle}</Text>
                             <InputNumber
                                 min={0}
+                                max={wo.remainingPickingQty ?? workQty - (processStageData?.qty || 0)}
                                 value={stageQty}
                                 onChange={(val) => setStageQty(val)}
                                 style={{ width: "100%", marginTop: 4 }}

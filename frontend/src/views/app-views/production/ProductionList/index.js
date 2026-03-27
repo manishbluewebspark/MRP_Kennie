@@ -86,43 +86,61 @@ export const STATUS_META = {
 
 // Badge render helper
 export const renderBadge = (status) => {
-  if (!status) return <Tag>No Status</Tag>;
+    if (!status) return <Tag>No Status</Tag>;
 
-  const lower = status.toLowerCase();
+    const lower = status.toLowerCase();
 
-  let color = "default";
+    let color = "default";
 
-  if (lower === "assembly done") {
-    color = "purple";
-  } else if (lower === "cable harness done") {
-    color = "purple";
-  } else if (lower === "labelling done") {
-    color = "orange";
-  } else if (lower === "quality check done") {
-    color = "cyan";
-  } else if (lower === "picking & assembly done") {
-    color = "geekblue";
-  } else if (lower === "picking done") {
-    color = "blue";
-  } else if (lower === "completed") {
-    color = "green";
-  }
 
-  return (
-    <Tag
-      color={color}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        fontWeight: 500,
-        width: 200,
-      }}
-    >
-      <CheckCircleOutlined />
-      {status}
-    </Tag>
-  );
+
+    // 🔄 IN PROGRESS STATES
+    if (lower === "picking in progress") {
+        color = "processing"; // 🔵 animated blue (best for progress)
+    } else if (lower === "assembly in progress") {
+        color = "purple";
+    } else if (lower === "cable harness in progress") {
+        color = "purple";
+    } else if (lower === "labelling in progress") {
+        color = "orange";
+    } else if (lower === "quality check in progress") {
+        color = "cyan";
+    } else if (lower === "picking & assembly in progress") {
+        color = "geekblue";
+    }
+
+    // ✅ DONE STATES
+    else if (lower === "assembly done") {
+        color = "purple";
+    } else if (lower === "cable harness done") {
+        color = "purple";
+    } else if (lower === "labelling done") {
+        color = "orange";
+    } else if (lower === "quality check done") {
+        color = "cyan";
+    } else if (lower === "picking & assembly done") {
+        color = "geekblue";
+    } else if (lower === "picking done") {
+        color = "blue";
+    } else if (lower === "completed") {
+        color = "green";
+    }
+
+    return (
+        <Tag
+            color={color}
+            style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontWeight: 500,
+                width: 200,
+            }}
+        >
+            <CheckCircleOutlined />
+            {status}
+        </Tag>
+    );
 };
 
 const renderQyoteTypeBadge = (type) => {
