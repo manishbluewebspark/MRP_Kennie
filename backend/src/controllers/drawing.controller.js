@@ -6314,7 +6314,7 @@ export const updateLatestPrice = async (req, res) => {
     costingItem.rfqDate = costingItem.mpn.RFQDate || costingItem.rfqDate || null;
     costingItem.description = String(costingItem.mpn.Description || costingItem.description || "").trim();
     costingItem.manufacturer = String(costingItem.mpn.Manufacturer || costingItem.manufacturer || "").trim();
-    costingItem.uom = costingItem.mpn.UOM || costingItem.uom || null;
+    // costingItem.uom = costingItem.mpn.UOM || costingItem.uom || null;
 
     // -----------------------------
     // 5️⃣ Recalculate Pricing
@@ -6545,7 +6545,7 @@ export const updateLatestPriceBulk = async (req, res) => {
         const rfqDate = costingItem.mpn.RFQDate || costingItem.rfqDate || null;
         const description = String(costingItem.mpn.Description || costingItem.description || "").trim();
         const manufacturer = String(costingItem.mpn.Manufacturer || costingItem.manufacturer || "").trim();
-        const uom = costingItem.mpn.UOM || costingItem.uom || null;
+        // const uom = costingItem.mpn.UOM || costingItem.uom || null;
 
         // recalc
         const quantity = toNum(costingItem.quantity);
@@ -6573,7 +6573,7 @@ export const updateLatestPriceBulk = async (req, res) => {
                 rfqDate,
                 description,
                 manufacturer,
-                uom,
+                // uom,
                 actualQty: round2(actualQty),
                 extPrice: round2(extPrice),
                 salesPrice: round2(salesPrice),
