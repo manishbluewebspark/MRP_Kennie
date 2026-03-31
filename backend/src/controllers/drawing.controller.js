@@ -6213,6 +6213,46 @@ export const importDrawings = async (req, res) => {
 //   }
 // };
 
+const convertLengthUnitPriceNew = (pricePerBaseUnit, baseUnit, targetUnit) => {
+  console.log('------pricePerBaseUnit, baseUnit, targetUnit',pricePerBaseUnit, baseUnit, targetUnit)
+  if (!pricePerBaseUnit || !baseUnit || !targetUnit) return pricePerBaseUnit;
+
+  const lengthMap = {
+    M: 1,
+    MM: 1000,
+    CM: 100,
+    FT: 3.28084,
+    INCH: 39.3701,
+    IN: 39.3701
+  };
+
+  // only for length units
+  const isLengthUnit = (unit) =>
+    ["M", "MM", "CM", "FT", "INCH", "IN"].includes(unit);
+
+  if (!isLengthUnit(baseUnit) || !isLengthUnit(targetUnit)) {
+    return pricePerBaseUnit;
+  }
+
+  if (!(baseUnit in lengthMap) || !(targetUnit in lengthMap)) {
+    return pricePerBaseUnit;
+  }
+
+  // default quantity = 1
+  const quantity = 1;
+
+  // STEP 1: target → meters
+  const targetInMeters = quantity / lengthMap[targetUnit];
+
+  // STEP 2: meters → base unit
+  const targetInBaseUnit = targetInMeters * lengthMap[baseUnit];
+
+  // STEP 3: final price (NO currency conversion here)
+  const finalPrice = targetInBaseUnit * pricePerBaseUnit;
+
+  return Number(finalPrice.toFixed(2));
+};
+
 export const updateLatestPrice = async (req, res) => {
   try {
     const { id } = req.params;
@@ -6235,17 +6275,26 @@ export const updateLatestPrice = async (req, res) => {
     //   .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM")
     //   .lean(false);
 
-    const costingItem = await CostingItems.findById(id)
-      .populate({
-        path: "mpn",
-        select:
-          "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
-        populate: {
-          path: "currency",
-          select: "code symbol name"
-        }
-      })
-      .lean(false);
+     const costingItem = await CostingItems.findById(id)
+  .populate("uom", "name code symbol") // 👈 CostingItems ka UOM
+  .populate({
+    path: "mpn",
+    select:
+      "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
+    populate: [
+      {
+        path: "currency",
+        select: "code symbol name"
+      },
+      {
+        path: "UOM", // 👈 MPN ka UOM
+        select: "name code symbol"
+      }
+    ]
+  })
+      .lean(false)
+
+      console.log('-------costingItem',costingItem)
 
     if (!costingItem) {
       return res.status(404).json({ success: false, message: "Costing item not found" });
@@ -6278,12 +6327,17 @@ export const updateLatestPrice = async (req, res) => {
     const sourceCurrency = (costingItem.mpn.currency?.code || "USD").toUpperCase();
 
 
-    // console.log('------drawingCurrency----sourceCurrency',costingItem)
+    console.log('------drawingCurrency----sourceCurrency',drawingCurrency,sourceCurrency)
     // -----------------------------
     // 3️⃣ Get & Convert Unit Price
     // -----------------------------
     const oldUnitPrice = toNum(costingItem.unitPrice);
     const incomingUnitPrice = toNum(costingItem.mpn.RFQUnitPrice);
+
+
+    const newPrice = convertLengthUnitPriceNew(incomingUnitPrice,costingItem?.mpn?.UOM?.code,costingItem?.uom?.code)
+
+    console.log('------newPrice',newPrice)
 
     if (!(incomingUnitPrice > 0)) {
       return res.status(400).json({
@@ -6294,16 +6348,16 @@ export const updateLatestPrice = async (req, res) => {
 
     const convertedUnitPrice =
       sourceCurrency === drawingCurrency
-        ? round2(incomingUnitPrice)
+        ? round2(newPrice)
         : convertCurrency(
-          incomingUnitPrice,
+          newPrice,
           sourceCurrency,
           drawingCurrency,
           settings,
           { decimals: 2 }
         );
 
-    // console.log('------convertedUnitPrice',convertedUnitPrice)
+    console.log('------convertedUnitPrice',convertedUnitPrice)
 
     // -----------------------------
     // 4️⃣ Sync fields from MPN
@@ -6465,15 +6519,22 @@ export const updateLatestPriceBulk = async (req, res) => {
 
 
     const items = await CostingItems.find({ _id: { $in: validIds } })
-      .populate({
-        path: "mpn",
-        select:
-          "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
-        populate: {
-          path: "currency",
-          select: "code symbol name"
-        }
-      })
+      .populate("uom", "name code symbol") // 👈 CostingItems ka UOM
+  .populate({
+    path: "mpn",
+    select:
+      "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
+    populate: [
+      {
+        path: "currency",
+        select: "code symbol name"
+      },
+      {
+        path: "UOM", // 👈 MPN ka UOM
+        select: "name code symbol"
+      }
+    ]
+  })
       .lean(false);
 
     // console.log('------items',items)
@@ -6525,11 +6586,14 @@ export const updateLatestPriceBulk = async (req, res) => {
           continue;
         }
 
+
+         const newPrice = convertLengthUnitPriceNew(newUnitPrice,costingItem?.mpn?.UOM?.code,costingItem?.uom?.code)
+
         const convertedUnitPrice =
           sourceCurrency === drawingCurrency
-            ? round2(newUnitPrice)
+            ? round2(newPrice)
             : convertCurrency(
-              newUnitPrice,
+              newPrice,
               sourceCurrency,
               drawingCurrency,
               settings,
