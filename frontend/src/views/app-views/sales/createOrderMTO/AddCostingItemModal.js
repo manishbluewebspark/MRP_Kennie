@@ -479,7 +479,7 @@ console.log('-------from',from,to)
     // For material, ensure UOM/MPN as well (if provided as objects)
     if (selectedQuoteType === 'material') {
        setChildPartData(editData)
-      setBaseUom(editData?.uom?.code)
+      setBaseUom(editData?.mpn?.UOM?.code)
       if (editData?.uom?._id) form.setFieldsValue({ uom: editData.uom._id });
       if (editData?.mpn?._id) form.setFieldsValue({ mpn: editData.mpn._id });
       if (editData?.lastEditedBy?.name) form.setFieldsValue({ editedBy: editData?.lastEditedBy?.name });

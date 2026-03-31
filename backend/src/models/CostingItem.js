@@ -59,6 +59,7 @@ const CostingItemSchema = new mongoose.Schema({
     editedBy: { type: String },
     createdAt: { type: Date, default: Date.now },
     lastEditedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    sourceCurrency:{type:String,default:""}
 }, { timestamps: true });
 
 // const CostingItems = mongoose.model("CostingItems", CostingItemSchema);

@@ -1661,13 +1661,26 @@ export const addCostingItem = async (req, res) => {
   }
 };
 
-
 export const updateCostingItem = async (req, res) => {
   try {
     const { drawingId, itemId } = req.params;
 
-    // 1) Load drawing FIRST (needed for currency conversion)
-    const drawing = await Drawing.findById(drawingId).populate("currency", "code symbol")
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    const round2 = (n) =>
+      Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+    const toNum = (v, d = 0) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : d;
+    };
+
+    // -----------------------------
+    // 1️⃣ Load Drawing
+    // -----------------------------
+    const drawing = await Drawing.findById(drawingId).populate("currency", "code symbol");
+
     if (!drawing) {
       return res.status(404).json({ success: false, error: "Drawing not found" });
     }
@@ -1679,30 +1692,120 @@ export const updateCostingItem = async (req, res) => {
 
     const drawingCurrency = (drawing?.currency?.code || "SGD").toUpperCase();
 
-    // ✅ Incoming currency (default USD)
-    const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
-    const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
-    // const sourceCurrency = (req.body.sourceCurrency || req.body.currency || "USD").toUpperCase();
+    // -----------------------------
+    // 2️⃣ Load Existing Item
+    // -----------------------------
+    const existingItem = await CostingItems.findById(itemId);
+    console.log('-----existingItem-',existingItem)
 
-    // ✅ Incoming price field (adjust if your API uses unitPrice/extPrice)
-    const incomingPrice = toNum(req.body.salesPrice);
+    if (!existingItem) {
+      return res.status(404).json({ success: false, error: "Costing item not found" });
+    }
 
-    // ✅ Convert to drawing currency
-    const salesPriceInDrawingCurrency =
-      sourceCurrency === drawingCurrency
-        ? round2(incomingPrice)
-        : convertCurrency(incomingPrice, sourceCurrency, drawingCurrency, settings, { decimals: 2 });
+    // -----------------------------
+    // 3️⃣ Incoming values
+    // -----------------------------
+    const salesPrice = toNum(req.body.salesPrice);
+    const unitPrice = toNum(req.body.unitPrice);
+    const extPrice = toNum(req.body.extPrice);
 
-    // 2) Update costing item with converted value
+    // -----------------------------
+    // 4️⃣ Source Currency (MPN)
+    // -----------------------------
+    let sourceCurrency = existingItem.sourceCurrency || "USD";
+
+    if (req.body.mpn) {
+      const mpnData = await MPN.findById(req.body.mpn).populate("currency", "code");
+      sourceCurrency = (mpnData?.currency?.code || "USD").toUpperCase();
+    }
+
+    // -----------------------------
+    // 5️⃣ Detect Changes
+    // -----------------------------
+    const isMpnChanged = req.body.mpn && String(existingItem.mpn) !== String(req.body.mpn);
+    const isCurrencyChanged = existingItem.sourceCurrency !== sourceCurrency;
+    const isUOMChanged = req.body.uom && String(existingItem.uom) !== String(req.body.uom);
+
+    // -----------------------------
+    // 6️⃣ FINAL VALUES (DEFAULT = SAME)
+    // -----------------------------
+    let finalSalesPrice = salesPrice;
+    let finalUnitPrice = unitPrice;
+    let finalExtPrice = extPrice;
+
+    // -----------------------------
+    // 7️⃣ ONLY RECALCULATE WHEN NEEDED
+    // -----------------------------
+    const isSystemChange = isMpnChanged || isCurrencyChanged || isUOMChanged;
+
+// 👉 detect manual edit
+const isPriceChanged =
+  salesPrice !== toNum(existingItem.salesPrice) ||
+  unitPrice !== toNum(existingItem.unitPrice) ||
+  extPrice !== toNum(existingItem.extPrice);
+
+if (isSystemChange) {
+  // ✅ SYSTEM RECALCULATION
+  let incomingUnitPrice = unitPrice;
+
+  if (isMpnChanged) {
+    const mpnData = await MPN.findById(req.body.mpn).populate("currency", "code");
+    incomingUnitPrice = toNum(mpnData?.RFQUnitPrice);
+  }
+
+  finalUnitPrice =
+    sourceCurrency === drawingCurrency
+      ? round2(incomingUnitPrice)
+      : convertCurrency(
+          incomingUnitPrice,
+          sourceCurrency,
+          drawingCurrency,
+          settings,
+          { decimals: 2 }
+        );
+
+  const quantity = toNum(req.body.quantity || existingItem.quantity);
+  finalExtPrice = round2(quantity * finalUnitPrice);
+
+  finalSalesPrice = finalExtPrice;
+}
+else if (isPriceChanged) {
+  // ✅ USER EDIT → ACCEPT AS IS (NO CONVERSION)
+  finalUnitPrice = unitPrice;
+  finalExtPrice = extPrice;
+  finalSalesPrice = salesPrice;
+}
+else {
+  // ✅ NO CHANGE → KEEP OLD
+  finalUnitPrice = existingItem.unitPrice;
+  finalExtPrice = existingItem.extPrice;
+  finalSalesPrice = existingItem.salesPrice;
+}
+
+    // -----------------------------
+    // 8️⃣ Safe Update डॉक्यूमेंट
+    // -----------------------------
     const updateDoc = {
-      ...req.body,
-      currency: drawingCurrency,                  // store final currency
-      sourceCurrency,                             // original currency
-      sourcePrice: round2(incomingPrice),         // original amount
-      salesPrice: round2(incomingPrice),    // ✅ converted
-      lastEditedBy: req.user?._id,
-      updatedAt: new Date(),
-    };
+  quantity: req.body.quantity ?? existingItem.quantity,
+  tolerance: req.body.tolerance ?? existingItem.tolerance,
+  uom: req.body.uom ?? existingItem.uom,
+  mpn: req.body.mpn ?? existingItem.mpn,
+
+  sgaPercent: req.body.sgaPercent ?? existingItem.sgaPercent,
+  matBurden: req.body.matBurden ?? existingItem.matBurden,
+  freightPercent: req.body.freightPercent ?? existingItem.freightPercent,
+  freightCost: req.body.freightCost ?? existingItem.freightCost,
+
+  currency: drawingCurrency,
+  sourceCurrency,
+
+  unitPrice: finalUnitPrice,
+  extPrice: finalExtPrice,       // ✅ FIX
+  salesPrice: finalSalesPrice,   // ✅ FIX
+
+  lastEditedBy: req.user?._id,
+  updatedAt: new Date(),
+};
 
     const item = await CostingItems.findOneAndUpdate(
       { _id: itemId, drawingId },
@@ -1710,12 +1813,11 @@ export const updateCostingItem = async (req, res) => {
       { new: true }
     );
 
-    if (!item) {
-      return res.status(404).json({ success: false, error: "Costing item not found" });
-    }
-
-    // 3) Recompute ALL totals from DB (salesPrice already converted)
+    // -----------------------------
+    // 9️⃣ Recalculate Totals
+    // -----------------------------
     const oid = new mongoose.Types.ObjectId(drawingId);
+
     const grouped = await CostingItems.aggregate([
       { $match: { drawingId: oid } },
       {
@@ -1742,12 +1844,12 @@ export const updateCostingItem = async (req, res) => {
         case "packing":
           packingTotal = t;
           break;
-        default:
-          break;
       }
     }
 
-    // 4) Apply markups
+    // -----------------------------
+    // 🔟 Apply Markups
+    // -----------------------------
     const materialMarkup = toNum(drawing.materialMarkup);
     const manhourMarkup = toNum(drawing.manhourMarkup);
     const packingMarkup = toNum(drawing.packingMarkup);
@@ -1757,22 +1859,31 @@ export const updateCostingItem = async (req, res) => {
     const packingWithMarkup = round2(packingTotal + (packingTotal * packingMarkup) / 100);
 
     const totalPriceRaw = round2(materialTotal + manhourTotal + packingTotal);
-    const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+    const totalPriceWithMarkup = round2(
+      materialWithMarkup + manhourWithMarkup + packingWithMarkup
+    );
 
-    // 5) Lead time
-    const existingLTW = toNum(drawing.leadTimeWeeks);
-
-    // ✅ Better: leadtime should be MAX among all items, not just this req.body
-    // If you want exact: compute max from DB
+    // -----------------------------
+    // 1️⃣1️⃣ Lead Time
+    // -----------------------------
     const leadAgg = await CostingItems.aggregate([
       { $match: { drawingId: oid } },
-      { $group: { _id: null, maxLead: { $max: { $toDouble: "$leadTime" } } } },
+      {
+        $group: {
+          _id: null,
+          maxLead: { $max: { $toDouble: "$leadTime" } },
+        },
+      },
     ]);
 
-    const maxLeadFromItems = toNum(leadAgg?.[0]?.maxLead);
-    const finalLTW = Math.max(existingLTW, maxLeadFromItems);
+    const finalLTW = Math.max(
+      toNum(drawing.leadTimeWeeks),
+      toNum(leadAgg?.[0]?.maxLead)
+    );
 
-    // 6) Save drawing
+    // -----------------------------
+    // 1️⃣2️⃣ Save Drawing
+    // -----------------------------
     drawing.materialTotal = round2(materialTotal);
     drawing.manhourTotal = round2(manhourTotal);
     drawing.packingTotal = round2(packingTotal);
@@ -1783,21 +1894,21 @@ export const updateCostingItem = async (req, res) => {
 
     await drawing.save();
 
+    // -----------------------------
+    // ✅ RESPONSE
+    // -----------------------------
     return res.json({
       success: true,
       message: "Costing item updated",
       data: item,
       totals: {
         currency: drawingCurrency,
-        materialTotal: round2(materialTotal),
-        manhourTotal: round2(manhourTotal),
-        packingTotal: round2(packingTotal),
-        materialWithMarkup,
-        manhourWithMarkup,
-        packingWithMarkup,
-        totalPrice: drawing.totalPrice,
+        materialTotal,
+        manhourTotal,
+        packingTotal,
+        totalPrice: totalPriceRaw,
         totalPriceWithMarkup,
-        leadTimeWeeks: drawing.leadTimeWeeks,
+        leadTimeWeeks: finalLTW,
       },
     });
   } catch (err) {
@@ -1805,6 +1916,151 @@ export const updateCostingItem = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+
+
+// export const updateCostingItem = async (req, res) => {
+//   try {
+//     const { drawingId, itemId } = req.params;
+
+//     // 1) Load drawing FIRST (needed for currency conversion)
+//     const drawing = await Drawing.findById(drawingId).populate("currency", "code symbol")
+//     if (!drawing) {
+//       return res.status(404).json({ success: false, error: "Drawing not found" });
+//     }
+
+//     const settings = await SystemSettings.findOne({}).lean();
+//     if (!settings?.currencySettings) {
+//       return res.status(500).json({ success: false, error: "Currency settings missing" });
+//     }
+
+//     const drawingCurrency = (drawing?.currency?.code || "SGD").toUpperCase();
+
+//     // ✅ Incoming currency (default USD)
+//     const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
+//     const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
+//     // const sourceCurrency = (req.body.sourceCurrency || req.body.currency || "USD").toUpperCase();
+
+//     // ✅ Incoming price field (adjust if your API uses unitPrice/extPrice)
+//     const incomingPrice = toNum(req.body.salesPrice);
+
+//     // ✅ Convert to drawing currency
+//     const salesPriceInDrawingCurrency =
+//       sourceCurrency === drawingCurrency
+//         ? round2(incomingPrice)
+//         : convertCurrency(incomingPrice, sourceCurrency, drawingCurrency, settings, { decimals: 2 });
+
+//     // 2) Update costing item with converted value
+//     const updateDoc = {
+//       ...req.body,
+//       currency: drawingCurrency,                  // store final currency
+//       sourceCurrency,                             // original currency
+//       sourcePrice: round2(incomingPrice),         // original amount
+//       salesPrice: round2(incomingPrice),    // ✅ converted
+//       lastEditedBy: req.user?._id,
+//       updatedAt: new Date(),
+//     };
+
+//     const item = await CostingItems.findOneAndUpdate(
+//       { _id: itemId, drawingId },
+//       updateDoc,
+//       { new: true }
+//     );
+
+//     if (!item) {
+//       return res.status(404).json({ success: false, error: "Costing item not found" });
+//     }
+
+//     // 3) Recompute ALL totals from DB (salesPrice already converted)
+//     const oid = new mongoose.Types.ObjectId(drawingId);
+//     const grouped = await CostingItems.aggregate([
+//       { $match: { drawingId: oid } },
+//       {
+//         $group: {
+//           _id: "$quoteType",
+//           bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
+//         },
+//       },
+//     ]);
+
+//     let materialTotal = 0;
+//     let manhourTotal = 0;
+//     let packingTotal = 0;
+
+//     for (const g of grouped) {
+//       const t = toNum(g.bucketTotal);
+//       switch ((g._id || "").toLowerCase()) {
+//         case "material":
+//           materialTotal = t;
+//           break;
+//         case "manhour":
+//           manhourTotal = t;
+//           break;
+//         case "packing":
+//           packingTotal = t;
+//           break;
+//         default:
+//           break;
+//       }
+//     }
+
+//     // 4) Apply markups
+//     const materialMarkup = toNum(drawing.materialMarkup);
+//     const manhourMarkup = toNum(drawing.manhourMarkup);
+//     const packingMarkup = toNum(drawing.packingMarkup);
+
+//     const materialWithMarkup = round2(materialTotal + (materialTotal * materialMarkup) / 100);
+//     const manhourWithMarkup = round2(manhourTotal + (manhourTotal * manhourMarkup) / 100);
+//     const packingWithMarkup = round2(packingTotal + (packingTotal * packingMarkup) / 100);
+
+//     const totalPriceRaw = round2(materialTotal + manhourTotal + packingTotal);
+//     const totalPriceWithMarkup = round2(materialWithMarkup + manhourWithMarkup + packingWithMarkup);
+
+//     // 5) Lead time
+//     const existingLTW = toNum(drawing.leadTimeWeeks);
+
+//     // ✅ Better: leadtime should be MAX among all items, not just this req.body
+//     // If you want exact: compute max from DB
+//     const leadAgg = await CostingItems.aggregate([
+//       { $match: { drawingId: oid } },
+//       { $group: { _id: null, maxLead: { $max: { $toDouble: "$leadTime" } } } },
+//     ]);
+
+//     const maxLeadFromItems = toNum(leadAgg?.[0]?.maxLead);
+//     const finalLTW = Math.max(existingLTW, maxLeadFromItems);
+
+//     // 6) Save drawing
+//     drawing.materialTotal = round2(materialTotal);
+//     drawing.manhourTotal = round2(manhourTotal);
+//     drawing.packingTotal = round2(packingTotal);
+//     drawing.totalPrice = totalPriceRaw;
+//     drawing.totalPriceWithMarkup = totalPriceWithMarkup;
+//     drawing.leadTimeWeeks = finalLTW;
+//     drawing.lastEditedBy = req?.user?._id || drawing.lastEditedBy;
+
+//     await drawing.save();
+
+//     return res.json({
+//       success: true,
+//       message: "Costing item updated",
+//       data: item,
+//       totals: {
+//         currency: drawingCurrency,
+//         materialTotal: round2(materialTotal),
+//         manhourTotal: round2(manhourTotal),
+//         packingTotal: round2(packingTotal),
+//         materialWithMarkup,
+//         manhourWithMarkup,
+//         packingWithMarkup,
+//         totalPrice: drawing.totalPrice,
+//         totalPriceWithMarkup,
+//         leadTimeWeeks: drawing.leadTimeWeeks,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("updateCostingItem Error:", err);
+//     return res.status(500).json({ success: false, error: err.message });
+//   }
+// };
 
 
 // export const addCostingItem = async (req, res) => {
