@@ -82,58 +82,58 @@ export const STATUS_META = {
 
 // Badge render helper
 export const renderBadge = (status) => {
-  if (!status) return <Tag>No Status</Tag>;
+    if (!status) return <Tag>No Status</Tag>;
 
-const lower = status?.toLowerCase();
-let color = "default";
+    const lower = status?.toLowerCase();
+    let color = "default";
 
-// 🔄 IN PROGRESS STATES
-if (lower === "picking in progress") {
-  color = "processing"; // 🔵 animated blue (best for progress)
-} else if (lower === "assembly in progress") {
-  color = "purple";
-} else if (lower === "cable harness in progress") {
-  color = "purple";
-} else if (lower === "labelling in progress") {
-  color = "orange";
-} else if (lower === "quality check in progress") {
-  color = "cyan";
-} else if (lower === "picking & assembly in progress") {
-  color = "geekblue";
-}
+    // 🔄 IN PROGRESS STATES
+    if (lower === "picking in progress") {
+        color = "processing"; // 🔵 animated blue (best for progress)
+    } else if (lower === "assembly in progress") {
+        color = "purple";
+    } else if (lower === "cable harness in progress") {
+        color = "purple";
+    } else if (lower === "labelling in progress") {
+        color = "orange";
+    } else if (lower === "quality check in progress") {
+        color = "cyan";
+    } else if (lower === "picking & assembly in progress") {
+        color = "geekblue";
+    }
 
-// ✅ DONE STATES
-else if (lower === "assembly done") {
-  color = "purple";
-} else if (lower === "cable harness done") {
-  color = "purple";
-} else if (lower === "labelling done") {
-  color = "orange";
-} else if (lower === "quality check done") {
-  color = "cyan";
-} else if (lower === "picking & assembly done") {
-  color = "geekblue";
-} else if (lower === "picking done") {
-  color = "blue";
-} else if (lower === "completed") {
-  color = "green";
-}
+    // ✅ DONE STATES
+    else if (lower === "assembly done") {
+        color = "purple";
+    } else if (lower === "cable harness done") {
+        color = "purple";
+    } else if (lower === "labelling done") {
+        color = "orange";
+    } else if (lower === "quality check done") {
+        color = "cyan";
+    } else if (lower === "picking & assembly done") {
+        color = "geekblue";
+    } else if (lower === "picking done") {
+        color = "blue";
+    } else if (lower === "completed") {
+        color = "green";
+    }
 
-  return (
-    <Tag
-      color={color}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        fontWeight: 500,
-        width: 200,
-      }}
-    >
-      <CheckCircleOutlined />
-      {status}
-    </Tag>
-  );
+    return (
+        <Tag
+            color={color}
+            style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontWeight: 500,
+                width: 200,
+            }}
+        >
+            <CheckCircleOutlined />
+            {status}
+        </Tag>
+    );
 };
 
 const renderQyoteTypeBadge = (type) => {
@@ -339,10 +339,23 @@ const DeliveryOrderPage = () => {
 
                     {/* Show Move to Production Icon Only When No Progress */}
                     {status === "No Progress Yet" && (
-                        <PlayCircleFilled
-                            onClick={() => handleMoveToProduction(record)}
-                            style={{ color: "#473bb1ff", cursor: "pointer", fontSize: 18 }}
-                        />
+                        record?.isCostingComplete ? (
+                            <PlayCircleFilled
+                                onClick={() => handleMoveToProduction(record)}
+                                style={{ color: "#473bb1ff", cursor: "pointer", fontSize: 18 }}
+                            />
+                        ) : (
+                            <span
+                                title="Costing incomplete"
+                                style={{
+                                    display: "inline-block",
+                                    width: 10,
+                                    height: 10,
+                                    backgroundColor: "red",
+                                    borderRadius: "50%",
+                                }}
+                            />
+                        )
                     )}
                 </Space>
             )
@@ -446,8 +459,16 @@ const DeliveryOrderPage = () => {
     const fetchWorkOrders = async (params = {}) => {
         setLoading(true);
         try {
-            const { page = 1, limit = 10, search = "", filters: f = filters, sortBy = "createdAt",
-                sortOrder = "desc", activeTab } = params;
+            const {
+                page = 1,
+                limit = 10,
+                search = "",
+                filters: f = filters,
+                sortBy = "createdAt",
+                sortOrder = "desc",
+                activeTab: tab = activeTab, // ✅ fallback fix
+            } = params;
+
             const response = await WorkOrderService.getAllWorkOrders({
                 page,
                 limit,
@@ -457,7 +478,7 @@ const DeliveryOrderPage = () => {
                 projectId: f?.projectNo || undefined,
                 posNo: f?.posNo || undefined,
                 drawingId: f?.drawingNo || undefined,
-                activeTab
+                activeTab: tab // ✅ ALWAYS correct tab
             });
 
             if (response.success) {
@@ -465,9 +486,10 @@ const DeliveryOrderPage = () => {
                     ...item,
                     key: item._id
                 }));
+
                 setData(formattedData);
-                setLastOrderNumber(response?.lastWorkOrderNo)
-                setTotalCount(response.totalCount || response.data.length);
+                setLastOrderNumber(response?.lastWorkOrderNo);
+                setTotalCount(response.pagination?.totalItems || 0);
             } else {
                 message.error(response.message || 'Failed to fetch work orders');
             }
@@ -478,6 +500,42 @@ const DeliveryOrderPage = () => {
             setLoading(false);
         }
     };
+
+    // const fetchWorkOrders = async (params = {}) => {
+    //     setLoading(true);
+    //     try {
+    //         const { page = 1, limit = 10, search = "", filters: f = filters, sortBy = "createdAt",
+    //             sortOrder = "desc", activeTab } = params;
+    //         const response = await WorkOrderService.getAllWorkOrders({
+    //             page,
+    //             limit,
+    //             search,
+    //             sortBy,
+    //             sortOrder,
+    //             projectId: f?.projectNo || undefined,
+    //             posNo: f?.posNo || undefined,
+    //             drawingId: f?.drawingNo || undefined,
+    //             activeTab
+    //         });
+
+    //         if (response.success) {
+    //             const formattedData = response.data.map(item => ({
+    //                 ...item,
+    //                 key: item._id
+    //             }));
+    //             setData(formattedData);
+    //             setLastOrderNumber(response?.lastWorkOrderNo)
+    //             setTotalCount(response.totalCount || response.data.length);
+    //         } else {
+    //             message.error(response.message || 'Failed to fetch work orders');
+    //         }
+    //     } catch (err) {
+    //         console.error("Error fetching work orders:", err);
+    //         message.error('Failed to fetch work orders');
+    //     } finally {
+    //         setLoading(false);
+    //     }
+    // };
 
     const handleExport = async (filter) => {
         // console.log("-------filter", filter);
@@ -539,9 +597,23 @@ const DeliveryOrderPage = () => {
         }
     };
 
+    // useEffect(() => {
+    //     fetchWorkOrders({ page, limit, search, activeTab });
+    // }, [page, limit, activeTab]);
+
     useEffect(() => {
-        fetchWorkOrders({ page, limit, search, activeTab });
-    }, [page, limit, activeTab]);
+        loadData();
+    }, [page, limit, activeTab, search]);
+
+    const loadData = async () => {
+        await fetchWorkOrders({
+            page,
+            limit,
+            search,
+            filters,
+            activeTab
+        });
+    };
 
 
 
@@ -749,6 +821,7 @@ const DeliveryOrderPage = () => {
                             onChange={(e) => {
                                 const tab = e.target.value;
                                 setActiveTab(tab);
+                                setPage(1);
                             }}
                         >
                             <Radio.Button value="PRODUCTION">

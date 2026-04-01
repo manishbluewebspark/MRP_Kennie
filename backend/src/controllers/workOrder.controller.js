@@ -327,13 +327,50 @@ export const getAllWorkOrders = async (req, res) => {
       drawingMap = new Map(drawingDocs.map((d) => [String(d._id), d]));
     }
 
+     // -----------------------------
+    // ⭐ Costing Items Fetch
+    // -----------------------------
+    let costingMap = new Map();
+
+    if (uniqueDrawingIds.length) {
+      const costingItems = await CostingItems.find({
+        drawingId: {
+          $in: uniqueDrawingIds.map(id => new mongoose.Types.ObjectId(id))
+        }
+      })
+        .select("drawingId quoteType")
+        .lean();
+
+      for (const item of costingItems) {
+        const key = String(item.drawingId);
+
+        if (!costingMap.has(key)) {
+          costingMap.set(key, new Set());
+        }
+
+        costingMap.get(key).add((item.quoteType || "").toLowerCase());
+      }
+    }
+
+    const requiredTypes = ["material", "manhour", "packing"];
+
     // ⭐ Inject drawingNo + projectType
     workOrders = workOrders.map((wo) => {
       const d = drawingMap.get(String(wo.drawingId));
+
+      const types = costingMap.get(String(wo.drawingId)) || new Set();
+
+      const missingTypes = requiredTypes.filter(
+        (t) => !types.has(t)
+      );
+
+      const isCostingComplete = missingTypes.length === 0;
+
       return {
         ...wo,
         drawingNo: d?.drawingNo || null,
         projectType: d?.projectType || d?.quoteType || null,
+        isCostingComplete,
       };
     });
 
