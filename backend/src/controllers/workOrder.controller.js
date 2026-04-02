@@ -352,7 +352,7 @@ export const getAllWorkOrders = async (req, res) => {
       }
     }
 
-    const requiredTypes = ["material", "manhour", "packing"];
+    const requiredTypes = ["material", "manhour"];
 
     // ⭐ Inject drawingNo + projectType
     workOrders = workOrders.map((wo) => {
@@ -3046,7 +3046,7 @@ export const moveToProduction = async (req, res) => {
       costingItems.map((c) => c.quoteType)
     );
 
-    const requiredTypes = ["material", "manhour", "packing"];
+    const requiredTypes = ["material", "manhour"];
 
     const missingTypes = requiredTypes.filter(
       (type) => !quoteTypes.has(type)
