@@ -377,7 +377,7 @@ const DeliveryOrderPage = () => {
                     onDelete={() => handleDelete(record._id)}
                     showInfo={hasPermission("work_order.work_order_managment:view")}
                     showEdit={hasPermission("work_order.work_order_managment:create_edit_delete")}
-                    showDelete={record?.status === "completed"}
+                    showDelete={hasPermission("work_order.work_order_managment:create_edit_delete")}
                     showDeleteConfirm={true}
                     onInfo={() => handleInfo(record)}
                 />

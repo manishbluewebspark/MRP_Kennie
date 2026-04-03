@@ -368,6 +368,7 @@ export const getAllWorkOrders = async (req, res) => {
 
       return {
         ...wo,
+        posNo:wo?.posNo,
         drawingNo: d?.drawingNo || null,
         projectType: d?.projectType || d?.quoteType || null,
         isCostingComplete,
@@ -6228,7 +6229,7 @@ export const saveWorkOrderStage = async (req, res) => {
     // --------------------------------------------------
 
     if (processKey === "picking") {
-      if (hasShortage && pickingDone + qty >= wo.quantity) {
+      if (hasShortage &&  qty >= wo.quantity) {
         return res.status(400).json({
           success: false,
           message:
@@ -6236,7 +6237,8 @@ export const saveWorkOrderStage = async (req, res) => {
         });
       }
 
-      if (pickingDone + qty > wo.quantity) {
+      console.log('--------dddd',pickingDone,qty,wo.quantity)
+      if (qty > wo.quantity) {
         return res.status(400).json({
           success: false,
           message: "Picking quantity exceeds work order quantity",
@@ -6245,7 +6247,7 @@ export const saveWorkOrderStage = async (req, res) => {
     }
 
     if (processKey === "assembly") {
-      if (assemblyDone + qty > pickingDone) {
+      if (qty > pickingDone) {
         return res.status(400).json({
           success: false,
           message: "Assembly cannot exceed picked quantity",
@@ -6329,6 +6331,9 @@ export const saveWorkOrderStage = async (req, res) => {
           fromUom: material.uomId,
           toUom: inventory.mpnId.UOM,
         });
+
+
+        console.log('-----baseQty',baseQty)
 
         if (inventory.balanceQuantity < baseQty) {
           return res.status(400).json({

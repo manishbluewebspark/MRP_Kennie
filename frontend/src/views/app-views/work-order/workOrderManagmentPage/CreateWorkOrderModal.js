@@ -30,6 +30,8 @@ const CreateWorkOrderModal = ({
   lastWorkOrderNo,
 }) => {
 
+  console.log('---------editingWorkOrder')
+
   // console.log('----projectData',projectData)
   const [form] = Form.useForm();
 
@@ -239,12 +241,12 @@ const CreateWorkOrderModal = ({
     <Input
       value={record.posNo}
       placeholder="Enter POS No"
-      status={
-        selectedDrawingIds.includes(String(record.drawingId)) &&
-        (!record.posNo || record.posNo.trim() === "")
-          ? "error"
-          : ""
-      }
+      // status={
+      //   selectedDrawingIds.includes(String(record.drawingId)) &&
+      //   (!record?.posNo || record?.posNo?.trim() === "")
+      //     ? "error"
+      //     : ""
+      // }
       onChange={(e) =>
         handleRowChange(record.drawingId, "posNo", e.target.value)
       }
@@ -315,11 +317,48 @@ const CreateWorkOrderModal = ({
   }, [visible]); // ✅ only depends on visible
 
   // ✅ when edit data + rows loaded => patch once
-  useEffect(() => {
-    if (!visible) return;
+  // useEffect(() => {
+  //   if (!visible) return;
 
-    if (isEditMode && editingWorkOrder) {
-      form.setFieldsValue({
+  //   if (isEditMode && editingWorkOrder) {
+  //     form.setFieldsValue({
+  //       workOrderNo: editingWorkOrder.workOrderNo,
+  //       poNumber: editingWorkOrder.poNumber,
+  //       projectNo : editingWorkOrder.projectNo,
+  //       needDate: editingWorkOrder.needDate ? dayjs(editingWorkOrder.needDate) : null,
+  //       commitDate: editingWorkOrder.commitDate ? dayjs(editingWorkOrder.commitDate) : null,
+  //     });
+
+  //     if (editDrawingId) {
+  //       // ✅ lock selection to this drawing
+  //       setSelectedDrawingIds([editDrawingId]);
+
+  //       // ✅ patch row fields for edit (posNo, qty)
+  //       setAllRows((prev) =>
+  //         prev.map((r) => {
+  //           if (String(r.drawingId) !== String(editDrawingId)) return r;
+  //           return {
+  //             ...r,
+  //             posNo: editingWorkOrder.posNo ?? r.posNo ?? "",
+  //             workOrderQty: typeof editingWorkOrder.quantity === "number" ? editingWorkOrder.quantity : r.workOrderQty,
+  //             uom: editingWorkOrder.uom || r.uom || "PCS",
+  //             remarks: editingWorkOrder.remarks ?? r.remarks ?? "",
+  //           };
+  //         })
+  //       );
+  //     }
+  //   }
+  // }, [visible, isEditMode, editDrawingId, editingWorkOrder, form]);
+
+  useEffect(() => {
+  if (!visible) return;
+  if (!isEditMode || !editingWorkOrder) return;
+  if (!allRows.length) return; // 🔥 WAIT for data
+
+  if (editDrawingId) {
+    setSelectedDrawingIds([editDrawingId]);
+
+         form.setFieldsValue({
         workOrderNo: editingWorkOrder.workOrderNo,
         poNumber: editingWorkOrder.poNumber,
         projectNo : editingWorkOrder.projectNo,
@@ -327,26 +366,24 @@ const CreateWorkOrderModal = ({
         commitDate: editingWorkOrder.commitDate ? dayjs(editingWorkOrder.commitDate) : null,
       });
 
-      if (editDrawingId) {
-        // ✅ lock selection to this drawing
-        setSelectedDrawingIds([editDrawingId]);
+    setAllRows((prev) =>
+      prev.map((r) => {
+        if (String(r.drawingId) !== String(editDrawingId)) return r;
 
-        // ✅ patch row fields for edit (posNo, qty)
-        setAllRows((prev) =>
-          prev.map((r) => {
-            if (String(r.drawingId) !== String(editDrawingId)) return r;
-            return {
-              ...r,
-              posNo: editingWorkOrder.posNo ?? r.posNo ?? "",
-              workOrderQty: typeof editingWorkOrder.quantity === "number" ? editingWorkOrder.quantity : r.workOrderQty,
-              uom: editingWorkOrder.uom || r.uom || "PCS",
-              remarks: editingWorkOrder.remarks ?? r.remarks ?? "",
-            };
-          })
-        );
-      }
-    }
-  }, [visible, isEditMode, editDrawingId, editingWorkOrder, form]);
+        return {
+          ...r,
+          posNo: editingWorkOrder.posNo ?? "",
+          workOrderQty:
+            typeof editingWorkOrder.quantity === "number"
+              ? editingWorkOrder.quantity
+              : r.workOrderQty,
+          uom: editingWorkOrder.uom || r.uom || "PCS",
+          remarks: editingWorkOrder.remarks ?? r.remarks ?? "",
+        };
+      })
+    );
+  }
+}, [visible, isEditMode, editDrawingId, editingWorkOrder, allRows]);
 
   const handleCreateOrder = async (values) => {
     try {

@@ -80,6 +80,7 @@ export const convertToInventoryUom = async ({
   const fromCode = await resolveUomCode(fromUom);
   const toCode = await resolveUomCode(toUom);
 
+  console.log('------fromCode',fromCode,toCode)
   if (!fromCode || !toCode) {
     throw new Error("Invalid UOM");
   }
@@ -103,7 +104,8 @@ export const convertToInventoryUom = async ({
     const inMeter = quantity * fromToMeter;
 
     // Step 2: Meter → Target UOM
-    const finalQty = inMeter / toToMeter;
+    // const finalQty = inMeter / toToMeter;
+    const finalQty = inMeter
 
     return Number(finalQty.toFixed(6));
   }
