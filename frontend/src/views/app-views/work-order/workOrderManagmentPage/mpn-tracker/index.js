@@ -504,27 +504,67 @@ const MPNTrackerPage = () => {
     }, 500);
 
     const handleImportMpnNeeded = async (file) => {
-        setImportExcel(true);
-        if (!file) {
-            setImportExcel(true);
-            return
-        }
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
+  setImportExcel(true);
 
-            const res = await WorkOrderService.importTotalMpnNeeded(formData);
-            message.success("Mpn Needed imported successfully!");
-            fetchTotalMpnNeeded()
-            setImportExcel(false)
-            return res;
-        } catch (err) {
-            setImportExcel(false)
-            console.error("❌ Import failed:", err);
-            message.error(err?.response?.data?.message || "Import failed!");
-            throw err;
-        }
-    };
+  if (!file) {
+    setImportExcel(false);
+    return;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await WorkOrderService.importTotalMpnNeeded(formData);
+
+    // ✅ Create download
+    const blob = new Blob([res.data], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "mpn_needed.xlsx";
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    message.success("MPN Needed calculated & downloaded successfully!");
+
+  } catch (err) {
+    console.error("❌ Import failed:", err);
+    message.error("Import failed!");
+  } finally {
+    setImportExcel(false);
+  }
+};
+
+    // const handleImportMpnNeeded = async (file) => {
+    //     setImportExcel(true);
+    //     if (!file) {
+    //         setImportExcel(true);
+    //         return
+    //     }
+    //     try {
+    //         const formData = new FormData();
+    //         formData.append("file", file);
+
+    //         const res = await WorkOrderService.importTotalMpnNeeded(formData);
+    //         message.success("Mpn Needed imported successfully!");
+    //         fetchTotalMpnNeeded()
+    //         setImportExcel(false)
+    //         return res;
+    //     } catch (err) {
+    //         setImportExcel(false)
+    //         console.error("❌ Import failed:", err);
+    //         message.error(err?.response?.data?.message || "Import failed!");
+    //         throw err;
+    //     }
+    // };
 
 const handleExport = async (filters) => {
   try {

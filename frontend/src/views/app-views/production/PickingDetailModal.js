@@ -491,13 +491,13 @@
 //           },
 //         },
 //       ]
-  
+
 
 // const columns = [...baseColumns, ...pickedColumn, ...shortageColumn];
 //     // ---------- SAVE ----------
 //     const handleSave = () => {
 
-    
+
 //         form.validateFields().then((values) => {
 //             const formattedMaterials = dataSource.map((item) => {
 //                 const pickedQty = Number(pickedQuantities[item.key] || 0);
@@ -836,7 +836,7 @@ const PickingDetailModal = ({
 
         form.resetFields();
         setStageQty(null);
-        
+
         const drawingId = getDrawingId(selectWorkOrderData);
 
         // 🔥 Restore previously saved stage data (for re-opening outstanding stage)
@@ -1068,7 +1068,7 @@ const PickingDetailModal = ({
         { title: "Description", dataIndex: "description", key: "description", width: 150 },
         { title: "MPN", dataIndex: "mpn", key: "mpn", width: 100 },
         { title: "UOM", dataIndex: "uom", key: "uom", width: 80 },
-        { title: "Total Qty", dataIndex: "quantity", key: "quantity", width: 80,render: (_, record) => (<div>{record.maxQty || (record.quantity * workQty)}</div>) },
+        { title: "Total Qty", dataIndex: "quantity", key: "quantity", width: 80, render: (_, record) => (<div>{record.maxQty || (record.quantity * workQty)}</div>) },
         { title: "Already Picked", dataIndex: "alreadyPicked", key: "alreadyPicked", width: 100 },
         { title: "Location", dataIndex: "storageLocation", key: "storageLocation", width: 110 },
     ];
@@ -1158,24 +1158,54 @@ const PickingDetailModal = ({
 
     const handleSave = () => {
         form.validateFields().then((values) => {
-            // The stageQty is the additional quantity user wants to process now
-            const additionalQty = stageQty || 0;
+            const additionalQty = Number(stageQty || 0);
             const newTotalQty = alreadyCompletedQty + additionalQty;
 
-            if (additionalQty <= 0 && newTotalQty < workQty) {
-                message.warning("Please enter quantity to process");
-                return;
+            const hasShortage = Object.values(shortageChecked).some(v => v === true);
+
+            const remainingAllowed = workQty - alreadyCompletedQty;
+
+            console.log("DEBUG FRONT", {
+                additionalQty,
+                alreadyCompletedQty,
+                newTotalQty,
+                remainingAllowed,
+                workQty
+            });
+
+            // ❗ Shortage case
+            if (hasShortage) {
+                if (additionalQty > 0) {
+                    message.error("Cannot enter Produce Qty while shortage exists");
+                    return;
+                }
+            } else {
+                // ❗ Required validation
+                if (!additionalQty || additionalQty <= 0) {
+                    message.warning("Please enter Produce Quantity");
+                    return;
+                }
+
+                // ❗ Prevent over production
+                if (additionalQty > remainingAllowed) {
+                    message.error(`Max allowed: ${remainingAllowed}`);
+                    return;
+                }
             }
 
+            // ❗ Final safety
             if (newTotalQty > workQty) {
                 message.error(`Cannot exceed work order quantity of ${workQty}`);
                 return;
             }
 
+            // --------------------------------------------------
+            // 📦 MATERIALS FORMAT
+            // --------------------------------------------------
+
             const formattedMaterials = dataSource.map((item) => {
                 const currentPickedQty = Number(pickedQuantities[item.key] || 0);
-                const previousPickedQty = item.alreadyPicked || 0;
-                const totalPickedQty = previousPickedQty + currentPickedQty;
+                const previousPickedQty = Number(item.alreadyPicked || 0);
 
                 const isShortage = !!shortageChecked[item.key];
                 const shortageQty = isShortage
@@ -1184,27 +1214,98 @@ const PickingDetailModal = ({
 
                 return {
                     ...item,
-                    pickedQty: totalPickedQty,  // Send total picked so far
-                    additionalPickedQty: currentPickedQty,  // Send what's being deducted now
+
+                    // 🔥 IMPORTANT FIX
+                    pickedQty: currentPickedQty,          // ✅ ONLY current (delta)
                     previousPickedQty: previousPickedQty,
                     shortage: isShortage,
                     shortageQty,
                 };
             });
 
+            // --------------------------------------------------
+            // 🚀 FINAL PAYLOAD
+            // --------------------------------------------------
+
             const payload = {
                 stage,
                 comments: values.comments || "",
-                stageQty: newTotalQty,  // New total completed qty
-                additionalStageQty: additionalQty,  // Qty being processed now
+
+                // 🔥 CRITICAL FIX
+                stageQty: additionalQty,        // ✅ send ONLY delta
+                // remove newTotalQty ❌
+
                 pickedQuantities,
                 materials: formattedMaterials,
                 workOrderId: wo.workOrderId,
             };
 
+            console.log("FINAL PAYLOAD", payload);
+
             onSave?.(payload);
         });
     };
+
+    // const handleSave = () => {
+    //     form.validateFields().then((values) => {
+    //         // The stageQty is the additional quantity user wants to process now
+    //         const additionalQty = stageQty || 0;
+    //         console.log('-----additionalQty',additionalQty,alreadyCompletedQty)
+    //         const newTotalQty = alreadyCompletedQty + additionalQty;
+
+    //          const hasShortage = Object.values(shortageChecked).some(v => v === true);
+    //          if (hasShortage) {
+    //         // No validation required
+    //     }  else {
+    //         if (!additionalQty || additionalQty <= 0) {
+    //             message.warning("Please enter Produce Quantity");
+    //             return;
+    //         }
+
+    //         // if (newTotalQty !== workQty) {
+    //         //     message.error(`Produce Qty must match total quantity (${workQty})`);
+    //         //     return;
+    //         // }
+    //     }
+
+    //         if (newTotalQty > workQty) {
+    //             message.error(`Cannot exceed work order quantity of ${workQty}`);
+    //             return;
+    //         }
+
+    //         const formattedMaterials = dataSource.map((item) => {
+    //             const currentPickedQty = Number(pickedQuantities[item.key] || 0);
+    //             const previousPickedQty = item.alreadyPicked || 0;
+    //             const totalPickedQty = previousPickedQty + currentPickedQty;
+
+    //             const isShortage = !!shortageChecked[item.key];
+    //             const shortageQty = isShortage
+    //                 ? Number(shortageInputs[item.key] || 0)
+    //                 : 0;
+
+    //             return {
+    //                 ...item,
+    //                 pickedQty: totalPickedQty,  // Send total picked so far
+    //                 additionalPickedQty: currentPickedQty,  // Send what's being deducted now
+    //                 previousPickedQty: previousPickedQty,
+    //                 shortage: isShortage,
+    //                 shortageQty,
+    //             };
+    //         });
+
+    //         const payload = {
+    //             stage,
+    //             comments: values.comments || "",
+    //             stageQty: newTotalQty,  // New total completed qty
+    //             additionalStageQty: additionalQty,  // Qty being processed now
+    //             pickedQuantities,
+    //             materials: formattedMaterials,
+    //             workOrderId: wo.workOrderId,
+    //         };
+
+    //         onSave?.(payload);
+    //     });
+    // };
 
     return (
         <Modal

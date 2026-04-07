@@ -525,9 +525,9 @@ const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryIte
                 const v = Number(value);
                 if (!value && value !== 0) return Promise.reject(new Error("Adjustment quantity is required"));
                 if (v === 0) return Promise.reject(new Error("Adjustment quantity cannot be zero"));
-                if (currentBalance + v < 0) {
-                  return Promise.reject(new Error(`Cannot reduce below zero. Maximum decrease: ${currentBalance}`));
-                }
+                // if (currentBalance + v < 0) {
+                //   return Promise.reject(new Error(`Cannot reduce below zero. Maximum decrease: ${currentBalance}`));
+                // }
                 return Promise.resolve();
               },
             },
@@ -537,7 +537,7 @@ const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryIte
             style={{ width: "100%" }}
             size="large"
             placeholder="0"
-            min={-currentBalance}
+            // min={-currentBalance}
             max={999999}
             onChange={(value) => setAdjustmentQuantity(Number(value || 0))}
             addonAfter={uomCode}

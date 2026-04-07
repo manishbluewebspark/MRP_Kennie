@@ -327,7 +327,7 @@ export const getAllWorkOrders = async (req, res) => {
       drawingMap = new Map(drawingDocs.map((d) => [String(d._id), d]));
     }
 
-     // -----------------------------
+    // -----------------------------
     // ⭐ Costing Items Fetch
     // -----------------------------
     let costingMap = new Map();
@@ -368,7 +368,7 @@ export const getAllWorkOrders = async (req, res) => {
 
       return {
         ...wo,
-        posNo:wo?.posNo,
+        posNo: wo?.posNo,
         drawingNo: d?.drawingNo || null,
         projectType: d?.projectType || d?.quoteType || null,
         isCostingComplete,
@@ -3139,7 +3139,7 @@ export const getAllProductionWordOrders = async (req, res) => {
     // console.log('----workOrderId', workOrderId)
 
     page = Number(page) || 1;
-    limit = Number(limit) || 20;
+    limit = Number(30) || 20;
 
     const query = { isInProduction: true };
 
@@ -3310,10 +3310,15 @@ export const getAllProductionWordOrders = async (req, res) => {
       const drawingDocs = await Drawing.find({
         _id: { $in: drawingIds.map((id) => new mongoose.Types.ObjectId(id)) },
       })
-        .select("drawingNo")
+        .select("drawingNo description")
         .lean();
 
-      drawingDocs.forEach((d) => drawingMap.set(String(d._id), d.drawingNo));
+      drawingDocs.forEach((d) =>
+        drawingMap.set(String(d._id), {
+          drawingNo: d.drawingNo,
+          description: d.description,
+        })
+      );
     }
 
     // ---- Lookup Project + Customer ----
@@ -3351,9 +3356,12 @@ export const getAllProductionWordOrders = async (req, res) => {
 
     // ---- Final Flat Output ----
     const finalList = workOrders.map((wo) => {
-      const drawingNo = wo.drawingId
+      const drawingData = wo.drawingId
         ? drawingMap.get(String(wo.drawingId)) || null
         : null;
+
+      const drawingNo = drawingData?.drawingNo || null;
+      const description = drawingData?.description || null;
 
       const project = wo.projectId
         ? projectMap.get(String(wo.projectId)) || null
@@ -3379,6 +3387,7 @@ export const getAllProductionWordOrders = async (req, res) => {
         poNumber: wo.poNumber,
         drawingId: wo.drawingId,
         drawingNo,
+        description,
         projectId: wo.projectId,
         projectName,
         projectType: projectTypeFormatted,
@@ -6182,7 +6191,6 @@ export const getCompleteWorkOrders = async (req, res) => {
 export const saveWorkOrderStage = async (req, res) => {
   try {
     const { id } = req.params;
-
     const {
       stage,
       comments,
@@ -6192,7 +6200,6 @@ export const saveWorkOrderStage = async (req, res) => {
     } = req.body;
 
     const wo = await WorkOrder.findById(id);
-
     if (!wo) {
       return res.status(404).json({
         success: false,
@@ -6201,7 +6208,6 @@ export const saveWorkOrderStage = async (req, res) => {
     }
 
     const processKey = mapStageToProcessKey(stage)?.toLowerCase();
-
     if (!processKey) {
       return res.status(400).json({
         success: false,
@@ -6225,19 +6231,18 @@ export const saveWorkOrderStage = async (req, res) => {
     );
 
     // --------------------------------------------------
-    // ❗ Shortage ke saath process complete block
+    // ❗ VALIDATIONS
     // --------------------------------------------------
 
     if (processKey === "picking") {
-      if (hasShortage &&  qty >= wo.quantity) {
+      if (hasShortage && qty > 0) {
         return res.status(400).json({
           success: false,
           message:
-            "Cannot complete process while material shortage exists. Resolve shortage first.",
+            "Cannot enter Produce Qty while shortage exists. Resolve shortage first.",
         });
       }
 
-      console.log('--------dddd',pickingDone,qty,wo.quantity)
       if (qty > wo.quantity) {
         return res.status(400).json({
           success: false,
@@ -6256,13 +6261,10 @@ export const saveWorkOrderStage = async (req, res) => {
     }
 
     if (processKey === "quality_check") {
-      let prevQty = 0;
-
-      if (wo.projectType === "other") {
-        prevQty = getStageQty("picking_assembly");
-      } else {
-        prevQty = getStageQty("assembly");
-      }
+      const prevQty =
+        wo.projectType === "other"
+          ? getStageQty("picking_assembly")
+          : getStageQty("assembly");
 
       if (qcDone + qty > prevQty) {
         return res.status(400).json({
@@ -6273,6 +6275,12 @@ export const saveWorkOrderStage = async (req, res) => {
     }
 
     if (processKey === "labelling") {
+
+      console.log('------sss',{
+  labellingDone,
+  qty,
+  assemblyDone,
+});
       if (labellingDone + qty > assemblyDone) {
         return res.status(400).json({
           success: false,
@@ -6282,7 +6290,7 @@ export const saveWorkOrderStage = async (req, res) => {
     }
 
     // --------------------------------------------------
-    // 📦 INVENTORY DEDUCTION
+    // 📦 INVENTORY DEDUCTION (SAFE)
     // --------------------------------------------------
 
     if (processKey === "picking") {
@@ -6292,28 +6300,27 @@ export const saveWorkOrderStage = async (req, res) => {
 
       for (let i = 0; i < materials.length; i++) {
         const material = materials[i];
-
         const pickedQty = Number(pickedQuantities[i] || 0);
-
         if (!pickedQty) continue;
 
+
+        console.log('------existingProcess',existingProcess)
         const alreadyPickedQty =
           existingProcess?.details
             ?.filter((d) => String(d.mpnId) === String(material.mpnId))
-            ?.reduce((sum, d) => sum + Number(d.qty || 0), 0) || 0;
+            ?.reduce((sum, d) => sum + Number(d.alreadyPicked || 0), 0) || 0;
 
-         // ✅ Total required for this work order
-  const totalRequiredQty = Number(material.quantity || 0) * Number(wo.quantity || 0);
+        const totalRequiredQty =
+          Number(material.quantity || 0) * Number(wo.quantity || 0);
 
-  // ✅ Remaining allowed to pick
-  const remainingAllowed = totalRequiredQty - alreadyPickedQty;
-
-  if (pickedQty > remainingAllowed) {
-    return res.status(400).json({
-      success: false,
-      message: `You cannot pick more than required for ${material.mpn}. Remaining allowed: ${remainingAllowed}`,
-    });
-  }
+        const remainingAllowed = totalRequiredQty - alreadyPickedQty;
+        console.log('--------pickedQty',pickedQty,remainingAllowed)
+        if (pickedQty > remainingAllowed) {
+          return res.status(400).json({
+            success: false,
+            message: `Max allowed for ${material.mpn}: ${remainingAllowed}`,
+          });
+        }
 
         const inventory = await Inventory.findOne({
           mpnId: material.mpnId,
@@ -6332,18 +6339,14 @@ export const saveWorkOrderStage = async (req, res) => {
           toUom: inventory.mpnId.UOM,
         });
 
-
-        console.log('-----baseQty',baseQty)
-
         if (inventory.balanceQuantity < baseQty) {
           return res.status(400).json({
             success: false,
-            message: `Insufficient stock for ${material.mpn}. Available: ${inventory.balanceQuantity}`,
+            message: `Insufficient stock for ${material.mpn}`,
           });
         }
 
         inventory.balanceQuantity -= baseQty;
-
         await inventory.save();
       }
     }
@@ -6352,9 +6355,7 @@ export const saveWorkOrderStage = async (req, res) => {
     // 🧠 PROCESS HISTORY UPDATE
     // --------------------------------------------------
 
-    if (!Array.isArray(wo.processHistory)) {
-      wo.processHistory = [];
-    }
+    if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
 
     const materialsWithQty = materials.map((m, i) => ({
       ...m,
@@ -6365,16 +6366,11 @@ export const saveWorkOrderStage = async (req, res) => {
 
     if (existing) {
       existing.qty += qty;
-
       existing.completedBy = userId;
       existing.completedAt = new Date();
 
       existing.comments = existing.comments || [];
-
-      existing.comments.push({
-        comment: comments,
-        commentedBy: userId,
-      });
+      existing.comments.push({ comment: comments, commentedBy: userId });
 
       existing.details = [...(existing.details || []), ...materialsWithQty];
     } else {
@@ -6384,12 +6380,7 @@ export const saveWorkOrderStage = async (req, res) => {
         completedBy: userId,
         completedAt: new Date(),
         createdAt: new Date(),
-        comments: [
-          {
-            comment: comments,
-            commentedBy: userId,
-          },
-        ],
+        comments: [{ comment: comments, commentedBy: userId }],
         details: materialsWithQty,
       });
     }
@@ -6409,13 +6400,346 @@ export const saveWorkOrderStage = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-
     return res.status(500).json({
       success: false,
       message: err.message,
     });
   }
 };
+
+const updateWorkOrderStatus = (wo) => {
+  const totalQty = Number(wo.quantity || 0);
+
+  const getStageQty = (key) =>
+    wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+  const hasStageShortage = (key) => {
+    const entry = wo.processHistory?.find((p) => p.process === key);
+    return entry?.details?.some(
+      (m) => m.shortage || Number(m.shortageQty || 0) > 0
+    );
+  };
+
+  const stages =
+    wo.projectType === "other"
+      ? ["picking_assembly", "quality_check"]
+      : wo.projectType === "box_build"
+      ? ["picking", "assembly", "quality_check"]
+      : ["picking", "assembly", "labelling", "quality_check"];
+
+  const formatStageName = (key) => {
+    const map = {
+      picking: "Picking",
+      assembly: wo.projectType === "box_build" ? "Assembly" : "Cable Harness",
+      labelling: "Labelling",
+      quality_check: "Quality Check",
+      picking_assembly: "Picking & Assembly",
+    };
+    return map[key] || key;
+  };
+
+  let hasAnyProgress =
+    Array.isArray(wo.processHistory) &&
+    wo.processHistory.some(
+      (p) =>
+        (p.qty && p.qty > 0) ||
+        (Array.isArray(p.details) && p.details.length > 0)
+    );
+
+  let currentStage = null;
+  let lastCompletedStage = null;
+
+  for (const key of stages) {
+    const doneQty = getStageQty(key);
+    const shortage = hasStageShortage(key);
+
+    if (doneQty >= totalQty && !shortage && totalQty > 0) {
+      lastCompletedStage = key;
+      continue;
+    }
+
+    if (doneQty > 0 || shortage) {
+      currentStage = key;
+      break;
+    }
+
+    if (doneQty === 0) break;
+  }
+
+  // 🔄 In Progress
+  if (currentStage) {
+    wo.status = `${formatStageName(currentStage)} In Progress`;
+    wo.isInProduction = true;
+    return;
+  }
+
+  // ✅ Completed
+  const anyShortage = stages.some((key) => hasStageShortage(key));
+  const allComplete =
+    stages.every((key) => getStageQty(key) >= totalQty) && !anyShortage;
+
+  if (allComplete) {
+    wo.status = "Completed";
+    wo.isProductionComplete = true;
+    wo.isInProduction = false;
+    wo.completeDate = new Date();
+    return;
+  }
+
+  // 🟡 Partial done
+  if (lastCompletedStage) {
+    wo.status = `${formatStageName(lastCompletedStage)} Done`;
+    wo.isInProduction = true;
+    return;
+  }
+
+  // ❌ Not Started ONLY if no activity
+  if (!hasAnyProgress) {
+    wo.status = "Not Start Yet";
+    wo.isInProduction = false;
+  } else {
+    wo.status = "In Progress";
+    wo.isInProduction = true;
+  }
+};
+
+
+// export const saveWorkOrderStage = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const {
+//       stage,
+//       comments,
+//       stageQty,
+//       pickedQuantities = {},
+//       materials = [],
+//     } = req.body;
+
+//     const wo = await WorkOrder.findById(id);
+
+//     if (!wo) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Work order not found",
+//       });
+//     }
+
+//     const processKey = mapStageToProcessKey(stage)?.toLowerCase();
+
+//     if (!processKey) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid stage",
+//       });
+//     }
+
+//     const qty = Number(stageQty || 0);
+//     const userId = req.user?._id;
+
+//     const getStageQty = (key) =>
+//       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//     const pickingDone = getStageQty("picking");
+//     const assemblyDone = getStageQty("assembly");
+//     const qcDone = getStageQty("quality_check");
+//     const labellingDone = getStageQty("labelling");
+
+//     const hasShortage = materials.some(
+//       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
+//     );
+
+//     // --------------------------------------------------
+//     // ❗ Shortage ke saath process complete block
+//     // --------------------------------------------------
+
+//     if (processKey === "picking") {
+//       if (hasShortage && qty > 0) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "Cannot enter Produce Qty while shortage exists. Resolve shortage first.",
+//         });
+//       }
+
+//       if (qty > wo.quantity) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Picking quantity exceeds work order quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "assembly") {
+//       if (qty > pickingDone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Assembly cannot exceed picked quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "quality_check") {
+//       let prevQty = 0;
+
+//       if (wo.projectType === "other") {
+//         prevQty = getStageQty("picking_assembly");
+//       } else {
+//         prevQty = getStageQty("assembly");
+//       }
+
+//       if (qcDone + qty > prevQty) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "QC cannot exceed previous stage quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "labelling") {
+//       if (labellingDone + qty > assemblyDone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Labelling cannot exceed assembly completed",
+//         });
+//       }
+//     }
+
+//     // --------------------------------------------------
+//     // 📦 INVENTORY DEDUCTION
+//     // --------------------------------------------------
+
+//     if (processKey === "picking") {
+//       const existingProcess = wo.processHistory?.find(
+//         (p) => p.process === "picking"
+//       );
+
+//       for (let i = 0; i < materials.length; i++) {
+//         const material = materials[i];
+
+//         const pickedQty = Number(pickedQuantities[i] || 0);
+
+//         if (!pickedQty) continue;
+
+//         const alreadyPickedQty =
+//           existingProcess?.details
+//             ?.filter((d) => String(d.mpnId) === String(material.mpnId))
+//             ?.reduce((sum, d) => sum + Number(d.qty || 0), 0) || 0;
+
+//         // ✅ Total required for this work order
+//         const totalRequiredQty = Number(material.quantity || 0) * Number(wo.quantity || 0);
+
+//         // ✅ Remaining allowed to pick
+//         const remainingAllowed = totalRequiredQty - alreadyPickedQty;
+
+//         if (pickedQty > remainingAllowed) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `You cannot pick more than required for ${material.mpn}. Remaining allowed: ${remainingAllowed}`,
+//           });
+//         }
+
+//         const inventory = await Inventory.findOne({
+//           mpnId: material.mpnId,
+//         }).populate("mpnId");
+
+//         if (!inventory) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Inventory not found for ${material.mpn}`,
+//           });
+//         }
+
+//         const baseQty = await convertToInventoryUom({
+//           qty: pickedQty,
+//           fromUom: material.uomId,
+//           toUom: inventory.mpnId.UOM,
+//         });
+
+
+//         console.log('-----baseQty', baseQty)
+
+//         if (inventory.balanceQuantity < baseQty) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Insufficient stock for ${material.mpn}. Available: ${inventory.balanceQuantity}`,
+//           });
+//         }
+
+//         inventory.balanceQuantity -= baseQty;
+
+//         await inventory.save();
+//       }
+//     }
+
+//     // --------------------------------------------------
+//     // 🧠 PROCESS HISTORY UPDATE
+//     // --------------------------------------------------
+
+//     if (!Array.isArray(wo.processHistory)) {
+//       wo.processHistory = [];
+//     }
+
+//     const materialsWithQty = materials.map((m, i) => ({
+//       ...m,
+//       qty: Number(pickedQuantities[i] || 0),
+//     }));
+
+//     let existing = wo.processHistory.find((p) => p.process === processKey);
+
+//     if (existing) {
+//       existing.qty += qty;
+
+//       existing.completedBy = userId;
+//       existing.completedAt = new Date();
+
+//       existing.comments = existing.comments || [];
+
+//       existing.comments.push({
+//         comment: comments,
+//         commentedBy: userId,
+//       });
+
+//       existing.details = [...(existing.details || []), ...materialsWithQty];
+//     } else {
+//       wo.processHistory.push({
+//         process: processKey,
+//         qty,
+//         completedBy: userId,
+//         completedAt: new Date(),
+//         createdAt: new Date(),
+//         comments: [
+//           {
+//             comment: comments,
+//             commentedBy: userId,
+//           },
+//         ],
+//         details: materialsWithQty,
+//       });
+//     }
+
+//     // --------------------------------------------------
+//     // 📊 STATUS ENGINE
+//     // --------------------------------------------------
+
+//     updateWorkOrderStatus(wo);
+
+//     await wo.save();
+
+//     return res.json({
+//       success: true,
+//       message: `${stage} saved successfully`,
+//       data: wo,
+//     });
+//   } catch (err) {
+//     console.error(err);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
 
 const mapStageToProcessKey = (stage) => {
   switch (stage) {
@@ -6440,113 +6764,115 @@ const mapStageToProcessKey = (stage) => {
   }
 };
 
-const updateWorkOrderStatus = (wo) => {
-  const type = wo.projectType;
+// const updateWorkOrderStatus = (wo) => {
+//   const type = wo.projectType;
 
-  const getStageQty = (key) =>
-    wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+//   const getStageQty = (key) =>
+//     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
 
-  const totalQty = Number(wo.quantity || 0);
+//   const totalQty = Number(wo.quantity || 0);
 
-  const formatStageName = (key) => {
-    switch (key) {
-      case "picking":
-        return "Picking";
+//   const formatStageName = (key) => {
+//     switch (key) {
+//       case "picking":
+//         return "Picking";
 
-      case "assembly":
-        return type === "box_build" ? "Assembly" : "Cable Harness";
+//       case "assembly":
+//         return type === "box_build" ? "Assembly" : "Cable Harness";
 
-      case "labelling":
-        return "Labelling";
+//       case "labelling":
+//         return "Labelling";
 
-      case "quality_check":
-        return "Quality Check";
+//       case "quality_check":
+//         return "Quality Check";
 
-      case "picking_assembly":
-        return "Picking & Assembly";
+//       case "picking_assembly":
+//         return "Picking & Assembly";
 
-      default:
-        return key;
-    }
-  };
+//       default:
+//         return key;
+//     }
+//   };
 
-  let stages = [];
+//   let stages = [];
 
-  if (type === "other") {
-    stages = ["picking_assembly", "quality_check"];
-  } else if (type === "box_build") {
-    stages = ["picking", "assembly", "quality_check"];
-  } else {
-    stages = ["picking", "assembly", "labelling", "quality_check"];
-  }
+//   if (type === "other") {
+//     stages = ["picking_assembly", "quality_check"];
+//   } else if (type === "box_build") {
+//     stages = ["picking", "assembly", "quality_check"];
+//   } else {
+//     stages = ["picking", "assembly", "labelling", "quality_check"];
+//   }
 
-  const hasStageShortage = (key) => {
-    const entry = wo.processHistory?.find((p) => p.process === key);
+//   const hasStageShortage = (key) => {
+//     const entry = wo.processHistory?.find((p) => p.process === key);
 
-    if (!entry?.details) return false;
+//     if (!entry?.details) return false;
 
-    return entry.details.some(
-      (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
-    );
-  };
+//     return entry.details.some(
+//       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
+//     );
+//   };
 
- let currentStage = null;
-let lastCompletedStage = null;
+//   let currentStage = null;
+//   let lastCompletedStage = null;
 
-for (let i = 0; i < stages.length; i++) {
-  const key = stages[i];
+//   for (let i = 0; i < stages.length; i++) {
+//     const key = stages[i];
 
-  const doneQty = getStageQty(key);
-  const shortage = hasStageShortage(key);
+//     const doneQty = getStageQty(key);
+//     const shortage = hasStageShortage(key);
 
-  // ✅ Stage Completed
-  if (doneQty >= totalQty && totalQty > 0 && !shortage) {
-    lastCompletedStage = key;
-    continue;
-  }
+//     // ✅ Stage Completed
+//     if (doneQty >= totalQty && totalQty > 0 && !shortage) {
+//       lastCompletedStage = key;
+//       continue;
+//     }
 
-  // 🔄 Stage In Progress
-  if (doneQty > 0 && doneQty < totalQty) {
-    currentStage = key;
-    break;
-  }
+//     // 🔄 Stage In Progress
+//     if (doneQty > 0 && (doneQty < totalQty || shortage)) {
+//       currentStage = key;
+//       break;
+//     }
 
-  // ❌ Not started
-  if (doneQty === 0) {
-    break;
-  }
-}
+//     // ❌ Not started
+//     if (doneQty === 0) {
+//       break;
+//     }
+//   }
 
-// 🔄 If current stage in progress
-if (currentStage) {
-  wo.status = `${formatStageName(currentStage)} In Progress`;
-  wo.isInProduction = true;
-  return;
-}
+//   // 🔄 If current stage in progress
+//   if (currentStage) {
+//     wo.status = `${formatStageName(currentStage)} In Progress`;
+//     wo.isInProduction = true;
+//     return;
+//   }
 
-// ✅ If last stage completed
-if (lastCompletedStage) {
-  const allComplete = stages.every(
-    (key) => getStageQty(key) >= totalQty && totalQty > 0
-  );
+//   // ✅ If last stage completed
+//   if (lastCompletedStage) {
+//     const anyShortage = stages.some((key) => hasStageShortage(key));
 
-  if (allComplete) {
-    wo.status = "Completed";
-    wo.isProductionComplete = true;
-    wo.isInProduction = false;
-    wo.completeDate = new Date();
-  } else {
-    wo.status = `${formatStageName(lastCompletedStage)} Done`;
-    wo.isInProduction = true;
-  }
+//     const allComplete =
+//       stages.every((key) => getStageQty(key) >= totalQty && totalQty > 0) &&
+//       !anyShortage;
 
-  return;
-}
+//     if (allComplete) {
+//       wo.status = "Completed";
+//       wo.isProductionComplete = true;
+//       wo.isInProduction = false;
+//       wo.completeDate = new Date();
+//     } else {
+//       wo.status = `${formatStageName(lastCompletedStage)} Done`;
+//       wo.isInProduction = true;
+//     }
 
-// ❌ Not started
-wo.status = "Not Start Yet";
-wo.isInProduction = false;
-};
+//     return;
+//   }
+
+//   // ❌ Not started
+//   wo.status = "Not Start Yet";
+//   wo.isInProduction = false;
+// };
 
 const toNum = (v) => {
   const n = Number(String(v ?? "").trim());
@@ -6557,6 +6883,9 @@ const norm = (v) => String(v ?? "").trim();
 
 export const importTotalMpnNeeded = async (req, res) => {
   try {
+    // -------------------------
+    // 1️⃣ VALIDATION
+    // -------------------------
     if (!req.file) {
       return res.status(400).json({ success: false, message: "No file uploaded" });
     }
@@ -6569,27 +6898,36 @@ export const importTotalMpnNeeded = async (req, res) => {
       });
     }
 
-    // ✅ Read excel
+    // -------------------------
+    // 2️⃣ READ EXCEL
+    // -------------------------
     const buffer = req.file.buffer || fs.readFileSync(req.file.path);
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames?.[0]];
+
     if (!sheet) {
       return res.status(400).json({ success: false, message: "Excel has no sheets" });
     }
 
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
     if (!rows.length) {
       return res.status(400).json({ success: false, message: "File is empty" });
     }
 
-    // ✅ flexible headers
+    // -------------------------
+    // 3️⃣ FLEXIBLE HEADERS
+    // -------------------------
     const pickDrawingNo = (r) =>
       r["Drawing No"] ?? r["DrawingNo"] ?? r["drawingNo"] ?? r["Drawing"] ?? r["drawing"] ?? "";
+
     const pickQty = (r) =>
       r["Qty"] ?? r["QTY"] ?? r["qty"] ?? r["Quantity"] ?? r["quantity"] ?? "";
 
-    // ✅ aggregate same DrawingNo (important)
-    const qtyByDrawingNo = new Map(); // drawingNo -> totalQty
+    // -------------------------
+    // 4️⃣ AGGREGATE DRAWINGS
+    // -------------------------
+    const qtyByDrawingNo = new Map();
     const invalidRows = [];
 
     rows.forEach((r, idx) => {
@@ -6601,7 +6939,7 @@ export const importTotalMpnNeeded = async (req, res) => {
           row: idx + 2,
           drawingNo,
           qty: pickQty(r),
-          reason: "Missing/invalid Drawing No or Qty",
+          reason: "Invalid Drawing No or Qty",
         });
         return;
       }
@@ -6617,60 +6955,285 @@ export const importTotalMpnNeeded = async (req, res) => {
       });
     }
 
+    // -------------------------
+    // 5️⃣ DRAWING → ID
+    // -------------------------
     const drawingNos = [...qtyByDrawingNo.keys()];
 
-    // ✅ Step-1: DrawingNo -> DrawingId
     const drawings = await Drawing.find(
       { drawingNo: { $in: drawingNos } },
       { _id: 1, drawingNo: 1 }
     ).lean();
 
-    const drawingIdByNo = new Map(drawings.map((d) => [String(d.drawingNo), String(d._id)]));
+    const drawingIdByNo = new Map(
+      drawings.map((d) => [String(d.drawingNo), String(d._id)])
+    );
 
     const notFoundDrawings = drawingNos.filter((dn) => !drawingIdByNo.has(dn));
 
-    // ✅ Step-2: WorkOrder update using drawingId
-    const bulkOps = [];
-    for (const [drawingNo, qty] of qtyByDrawingNo.entries()) {
+    // -------------------------
+    // 6️⃣ FETCH COSTING ITEMS
+    // -------------------------
+    const costingItems = await CostingItems.find({
+      drawingId: { $in: [...drawingIdByNo.values()] },
+      quoteType: "material",
+    }).lean();
+
+    const costingMap = new Map();
+
+    costingItems.forEach((ci) => {
+      const key = String(ci.drawingId);
+      const arr = costingMap.get(key) || [];
+      arr.push(ci);
+      costingMap.set(key, arr);
+    });
+
+    // -------------------------
+    // 7️⃣ MPN CALCULATION (CORE)
+    // -------------------------
+    const mpnUsageMap = new Map();
+    const mpnIdSet = new Set();
+
+    for (const [drawingNo, inputQty] of qtyByDrawingNo.entries()) {
       const drawingId = drawingIdByNo.get(drawingNo);
       if (!drawingId) continue;
 
-      bulkOps.push({
-        updateMany: {
-          filter: { drawingId: new mongoose.Types.ObjectId(drawingId) },
-          update: {
-            $inc: { quantity: qty }, // ✅ change field name if your WO uses different one
-            $set: { updatedAt: new Date() },
-          },
-        },
+      const costingArr = costingMap.get(drawingId);
+      if (!costingArr) continue;
+
+      for (const ci of costingArr) {
+        if (!ci.mpn) continue;
+
+        const mpnId = String(ci.mpn);
+        mpnIdSet.add(mpnId);
+
+        const needed = Number(ci.quantity || 0) * inputQty;
+
+        const prev = mpnUsageMap.get(mpnId) || {
+          mpnId,
+          description: ci.description || "",
+          manufacturer: ci.manufacturer || "",
+          uomId: ci.uom || null,
+          totalNeeded: 0,
+        };
+
+        prev.totalNeeded += needed;
+        mpnUsageMap.set(mpnId, prev);
+      }
+    }
+
+    if (!mpnUsageMap.size) {
+      return res.status(400).json({
+        success: false,
+        message: "No MPN usage calculated",
       });
     }
 
-    let bulkResult = null;
-    if (bulkOps.length) {
-      bulkResult = await WorkOrder.bulkWrite(bulkOps, { ordered: false });
-    }
+    // -------------------------
+    // 8️⃣ LOAD MASTER DATA
+    // -------------------------
+    const mpnObjectIds = [...mpnIdSet].map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
 
-    return res.json({
-      success: true,
-      message: "Import completed",
-      summary: {
-        totalRows: rows.length,
-        validDrawingNos: qtyByDrawingNo.size,
-        drawingsMatched: drawings.length,
-        workOrdersMatched: bulkResult?.matchedCount || 0,
-        workOrdersModified: bulkResult?.modifiedCount || 0,
-        notFoundDrawingCount: notFoundDrawings.length,
-        invalidCount: invalidRows.length,
-      },
-      notFoundDrawings: [...new Set(notFoundDrawings)],
-      invalidRows,
+    const mpnDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
+    const mpnMap = new Map(mpnDocs.map((m) => [String(m._id), m]));
+
+    const uomIds = [
+      ...new Set(
+        [...mpnUsageMap.values()]
+          .map((r) => r.uomId)
+          .filter(Boolean)
+          .map(String)
+      ),
+    ];
+
+    const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
+    const uomMap = new Map(uomDocs.map((u) => [String(u._id), u]));
+
+    const invDocs = await Inventory.find({
+      mpnId: { $in: mpnObjectIds },
+    }).lean();
+
+    const invMap = new Map();
+    invDocs.forEach((inv) => {
+      const key = String(inv.mpnId);
+      invMap.set(key, (invMap.get(key) || 0) + Number(inv.balanceQuantity || 0));
     });
-  } catch (err) {
-    console.error("importTotalMpnNeeded error:", err);
-    return res.status(500).json({ success: false, message: err.message });
+
+    // -------------------------
+    // 9️⃣ BUILD EXCEL
+    // -------------------------
+    const excelRows = [...mpnUsageMap.values()].map((row) => {
+      const mpn = mpnMap.get(row.mpnId);
+      const uom = row.uomId ? uomMap.get(String(row.uomId)) : null;
+      const stock = invMap.get(row.mpnId) || 0;
+
+      return {
+        "MPN": mpn?.mpn || mpn?.MPN || "",
+        "Description": row.description || mpn?.description || "",
+        "Manufacturer": row.manufacturer || mpn?.manufacturer || "",
+        "UOM": uom?.code || "",
+        "Total Needed": row.totalNeeded,
+        "Current Stock": stock,
+        "Shortfall": Math.max(0, row.totalNeeded - stock),
+      };
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(excelRows);
+
+    ws["!cols"] = Object.keys(excelRows[0]).map((h) => ({
+      wch: Math.max(12, h.length + 2),
+    }));
+
+    XLSX.utils.book_append_sheet(wb, ws, "MPN Needed");
+
+    const bufferOut = XLSX.write(wb, {
+      type: "buffer",
+      bookType: "xlsx",
+    });
+
+    // -------------------------
+    // 🔟 RESPONSE
+    // -------------------------
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="mpn_needed.xlsx"'
+    );
+
+    return res.end(bufferOut);
+
+  } catch (error) {
+    console.error("importTotalMpnNeeded error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
+
+
+// export const importTotalMpnNeeded = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ success: false, message: "No file uploaded" });
+//     }
+
+//     const fileName = (req.file.originalname || "").toLowerCase();
+//     if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Only .xlsx / .xls files allowed",
+//       });
+//     }
+
+//     // ✅ Read excel
+//     const buffer = req.file.buffer || fs.readFileSync(req.file.path);
+//     const workbook = XLSX.read(buffer, { type: "buffer" });
+//     const sheet = workbook.Sheets[workbook.SheetNames?.[0]];
+//     if (!sheet) {
+//       return res.status(400).json({ success: false, message: "Excel has no sheets" });
+//     }
+
+//     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+//     if (!rows.length) {
+//       return res.status(400).json({ success: false, message: "File is empty" });
+//     }
+
+//     // ✅ flexible headers
+//     const pickDrawingNo = (r) =>
+//       r["Drawing No"] ?? r["DrawingNo"] ?? r["drawingNo"] ?? r["Drawing"] ?? r["drawing"] ?? "";
+//     const pickQty = (r) =>
+//       r["Qty"] ?? r["QTY"] ?? r["qty"] ?? r["Quantity"] ?? r["quantity"] ?? "";
+
+//     // ✅ aggregate same DrawingNo (important)
+//     const qtyByDrawingNo = new Map(); // drawingNo -> totalQty
+//     const invalidRows = [];
+
+//     rows.forEach((r, idx) => {
+//       const drawingNo = norm(pickDrawingNo(r));
+//       const qty = toNum(pickQty(r));
+
+//       if (!drawingNo || qty === null) {
+//         invalidRows.push({
+//           row: idx + 2,
+//           drawingNo,
+//           qty: pickQty(r),
+//           reason: "Missing/invalid Drawing No or Qty",
+//         });
+//         return;
+//       }
+
+//       qtyByDrawingNo.set(drawingNo, (qtyByDrawingNo.get(drawingNo) || 0) + qty);
+//     });
+
+//     if (!qtyByDrawingNo.size) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "No valid rows found",
+//         invalidRows,
+//       });
+//     }
+
+//     const drawingNos = [...qtyByDrawingNo.keys()];
+
+//     // ✅ Step-1: DrawingNo -> DrawingId
+//     const drawings = await Drawing.find(
+//       { drawingNo: { $in: drawingNos } },
+//       { _id: 1, drawingNo: 1 }
+//     ).lean();
+
+//     const drawingIdByNo = new Map(drawings.map((d) => [String(d.drawingNo), String(d._id)]));
+
+//     const notFoundDrawings = drawingNos.filter((dn) => !drawingIdByNo.has(dn));
+
+//     // ✅ Step-2: WorkOrder update using drawingId
+//     const bulkOps = [];
+//     for (const [drawingNo, qty] of qtyByDrawingNo.entries()) {
+//       const drawingId = drawingIdByNo.get(drawingNo);
+//       if (!drawingId) continue;
+
+//       bulkOps.push({
+//         updateMany: {
+//           filter: { drawingId: new mongoose.Types.ObjectId(drawingId) },
+//           update: {
+//             $inc: { quantity: qty }, // ✅ change field name if your WO uses different one
+//             $set: { updatedAt: new Date() },
+//           },
+//         },
+//       });
+//     }
+
+//     let bulkResult = null;
+//     if (bulkOps.length) {
+//       bulkResult = await WorkOrder.bulkWrite(bulkOps, { ordered: false });
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "Import completed",
+//       summary: {
+//         totalRows: rows.length,
+//         validDrawingNos: qtyByDrawingNo.size,
+//         drawingsMatched: drawings.length,
+//         workOrdersMatched: bulkResult?.matchedCount || 0,
+//         workOrdersModified: bulkResult?.modifiedCount || 0,
+//         notFoundDrawingCount: notFoundDrawings.length,
+//         invalidCount: invalidRows.length,
+//       },
+//       notFoundDrawings: [...new Set(notFoundDrawings)],
+//       invalidRows,
+//     });
+//   } catch (err) {
+//     console.error("importTotalMpnNeeded error:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 
 export const getFilterData = async (req, res) => {
   try {

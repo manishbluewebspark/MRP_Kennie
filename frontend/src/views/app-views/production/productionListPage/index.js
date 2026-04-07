@@ -185,28 +185,28 @@ const CableAssemblyCard = ({
     const stages = STAGE_CONFIG.map((stage) => {
       const entry = history.find((p) => p.process === stage.key);
 
-const doneRaw = Number(entry?.qty || 0);
+      const doneRaw = Number(entry?.qty || 0);
 
-const doneQty =
-  qtyRequired > 0 ? Math.min(doneRaw, qtyRequired) : doneRaw;
+      const doneQty =
+        qtyRequired > 0 ? Math.min(doneRaw, qtyRequired) : doneRaw;
 
-const outstandingQty =
-  qtyRequired > 0 ? Math.max(qtyRequired - doneQty, 0) : 0;
+      const outstandingQty =
+        qtyRequired > 0 ? Math.max(qtyRequired - doneQty, 0) : 0;
 
-// ✅ stage exist check
-const stageStarted = !!entry;
+      // ✅ stage exist check
+      const stageStarted = !!entry;
 
-let status = "new";
+      let status = "new";
 
-if (!stageStarted) {
-  status = "new";
-}
-else if (doneQty >= qtyRequired && qtyRequired > 0) {
-  status = "completed";
-}
-else {
-  status = "in_progress";
-}
+      if (!stageStarted) {
+        status = "new";
+      }
+      else if (doneQty >= qtyRequired && qtyRequired > 0) {
+        status = "completed";
+      }
+      else {
+        status = "in_progress";
+      }
 
       return {
         ...stage,
@@ -274,17 +274,35 @@ else {
           <Row justify="space-between" align="top">
             {/* Left Section */}
             <Col>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <FileTextOutlined style={{ color: "#1890ff", fontSize: 18 }} />
-                <span
-                  style={{ fontSize: 15, fontWeight: 600, color: "#000" }}
-                >
-                  {record?.workOrderNo || "-"} —{" "}
-                  {formatProjectType(record?.projectType || "-")} - Details
-                </span>
-                <Tag color="purple" style={{ fontSize: 11, padding: "0 6px" }}>
-                  Qty: {record?.quantity ?? 0}
-                </Tag>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {/* <FileTextOutlined style={{ color: "#1890ff", fontSize: 18 }} /> */}
+
+                <div style={{ display: "flex", flexDirection: "column" }}>
+
+                  {/* Top Row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: "#000" }}>
+                      Drawing - {record?.drawingNo || "-"}
+                    </span>
+
+                    <Tag color="purple" style={{ fontSize: 11, padding: "6 6px" }}>
+                      Qty: {record?.quantity ?? 0}
+                    </Tag>
+                  </div>
+
+                  {/* Description */}
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: "#666",
+                      marginTop: 2,
+                      lineHeight: "18px",
+                    }}
+                  >
+                    Description:- {record?.description || "No description"}
+                  </span>
+
+                </div>
               </div>
             </Col>
 
@@ -355,8 +373,8 @@ else {
             }}
           >
             <InfoItem
-              label="Drawing No"
-              value={record?.drawingNo}
+              label="Work Order No"
+              value={record?.workOrderNo}
               icon={<FileDoneOutlined />}
             />
             <InfoItem
@@ -369,11 +387,11 @@ else {
               value={record?.posNo}
               icon={<BarcodeOutlined />}
             />
-            <InfoItem
+            {/* <InfoItem
               label="Work Order No"
               value={record?.workOrderNo}
               icon={<ApartmentOutlined />}
-            />
+            /> */}
             <InfoItem
               label="Project"
               value={record?.projectName}
@@ -583,6 +601,7 @@ const SkillLevelCostingList = () => {
   const [search, setSearch] = useState("");
   const [skillLevelCostings, setSkillLevelCostings] = useState([]);
   const [loading, setLoading] = useState(false);
+const [inputValue, setInputValue] = useState("");
 
   const [activeTab, setActiveTab] = useState("active_production");
   const [modalVisible, setModalVisible] = useState(false);
@@ -606,8 +625,8 @@ const SkillLevelCostingList = () => {
 
 
   const { state } = useLocation();
-const workOrderId = state?.workOrderId;
-// console.log('------workOrderId',workOrderId)
+  const workOrderId = state?.workOrderId;
+  // console.log('------workOrderId',workOrderId)
 
 
   // useEffect(() => {
@@ -618,11 +637,11 @@ const workOrderId = state?.workOrderId;
   // }, [page, limit, search]);
 
   useEffect(() => {
-     if (workOrderId) {
-    fetchWorkOrdersData({ workOrderId });
-  } else {
-    fetchWorkOrdersData({ page, limit, search, filters });
-  }
+    if (workOrderId) {
+      fetchWorkOrdersData({ workOrderId });
+    } else {
+      fetchWorkOrdersData({ page, limit, search, filters });
+    }
 
   }, [page, limit, search, filters, workOrderId]);
 
@@ -867,7 +886,7 @@ const workOrderId = state?.workOrderId;
     {
       title: "",
       key: "projectDetails",
-       width: "100%",
+      width: "100%",
       render: (_, record) => (
         <CableAssemblyCard
           record={record}
@@ -1064,8 +1083,11 @@ const workOrderId = state?.workOrderId;
           <Input
             placeholder="Search..."
             prefix={<SearchOutlined />}
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
+            value={inputValue}
+            
+            onChange={(e) => {handleSearch(e.target.value)
+              setInputValue(e.target.value);
+            }}
           />
         </Col>
 

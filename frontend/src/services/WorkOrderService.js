@@ -205,6 +205,17 @@ WorkOrderService.exportGetEachMPNUsage = ({ mpnId }) => {
   });
 };
 
+// WorkOrderService.importTotalMpnNeeded = (formData) => {
+//   return fetch({
+//     url: "/work-orders/workOrder/total-mpn-needed/import",
+//     method: "post",
+//     data: formData,
+//     headers: {
+//       "Content-Type": "multipart/form-data",
+//     },
+//   });
+// };
+
 WorkOrderService.importTotalMpnNeeded = (formData) => {
   return fetch({
     url: "/work-orders/workOrder/total-mpn-needed/import",
@@ -213,6 +224,7 @@ WorkOrderService.importTotalMpnNeeded = (formData) => {
     headers: {
       "Content-Type": "multipart/form-data",
     },
+    responseType: "blob", // ⭐ MUST
   });
 };
 
