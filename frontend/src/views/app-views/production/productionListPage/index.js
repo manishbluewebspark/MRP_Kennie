@@ -103,7 +103,7 @@ const STAGE_PERMISSION_MAP = {
   },
   "Cable Harness": {
     picking: "production.cable_harness_assembly:picking_process",
-    assembly: "production.cable_harness_assembly:cable_harness",
+    cable_harness: "production.cable_harness_assembly:cable_harness",
     labelling: "production.cable_harness_assembly:labelling",
     quality_check: "production.cable_harness_assembly:qc",
     packing: "production.cable_harness_assembly:packing",
@@ -152,7 +152,7 @@ const CableAssemblyCard = ({
     // Default (Cable Harness)
     return [
       { label: "Picking", key: "picking" },
-      { label: "Cable Harness", key: "assembly" }, // same process key
+      { label: "Cable Harness", key: "cable_harness" }, // same process key
       { label: "Labelling", key: "labelling" },
       { label: "Quality Check", key: "quality_check" },
     ];
@@ -869,6 +869,7 @@ const [inputValue, setInputValue] = useState("");
       const res = await InventoryService.getMaterialShortages({
         page,
         limit,
+        search
       });
       // console.log("-------active res", res);
       setMaterialShortages(res.data || []);

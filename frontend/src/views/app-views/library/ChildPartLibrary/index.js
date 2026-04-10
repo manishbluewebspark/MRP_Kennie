@@ -609,7 +609,8 @@ const ChildPartLibrary = () => {
           (res.data || []).map((mpn) => ({
             label: mpn?.MPN,
             value: mpn?._id,
-            category:mpn?.Category?.name
+            category:mpn?.Category?.name,
+            categoryId:mpn?.Category?._id
           }))
         );
       }

@@ -15,706 +15,117 @@ import SystemSettings from "../models/SystemSettings.js";
 
 import mongoose from "mongoose";
 import CostingItems from "../models/CostingItem.js";
-import { convertQty } from "../utils/uomController.js";
+import { convertQty, convertToBaseUOM } from "../utils/uomController.js";
 
 // DemandQty map: mpnId -> totalDemandQty
+// async function buildDemandMap() {
+//   // 1) Workorders (filter status if you want)
+//   const workOrders = await WorkOrder.find({
+//     // status: { $in: ["No Progress Yet", "In Progress"] } // optional
+//   })
+//     .select("_id drawingId quantity")
+//     .lean();
+
+//   if (!workOrders.length) return new Map();
+
+//   // 2) group wo by drawingId and keep woQty sum
+//   const woQtyByDrawing = new Map(); // drawingId -> total WO quantity
+//   const drawingIds = new Set();
+
+//   for (const wo of workOrders) {
+//     const dId = String(wo.drawingId);
+//     if (!dId) continue;
+//     drawingIds.add(dId);
+//     const prev = woQtyByDrawing.get(dId) || 0;
+//     woQtyByDrawing.set(dId, prev + Number(wo.quantity || 1));
+//   }
+
+//   const drawingObjectIds = [...drawingIds].map((id) => new mongoose.Types.ObjectId(id));
+
+//   // 3) CostingItems of those drawings (material)
+//   const costingItems = await CostingItems.find({
+//     drawingId: { $in: drawingObjectIds },
+//     quoteType: "material",
+//   })
+//     .select("drawingId mpn quantity")
+//     .lean();
+
+//   if (!costingItems.length) return new Map();
+
+//   // 4) mpn demand = sum( costingItem.qty * woQtyOfDrawing )
+//   const demandMap = new Map(); // mpnId -> demandQty
+
+//   for (const ci of costingItems) {
+//     const dId = String(ci.drawingId);
+//     const mpnId = String(ci.mpn);
+//     if (!mpnId) continue;
+
+//     const woQty = woQtyByDrawing.get(dId) || 0;
+//     if (woQty <= 0) continue;
+
+//     const needed = Number(ci.quantity || 0) * woQty;
+
+//     demandMap.set(mpnId, (demandMap.get(mpnId) || 0) + needed);
+//   }
+
+//   return demandMap;
+// }
+
 async function buildDemandMap() {
-  // 1) Workorders (filter status if you want)
-  const workOrders = await WorkOrder.find({
-    // status: { $in: ["No Progress Yet", "In Progress"] } // optional
-  })
+  const workOrders = await WorkOrder.find({})
     .select("_id drawingId quantity")
     .lean();
 
   if (!workOrders.length) return new Map();
 
-  // 2) group wo by drawingId and keep woQty sum
-  const woQtyByDrawing = new Map(); // drawingId -> total WO quantity
+  const woQtyByDrawing = new Map();
   const drawingIds = new Set();
 
   for (const wo of workOrders) {
     const dId = String(wo.drawingId);
     if (!dId) continue;
+
     drawingIds.add(dId);
-    const prev = woQtyByDrawing.get(dId) || 0;
-    woQtyByDrawing.set(dId, prev + Number(wo.quantity || 1));
+    woQtyByDrawing.set(dId, (woQtyByDrawing.get(dId) || 0) + Number(wo.quantity || 1));
   }
 
-  const drawingObjectIds = [...drawingIds].map((id) => new mongoose.Types.ObjectId(id));
-
-  // 3) CostingItems of those drawings (material)
   const costingItems = await CostingItems.find({
-    drawingId: { $in: drawingObjectIds },
+    drawingId: { $in: [...drawingIds] },
     quoteType: "material",
   })
-    .select("drawingId mpn quantity")
+    .populate({
+      path: "mpn",
+      select: "UOM",
+      populate: { path: "UOM", select: "code" },
+    })
+    .populate("uom", "code")
+    .select("drawingId mpn quantity uom")
     .lean();
 
-  if (!costingItems.length) return new Map();
-
-  // 4) mpn demand = sum( costingItem.qty * woQtyOfDrawing )
-  const demandMap = new Map(); // mpnId -> demandQty
+  const demandMap = new Map();
 
   for (const ci of costingItems) {
     const dId = String(ci.drawingId);
-    const mpnId = String(ci.mpn);
+    const mpnId = String(ci.mpn?._id || ci.mpn);
+
     if (!mpnId) continue;
 
     const woQty = woQtyByDrawing.get(dId) || 0;
     if (woQty <= 0) continue;
 
-    const needed = Number(ci.quantity || 0) * woQty;
+    let needed = Number(ci.quantity || 0) * woQty;
+    console.log('--------uom',ci)
+    // 🔥 convert to M (inventory base UOM)
+    const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code;
+    const toUOM = ci?.mpn?.UOM?.code;
+
+    needed = convertToBaseUOM(needed, fromUOM, toUOM);
 
     demandMap.set(mpnId, (demandMap.get(mpnId) || 0) + needed);
   }
 
   return demandMap;
 }
-
-// controllers/inventoryController.js
-// export const getInventoryList = async (req, res) => {
-//   try {
-//     const { 
-//       page = 1, 
-//       limit = 10, 
-//       search = "",
-//       sortBy = "partNumber",
-//       sortOrder = "asc" 
-//     } = req.query;
-
-//     const pageNum = parseInt(page);
-//     const limitNum = parseInt(limit);
-
-//     // Build filter
-//     const filter = {};
-
-//     if (search) {
-//       filter.$or = [
-//         { MPN: { $regex: search, $options: "i" } },
-//         { Description: { $regex: search, $options: "i" } },
-//         { Manufacturer: { $regex: search, $options: "i" } }
-//       ];
-//     }
-
-//     // Get total count
-//     const total = await Inventory.countDocuments(filter);
-
-//     // Get inventory data with population
-//     const inventoryList = await Inventory.find(filter)
-//       .populate({
-//         path: "mpnId",
-//         select: "MPN Description Manufacturer UOM StorageLocation ", // MPN field bhi select karo
-//         model: "MPNLibrary"
-//       })
-//       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
-//       .skip((pageNum - 1) * limitNum)
-//       .limit(limitNum)
-//       .lean(); // Better performance
-
-//     // Transform data to match required format
-//     const transformedData = inventoryList.map(item => {
-//       // MPN data from populated field or fallback
-//       const mpnData = item.mpnId || {};
-
-//       return {
-//         _id: item._id,
-//         MPN: mpnData.MPN || mpnData.partNumber || "N/A", // MPN field
-//         Manufacturer: mpnData.Manufacturer || mpnData.Manufacturer || "N/A",
-//         Description: mpnData.Description || mpnData.Description || "N/A",
-//         Storage: mpnData.storageLocation || "Main Warehouse", // Adjust based on your schema
-//         "Balance Qty": item.balanceQuantity || 0,
-//         "Incoming Qty": item.incomingQuantity || 0,
-//         "Incoming PO NO.": item.incomingPONumber || "N/A", // You might need to calculate this
-//         "Commit Date": item.commitDate ? new Date(item.commitDate).toLocaleDateString() : "N/A",
-//         Status: getInventoryStatus(item.balanceQuantity, item.incomingQuantity)
-//       };
-//     });
-
-//     res.json({
-//       success: true,
-//       data: transformedData,
-//       total,
-//       page: pageNum,
-//       limit: limitNum,
-//       totalPages: Math.ceil(total / limitNum)
-//     });
-
-//   } catch (error) {
-//     console.error("Get Inventory List Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: error.message
-//     });
-//   }
-// };
-
-// // Helper function to determine inventory status
-// const getInventoryStatus = (balanceQty, incomingQty) => {
-//   if (balanceQty <= 0 && incomingQty <= 0) return "Out of Stock";
-//   if (balanceQty <= 0 && incomingQty > 0) return "On Order";
-//   if (balanceQty > 0 && balanceQty < 10) return "Low Stock";
-//   return "In Stock";
-// };
-
-export const adjustInventory = async (req, res) => {
-  try {
-    const { inventoryId, adjustmentQuantity, reason } = req.body;
-    const adjustedBy = req.user._id; // From authentication middleware
-
-    if (!inventoryId || adjustmentQuantity === undefined || !reason) {
-      return res.status(400).json({
-        success: false,
-        message: "Inventory ID, adjustment quantity, and reason are required"
-      });
-    }
-
-    const inventory = await Inventory.findById(inventoryId)
-      .populate({
-        path: "mpnId",
-        select: "UOM MPN"
-      });
-
-    if (!inventory) {
-      return res.status(404).json({
-        success: false,
-        message: "Inventory not found"
-      });
-    }
-
-    if (!inventory.mpnId) {
-      return res.status(400).json({
-        success: false,
-        message: "MPN missing in inventory"
-      });
-    }
-
-
-
-    const baseUomId = inventory.mpnId.UOM; // ✅ BASE UOM (meter / EA)
-
-    const baseAdjustmentQty = await convertQty({
-      qty: adjustmentQuantity,
-      fromUomId: baseUomId,
-    });
-
-    // Use the static method for transaction safety
-    const result = await Inventory.adjustInventory(
-      inventoryId,
-      baseAdjustmentQty,
-      reason,
-      adjustedBy
-    );
-
-    res.json({
-      success: true,
-      message: "Inventory adjusted successfully",
-      data: {
-        inventory: result.inventory,
-        adjustment: result.adjustment
-      }
-    });
-
-  } catch (error) {
-    console.error("Adjust Inventory Error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-// export const getInventoryList = async (req, res) => {
-//   try {
-//     const {
-//       page = 1,
-//       limit = 10,
-//       search = "",
-//       sortBy = "createdAt",
-//       sortOrder = "desc",
-//     } = req.query;
-
-//     const pageNum = Math.max(parseInt(page) || 1, 1);
-//     const limitNum = Math.max(parseInt(limit) || 10, 1);
-//     const skip = (pageNum - 1) * limitNum;
-
-//     const s = String(search || "").trim();
-//     const sortDir = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
-
-//     // ✅ inventoryFilter yahan rakho (agar inventory fields se filter chahiye)
-//     const inventoryMatch = {};
-
-//     // ✅ search on MPN model fields
-//     const mpnSearchMatch = s
-//       ? {
-//           $or: [
-//             { "mpn.MPN": { $regex: s, $options: "i" } },
-//             { "mpn.Description": { $regex: s, $options: "i" } },
-//             { "mpn.Manufacturer": { $regex: s, $options: "i" } },
-//           ],
-//         }
-//       : {};
-
-//     const pipeline = [
-//       { $match: inventoryMatch },
-
-//       // Inventory.mpnId -> mpns collection lookup
-//       {
-//         $lookup: {
-//           from: "mpnlibraries",                 // ⚠️ apni actual collection name check karo
-//           localField: "mpnId",
-//           foreignField: "_id",
-//           as: "mpn",
-//         },
-//       },
-//       { $unwind: { path: "$mpn", preserveNullAndEmptyArrays: true } },
-
-//       // UOM populate (mpn.UOM -> uoms collection)
-//       {
-//         $lookup: {
-//           from: "uoms",                 // ⚠️ actual collection name
-//           localField: "mpn.UOM",
-//           foreignField: "_id",
-//           as: "uom",
-//         },
-//       },
-//       { $unwind: { path: "$uom", preserveNullAndEmptyArrays: true } },
-
-//       // ✅ Apply search AFTER lookup
-//       ...(s ? [{ $match: mpnSearchMatch }] : []),
-
-//       // ✅ Sort (allow inventory fields; if mpn fields sort chahiye to map karo)
-//       { $sort: { [sortBy]: sortDir } },
-
-//       // ✅ Count + paginated data in one go
-//       {
-//         $facet: {
-//           data: [
-//             { $skip: skip },
-//             { $limit: limitNum },
-//             {
-//               $project: {
-//                 _id: 1,
-//                 mpnId: "$mpn._id",
-//                 balanceQuantity: 1,
-//                 createdAt: 1,
-
-//                 MPN: { $ifNull: ["$mpn.MPN", ""] },
-//                 Description: { $ifNull: ["$mpn.Description", ""] },
-//                 Manufacturer: { $ifNull: ["$mpn.Manufacturer", ""] },
-//                 UOM: { $ifNull: ["$uom.code", ""] },
-//                 Storage: "$mpn.StorageLocation",
-//               },
-//             },
-//           ],
-//           total: [{ $count: "count" }],
-//         },
-//       },
-//     ];
-
-//     const result = await Inventory.aggregate(pipeline);
-//     const rows = result?.[0]?.data || [];
-//     const total = result?.[0]?.total?.[0]?.count || 0;
-
-//     // ✅ add status mapping if needed
-//     const finalRows = rows.map((r) => ({
-//       ...r,
-//       Status: getInventoryStatus(r.balanceQuantity || 0, 0),
-//     }));
-
-//     return res.json({
-//       success: true,
-//       data: finalRows,
-//       total,
-//       page: pageNum,
-//       limit: limitNum,
-//       totalPages: Math.ceil(total / limitNum),
-//     });
-//   } catch (error) {
-//     console.error("getInventoryList error:", error);
-//     return res.status(500).json({ success: false, message: error.message });
-//   }
-// };
-
-
-
-// export const getInventoryList = async (req, res) => {
-//   try {
-//     const {
-//       page = 1,
-//       limit = 10,
-//       search = "",
-//       sortBy = "MPN",           // sorting on MPN master
-//       sortOrder = "asc"
-//     } = req.query;
-
-//     const pageNum = parseInt(page, 10);
-//     const limitNum = parseInt(limit, 10);
-
-//     // 1️⃣ Filter on MPN master
-//     const mpnFilter = {};
-
-//     if (search) {
-//       mpnFilter.$or = [
-//         { MPN: { $regex: search, $options: "i" } },
-//         { Description: { $regex: search, $options: "i" } },
-//         { Manufacturer: { $regex: search, $options: "i" } },
-//       ];
-//     }
-
-//     // 2️⃣ Count from MPN (jitne MPN utni rows)
-//     const total = await MPN.countDocuments(mpnFilter);
-
-//     // 3️⃣ Fetch MPNs + populate UOM (code)
-//     const sortField = sortBy || "MPN";
-//     const sortDir = sortOrder === "desc" ? -1 : 1;
-
-//     const mpns = await MPN.find(mpnFilter)
-//       .populate("UOM", "code")   // 🟢 yahi se UOM code aa jayega
-//       .sort({ [sortField]: sortDir })
-//       .skip((pageNum - 1) * limitNum)
-//       .limit(limitNum)
-//       .lean();
-
-//     // If no MPNs, return empty
-//     if (!mpns.length) {
-//       return res.json({
-//         success: true,
-//         data: [],
-//         total,
-//         page: pageNum,
-//         limit: limitNum,
-//         totalPages: Math.ceil(total / limitNum),
-//       });
-//     }
-
-//     // 4️⃣ Get inventory records for these MPNs
-//     const mpnIds = mpns.map(m => m._id);
-//     const inventoryDocs = await Inventory.find({
-//       mpnId: { $in: mpnIds },
-//     }).lean();
-
-//     const inventoryMap = new Map(
-//       inventoryDocs.map(inv => [String(inv.mpnId), inv])
-//     );
-
-//     // 5️⃣ For each MPN, calculate pending POs + merge inventory
-//     const rows = await Promise.all(
-//       mpns.map(async (mpnDoc) => {
-//         const mpnIdStr = String(mpnDoc._id);
-//         const inventory = inventoryMap.get(mpnIdStr) || null;
-
-//         try {
-//           // 🔹 Pending POs for this MPN
-//           const pendingPOs = await PurchaseOrders.find({
-//             "items.mpn": mpnDoc._id,
-//             status: { $in: ["Pending", "Approved", "Partially Received"] },
-//           })
-//             .select(
-//               "_id poNumber supplier needDate  items.mpn items.idNumber items.qty items.receivedQtyTotal items.pendingQty items.committedDate items.needDate status createdAt updatedAt"
-//             )
-//             .populate("items.mpn", "MPN Description Manufacturer UOM") // UOM id yahan tak
-//             .populate("supplier", "companyName contactPerson companyAddress")
-//             .lean();
-
-//           console.log('--------pendingPOs', pendingPOs)
-
-//           let totalIncomingQty = 0;
-//           let incomingPONumbers = [];
-//           let earliestCommitDate = null;
-//           let purchaseData = [];
-
-//           pendingPOs.forEach((po) => {
-//             po.items.forEach((poItem) => {
-//               if (poItem.mpn && String(poItem.mpn._id) === mpnIdStr) {
-//                 const remainingQty =
-//                   (poItem.qty || 0) - (poItem.receivedQtyTotal || 0);
-
-//                 if (remainingQty > 0) {
-//                   totalIncomingQty += remainingQty;
-//                   incomingPONumbers.push(po.poNumber);
-
-//                   if (po.commitDate) {
-//                     const cDate = new Date(po.commitDate);
-//                     if (!earliestCommitDate || cDate < earliestCommitDate) {
-//                       earliestCommitDate = cDate;
-//                     }
-//                   }
-
-//                   purchaseData.push({
-//                     _id: po?._id,
-//                     idNumber: poItem?.idNumber,
-//                     mpn: poItem?.mpn,
-//                     poNumber: po.poNumber,
-//                     supplier: po.supplier || { name: "N/A" },
-//                     quantity: remainingQty,
-//                     totalQuantity: poItem.qty || 0,
-//                     receivedQuantity: poItem.receivedQtyTotal || 0,
-//                     pendingQuantity: poItem.pendingQty || 0,
-//                     needDate: po.needDate
-//                       ? new Date(po.needDate).toLocaleDateString()
-//                       : "N/A",
-//                     committedDate: poItem.committedDate
-//                       ? new Date(poItem.committedDate).toLocaleDateString()
-//                       : "N/A",
-//                     status: po.status,
-//                     createdAt: po.createdAt,
-//                     updatedAt: po.updatedAt,
-//                     poStatus: po.status,
-//                     itemDescription: poItem.mpn?.Description || "N/A",
-//                     itemManufacturer: poItem.mpn?.Manufacturer || "N/A",
-//                     // Agar aapko yahan bhi UOM code chahiye to
-//                     // itemUOM: (poItem.mpn?.UOM && poItem.mpn?.UOM.code) || undefined
-//                   });
-//                 }
-//               }
-//             });
-//           });
-
-//           incomingPONumbers = [...new Set(incomingPONumbers)];
-
-//           const balanceQty = inventory?.balanceQuantity || 0;
-
-//           // 🔚 Final row + UOM code include
-//           return {
-//             _id: inventory?._id || null,           // inventory id (if any)
-//             mpnId: mpnDoc._id,                     // MPN id
-
-//             MPN: mpnDoc.MPN || "N/A",
-//             Manufacturer: mpnDoc.Manufacturer || "N/A",
-//             Description: mpnDoc.Description || "N/A",
-//             UOM: mpnDoc.UOM?.code || "N/A",        // 🟢 Yahi UOM code aa raha hai
-//             Storage: mpnDoc.StorageLocation || "Main Warehouse",
-//             UOM: mpnDoc?.UOM,
-//             balanceQuantity: balanceQty,
-//             IncomingQty: totalIncomingQty,
-//             IncomingPoNumber:
-//               incomingPONumbers.length > 0
-//                 ? incomingPONumbers.join(", ")
-//                 : "N/A",
-//             commitDate: earliestCommitDate
-//               ? new Date(earliestCommitDate).toLocaleDateString()
-//               : "N/A",
-
-//             Status: getInventoryStatus(balanceQty, totalIncomingQty),
-
-//             purchaseData, // full PO data
-//           };
-//         } catch (err) {
-//           console.error(`Error processing MPN ${mpnDoc.MPN}:`, err);
-//           const balanceQty = inventory?.balanceQuantity || 0;
-
-//           return {
-//             _id: inventory?._id || null,
-//             mpnId: mpnDoc._id,
-//             UOM: mpnDoc?.UOM,
-//             MPN: mpnDoc.MPN || "N/A",
-//             Manufacturer: mpnDoc.Manufacturer || "N/A",
-//             Description: mpnDoc.Description || "N/A",
-//             UOM: mpnDoc.UOM?.code || "N/A",
-//             Storage: mpnDoc.StorageLocation || "Main Warehouse",
-
-//             balanceQuantity: balanceQty,
-//             IncomingQty: 0,
-//             IncomingPoNumber: "N/A",
-//             commitDate: "N/A",
-//             Status: getInventoryStatus(balanceQty, 0),
-//             purchaseData: [],
-//           };
-//         }
-//       })
-//     );
-
-//     // 7️⃣ Final response
-//     return res.json({
-//       success: true,
-//       data: rows,
-//       total,
-//       page: pageNum,
-//       limit: limitNum,
-//       totalPages: Math.ceil(total / limitNum),
-//     });
-//   } catch (error) {
-//     console.error("Get Inventory List Error:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: error.message,
-//     });
-//   }
-// };
-
-
-
-// export const getInventoryList = async (req, res) => {
-//   try {
-//     const {
-//       page = 1,
-//       limit = 10,
-//       search = "",
-//       sortBy = "createdAt",
-//       sortOrder = "desc",
-//     } = req.query;
-
-//     const pageNum = Math.max(parseInt(page) || 1, 1);
-//     const limitNum = Math.max(parseInt(limit) || 10, 1);
-
-//     // ✅ Inventory filter (Inventory ke fields pe)
-//     const filter = {};
-
-//     // ✅ FIX: search MPNLibrary me hoga, then mpnId filter inventory me
-//     if (search && String(search).trim()) {
-//       const s = String(search).trim();
-
-//       const mpnDocs = await MPNLibrary.find({
-//         $or: [
-//           { MPN: { $regex: s, $options: "i" } },
-//           { Description: { $regex: s, $options: "i" } },
-//           { Manufacturer: { $regex: s, $options: "i" } },
-//         ],
-//       }).select("_id").lean();
-
-//       const mpnIds = mpnDocs.map(d => d._id);
-
-//       // ✅ agar search me kuch match hi nahi mila, direct empty response
-//       if (!mpnIds.length) {
-//         return res.json({
-//           success: true,
-//           data: [],
-//           total: 0,
-//           page: pageNum,
-//           limit: limitNum,
-//           totalPages: 0,
-//         });
-//       }
-
-//       filter.mpnId = { $in: mpnIds };
-//     }
-
-//     // ✅ total count
-//     const total = await Inventory.countDocuments(filter);
-
-//     // ✅ Inventory list
-//     const inventoryList = await Inventory.find(filter)
-//       .populate({
-//         path: "mpnId",
-//         select: "MPN Description Manufacturer UOM StorageLocation",
-//         model: "MPNLibrary",
-//         populate: { path: "UOM", select: "code" },
-//       })
-//       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
-//       .skip((pageNum - 1) * limitNum)
-//       .limit(limitNum)
-//       .lean();
-
-//     // ✅ PO calculation (tumhara code same)
-//     const inventoryWithPOData = await Promise.all(
-//       inventoryList.map(async (item) => {
-//         try {
-//           const pendingPOs = await PurchaseOrders.find({
-//             "items.mpn": item.mpnId?._id,
-//             status: { $in: ["Pending", "Approved", "Partially Received"] },
-//           })
-//             .select("poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt")
-//             .populate("items.mpn", "MPN Description Manufacturer")
-//             .populate("supplier", "name contactEmail phoneNumber")
-//             .lean();
-
-//           let totalIncomingQty = 0;
-//           let incomingPONumbers = [];
-//           let earliestCommitDate = null;
-//           let purchaseData = [];
-
-//           pendingPOs.forEach((po) => {
-//             po.items.forEach((poItem) => {
-//               if (poItem.mpn && String(poItem.mpn._id) === String(item.mpnId?._id)) {
-//                 const remainingQty = Number(poItem.qty || 0) - Number(poItem.receivedQty || 0);
-
-//                 if (remainingQty > 0) {
-//                   totalIncomingQty += remainingQty;
-//                   incomingPONumbers.push(po.poNumber);
-
-//                   if (poItem.commitDate) {
-//                     const commitDate = new Date(poItem.commitDate);
-//                     if (!earliestCommitDate || commitDate < earliestCommitDate) earliestCommitDate = commitDate;
-//                   }
-
-//                   purchaseData.push({
-//                     poNumber: po.poNumber,
-//                     supplier: po.supplier || { name: "N/A" },
-//                     quantity: remainingQty,
-//                     totalQuantity: poItem.qty,
-//                     receivedQuantity: poItem.receivedQty || 0,
-//                     needDate: poItem.needDate ? new Date(poItem.needDate).toLocaleDateString() : "N/A",
-//                     committedDate: poItem.commitDate ? new Date(poItem.commitDate).toLocaleDateString() : "N/A",
-//                     status: po.status,
-//                     createdAt: po.createdAt,
-//                     updatedAt: po.updatedAt,
-//                     itemDescription: poItem.mpn?.Description || "N/A",
-//                     itemManufacturer: poItem.mpn?.Manufacturer || "N/A",
-//                   });
-//                 }
-//               }
-//             });
-//           });
-
-//           incomingPONumbers = [...new Set(incomingPONumbers)];
-
-//           return {
-//             ...item,
-//             calculatedIncomingQty: totalIncomingQty,
-//             incomingPONumbers,
-//             earliestCommitDate,
-//             purchaseData,
-//           };
-//         } catch (error) {
-//           console.error(`Error processing MPN ${item.mpnId?.MPN}:`, error);
-//           return {
-//             ...item,
-//             calculatedIncomingQty: 0,
-//             incomingPONumbers: [],
-//             earliestCommitDate: null,
-//             purchaseData: [],
-//           };
-//         }
-//       })
-//     );
-
-//     // ✅ transform
-//     const transformedData = inventoryWithPOData.map((item) => {
-//       const mpnData = item.mpnId || {};
-
-//       return {
-//         _id: item._id,
-//         MPN: mpnData.MPN || "N/A",
-//         Manufacturer: mpnData.Manufacturer || "N/A",
-//         Description: mpnData.Description || "N/A",
-//         Storage: mpnData.StorageLocation || "-",
-//         UOM:mpnData?.UOM?.code,
-//         balanceQuantity: item.balanceQuantity || 0,
-//         IncomingQty: item.calculatedIncomingQty || 0,
-
-//         IncomingPoNumber: item.incomingPONumbers?.length ? item.incomingPONumbers.join(", ") : "",
-//         commitDate: item.earliestCommitDate ? new Date(item.earliestCommitDate).toLocaleDateString() : "",
-
-//         Status: getInventoryStatus(item.balanceQuantity || 0, item.calculatedIncomingQty || 0),
-
-//         mpnId: item.mpnId?._id,
-//         purchaseData: item.purchaseData,
-//       };
-//     });
-
-//     return res.json({
-//       success: true,
-//       data: transformedData,
-//       total,
-//       page: pageNum,
-//       limit: limitNum,
-//       totalPages: Math.ceil(total / limitNum),
-//     });
-//   } catch (error) {
-//     console.error("Get Inventory List Error:", error);
-//     return res.status(500).json({ success: false, message: error.message });
-//   }
-// };
 
 export const getInventoryList = async (req, res) => {
   try {
@@ -893,7 +304,7 @@ export const getInventoryList = async (req, res) => {
 
       const balanceQty = toNum(item.balanceQuantity);
       const incomingQty = toNum(item.calculatedIncomingQty);
-      const demandQty = toNum(demandMap.get(mpnIdStr) || 0);
+   const demandQty = Number(demandMap.get(mpnIdStr) || 0);
 
       // ✅ raw net (for internal / analytics)
       const netQty = calcNetQty(balanceQty, incomingQty, demandQty);
@@ -960,6 +371,73 @@ export const getInventoryList = async (req, res) => {
   } catch (error) {
     console.error("Get Inventory List Error:", error);
     return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const adjustInventory = async (req, res) => {
+  try {
+    const { inventoryId, adjustmentQuantity, reason } = req.body;
+    const adjustedBy = req.user._id; // From authentication middleware
+
+    if (!inventoryId || adjustmentQuantity === undefined || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: "Inventory ID, adjustment quantity, and reason are required"
+      });
+    }
+
+    const inventory = await Inventory.findById(inventoryId)
+      .populate({
+        path: "mpnId",
+        select: "UOM MPN"
+      });
+
+    if (!inventory) {
+      return res.status(404).json({
+        success: false,
+        message: "Inventory not found"
+      });
+    }
+
+    if (!inventory.mpnId) {
+      return res.status(400).json({
+        success: false,
+        message: "MPN missing in inventory"
+      });
+    }
+
+
+
+    const baseUomId = inventory.mpnId.UOM; // ✅ BASE UOM (meter / EA)
+
+    const baseAdjustmentQty = await convertQty({
+      qty: adjustmentQuantity,
+      fromUomId: baseUomId,
+    });
+
+    // Use the static method for transaction safety
+    const result = await Inventory.adjustInventory(
+      inventoryId,
+      baseAdjustmentQty,
+      reason,
+      adjustedBy
+    );
+
+    res.json({
+      success: true,
+      message: "Inventory adjusted successfully",
+      data: {
+        inventory: result.inventory,
+        adjustment: result.adjustment
+      }
+    });
+
+  } catch (error) {
+    console.error("Adjust Inventory Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
@@ -2058,7 +1536,7 @@ export const addShortage = async (req, res) => {
 
 export const getMaterialShortages = async (req, res) => {
   try {
-    const { mpnId, workOrderId } = req.query;
+    const { mpnId, workOrderId, search } = req.query;
 
     const query = {
       "workOrders.0": { $exists: true },
@@ -2073,16 +1551,27 @@ export const getMaterialShortages = async (req, res) => {
 
     const shortages = [];
 
+    const regex = search ? new RegExp(search, "i") : null;
+
     inventories.forEach((inv) => {
       (inv.workOrders || []).forEach((wo) => {
 
-        // agar specific WO chaahiye, filter here
+        // ✅ WorkOrder filter
         if (workOrderId && String(wo.workOrderId) !== String(workOrderId)) {
           return;
         }
 
+        // ✅ SEARCH FILTER (MPN / description / workOrderNo)
+        if (regex) {
+          const match =
+            regex.test(inv?.mpnId?.MPN || "") ||
+            regex.test(inv?.mpnId?.description || "") ||
+            regex.test(wo?.workOrderNo || "");
+
+          if (!match) return;
+        }
+
         shortages.push({
-          // Inventory level fields
           mpnId: inv.mpnId?._id || inv.mpnId,
           mpn: inv.mpnId?.MPN || "",
           description: inv.mpnId?.description || "",
@@ -2090,10 +1579,6 @@ export const getMaterialShortages = async (req, res) => {
           balanceQuantity: inv.balanceQuantity,
           stockStatus: inv.stockStatus,
 
-          // ❌ DON'T SEND FULL ARRAY (was wrong)
-          // workOrders: inv.workOrders,
-
-          // ✅ Only this WO as separate item
           workOrderId: wo.workOrderId,
           workOrderNo: wo.workOrderNo,
           drawingId: wo.drawingId,
@@ -2116,6 +1601,67 @@ export const getMaterialShortages = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// export const getMaterialShortages = async (req, res) => {
+//   try {
+//     const { mpnId, workOrderId } = req.query;
+
+//     const query = {
+//       "workOrders.0": { $exists: true },
+//     };
+
+//     if (mpnId) query.mpnId = mpnId;
+//     if (workOrderId) query["workOrders.workOrderId"] = workOrderId;
+
+//     const inventories = await Inventory.find(query)
+//       .populate("mpnId", "MPN description uom")
+//       .lean();
+
+//     const shortages = [];
+
+//     inventories.forEach((inv) => {
+//       (inv.workOrders || []).forEach((wo) => {
+
+//         // agar specific WO chaahiye, filter here
+//         if (workOrderId && String(wo.workOrderId) !== String(workOrderId)) {
+//           return;
+//         }
+
+//         shortages.push({
+//           // Inventory level fields
+//           mpnId: inv.mpnId?._id || inv.mpnId,
+//           mpn: inv.mpnId?.MPN || "",
+//           description: inv.mpnId?.description || "",
+//           uom: inv.mpnId?.uom || "",
+//           balanceQuantity: inv.balanceQuantity,
+//           stockStatus: inv.stockStatus,
+
+//           // ❌ DON'T SEND FULL ARRAY (was wrong)
+//           // workOrders: inv.workOrders,
+
+//           // ✅ Only this WO as separate item
+//           workOrderId: wo.workOrderId,
+//           workOrderNo: wo.workOrderNo,
+//           drawingId: wo.drawingId,
+//           requiredQty: wo.requiredQty,
+//           pickedQty: wo?.pickedQty,
+//           needDate: wo.needDate,
+//           createdAt: wo.createdAt,
+//         });
+//       });
+//     });
+
+//     return res.json({
+//       success: true,
+//       message: "Material shortages fetched",
+//       data: shortages,
+//     });
+
+//   } catch (err) {
+//     console.error("Error getMaterialShortages:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 
 export const getCompleteDrawingsMTO = async (req, res) => {
   try {

@@ -6188,6 +6188,1478 @@ export const getCompleteWorkOrders = async (req, res) => {
 };
 
 
+// export const saveWorkOrderStage = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const {
+//       stage,
+//       comments,
+//       stageQty,
+//       materials = [],
+//     } = req.body;
+
+//     const wo = await WorkOrder.findById(id);
+//     if (!wo) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Work order not found",
+//       });
+//     }
+
+//     const processKey = mapStageToProcessKey(stage);
+//     if (!processKey) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid stage",
+//       });
+//     }
+
+//     const additionalQty = Number(stageQty || 0);
+//     const userId = req.user?._id;
+
+//     const getStageQty = (key) =>
+//       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//     const pickingDone = getStageQty("picking");
+//     const cableHarnessDone = getStageQty("cable_harness");
+//     const assemblyDone = getStageQty("assembly");
+//     const labellingDone = getStageQty("labelling");
+//     const qcDone = getStageQty("quality_check");
+//     const pickingAssemblyDone = getStageQty("picking_assembly");
+
+//     const hasShortage = materials.some(
+//       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
+//     );
+
+//     // ============================================================
+//     // VALIDATIONS
+//     // ============================================================
+
+//     if (wo.projectType === "other") {
+//       if (processKey === "picking_assembly") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingAssemblyDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking & Assembly quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > pickingAssemblyDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed Picking & Assembly quantity",
+//           });
+//         }
+//       }
+//     }
+//     else if (wo.projectType === "box_build") {
+//       if (processKey === "picking") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "assembly") {
+//         if (assemblyDone + additionalQty > pickingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Assembly cannot exceed picked quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > assemblyDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed assembly quantity",
+//           });
+//         }
+//       }
+//     }
+//     else if (wo.projectType === "cable_harness") {
+//       if (processKey === "picking") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "cable_harness") {
+//         if (cableHarnessDone + additionalQty > pickingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cable Harness cannot exceed picked quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "labelling") {
+//         if (labellingDone + additionalQty > cableHarnessDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Labelling cannot exceed Cable Harness quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > labellingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed Labelling quantity",
+//           });
+//         }
+//       }
+//     }
+
+//     // ============================================================
+//     // INVENTORY DEDUCTION
+//     // ============================================================
+
+//     if (processKey === "picking") {
+//       const existingProcess = wo.processHistory?.find(p => p.process === "picking");
+
+//       for (const material of materials) {
+//         const currentPickedQty = Number(material.pickedQty || 0);
+//         if (currentPickedQty <= 0) continue;
+
+//         const previousEntries = existingProcess?.details?.filter(
+//           (d) => String(d.mpnId) === String(material.mpnId)
+//         ) || [];
+        
+//         const totalAlreadyPicked = previousEntries.reduce(
+//           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
+//         );
+
+//         const totalRequiredQty = Number(material.quantity || 0) * Number(wo.quantity || 0);
+//         const remainingAllowed = totalRequiredQty - totalAlreadyPicked;
+
+//         if (currentPickedQty > remainingAllowed) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Max allowed for ${material.mpn}: ${remainingAllowed}`,
+//           });
+//         }
+
+//         const inventory = await Inventory.findOne({ mpnId: material.mpnId }).populate("mpnId");
+//         if (!inventory) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Inventory not found for ${material.mpn}`,
+//           });
+//         }
+
+//         const baseQty = await convertToInventoryUom({
+//           qty: currentPickedQty,
+//           fromUom: material.uomId,
+//           toUom: inventory.mpnId.UOM,
+//         });
+
+//         if (inventory.balanceQuantity < baseQty) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Insufficient stock for ${material.mpn}`,
+//           });
+//         }
+
+//         inventory.balanceQuantity -= baseQty;
+//         await inventory.save();
+//       }
+//     }
+
+//     // ============================================================
+//     // PROCESS HISTORY UPDATE - REPLACE INSTEAD OF APPEND
+//     // ============================================================
+
+//     if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
+
+//     let existing = wo.processHistory.find((p) => p.process === processKey);
+
+//     // 🔥 CRITICAL: Calculate final shortage status based on total picked qty
+//     const calculateFinalShortage = (material, totalPickedAfterThis, totalRequired) => {
+//       // If total picked qty equals required qty, NO shortage
+//       if (totalPickedAfterThis >= totalRequired) {
+//         return { shortage: false, shortageQty: 0 };
+//       }
+//       // Otherwise, use the provided shortage status
+//       return {
+//         shortage: material.shortage,
+//         shortageQty: material.shortageQty
+//       };
+//     };
+
+//     // Get previous details to calculate totals
+//     const previousDetails = existing?.details || [];
+    
+//     // Create a map of final status per mpnId
+//     const finalStatusPerMpn = {};
+    
+//     // First, add all previous entries
+//     for (const prevDetail of previousDetails) {
+//       const mpnId = String(prevDetail.mpnId);
+//       if (!finalStatusPerMpn[mpnId]) {
+//         finalStatusPerMpn[mpnId] = {
+//           totalPickedQty: 0,
+//           latestShortage: prevDetail.shortage,
+//           latestShortageQty: prevDetail.shortageQty,
+//           quantity: prevDetail.quantity,
+//           uomId: prevDetail.uomId,
+//           uom: prevDetail.uom,
+//           mpn: prevDetail.mpn,
+//         };
+//       }
+//       finalStatusPerMpn[mpnId].totalPickedQty += Number(prevDetail.pickedQty || 0);
+//     }
+    
+//     // Then, add current materials
+//     for (const material of materials) {
+//       const mpnId = String(material.mpnId);
+//       const currentPickedQty = Number(material.pickedQty || 0);
+      
+//       if (!finalStatusPerMpn[mpnId]) {
+//         finalStatusPerMpn[mpnId] = {
+//           totalPickedQty: 0,
+//           quantity: material.quantity,
+//           uomId: material.uomId,
+//           uom: material.uom,
+//           mpn: material.mpn,
+//         };
+//       }
+//       finalStatusPerMpn[mpnId].totalPickedQty += currentPickedQty;
+//       finalStatusPerMpn[mpnId].latestShortage = material.shortage;
+//       finalStatusPerMpn[mpnId].latestShortageQty = material.shortageQty;
+//     }
+    
+//     // Calculate final shortage status for each mpnId
+//     const finalDetails = [];
+//     for (const mpnId in finalStatusPerMpn) {
+//       const data = finalStatusPerMpn[mpnId];
+//       const totalRequired = Number(data.quantity || 1) * Number(wo.quantity || 0);
+      
+//       // 🔥 If total picked qty equals required qty, NO shortage
+//       let finalShortage = data.latestShortage;
+//       let finalShortageQty = data.latestShortageQty;
+      
+//       if (data.totalPickedQty >= totalRequired) {
+//         finalShortage = false;
+//         finalShortageQty = 0;
+//       }
+      
+//       finalDetails.push({
+//         mpnId: mpnId,
+//         mpn: data.mpn,
+//         pickedQty: data.totalPickedQty,
+//         shortage: finalShortage,
+//         shortageQty: finalShortageQty,
+//         quantity: data.quantity,
+//         uomId: data.uomId,
+//         uom: data.uom,
+//         pickedAt: new Date(),
+//       });
+//     }
+
+//     if (existing) {
+//       existing.qty += additionalQty;
+//       existing.completedBy = userId;
+//       existing.completedAt = new Date();
+//       existing.comments = existing.comments || [];
+//       existing.comments.push({ 
+//         comment: comments, 
+//         commentedBy: userId,
+//         commentedAt: new Date()
+//       });
+//       // 🔥 REPLACE details instead of append
+//       existing.details = finalDetails;
+//     } else {
+//       wo.processHistory.push({
+//         process: processKey,
+//         qty: additionalQty,
+//         completedBy: userId,
+//         completedAt: new Date(),
+//         createdAt: new Date(),
+//         comments: [{ 
+//           comment: comments, 
+//           commentedBy: userId,
+//           commentedAt: new Date()
+//         }],
+//         details: finalDetails,
+//       });
+//     }
+
+//     // ============================================================
+//     // UPDATE STATUS
+//     // ============================================================
+    
+//     updateWorkOrderStatus(wo);
+//     await wo.save();
+
+//     return res.json({
+//       success: true,
+//       message: `${stage} saved successfully`,
+//       data: wo,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
+
+// ============================================================
+// UPDATE STATUS (FIXED - Checks actual shortage)
+// ============================================================
+
+// const updateWorkOrderStatus = (wo) => {
+//   const totalQty = Number(wo.quantity || 0);
+  
+//   const getStageQty = (key) =>
+//     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//   const hasStageShortage = (key) => {
+//     const entry = wo.processHistory?.find((p) => p.process === key);
+//     if (!entry?.details) return false;
+    
+//     // Get the latest entry per mpnId
+//     const latestPerMpn = {};
+//     for (const detail of entry.details) {
+//       const mpnId = String(detail.mpnId);
+//       if (!latestPerMpn[mpnId] || new Date(detail.pickedAt) > new Date(latestPerMpn[mpnId].pickedAt)) {
+//         latestPerMpn[mpnId] = detail;
+//       }
+//     }
+    
+//     return Object.values(latestPerMpn).some(
+//       (d) => d.shortage === true || Number(d.shortageQty || 0) > 0
+//     );
+//   };
+
+//   // Define stages based on project type
+//   let stages = [];
+//   if (wo.projectType === "other") {
+//     stages = ["picking_assembly", "quality_check"];
+//   } else if (wo.projectType === "box_build") {
+//     stages = ["picking", "assembly", "quality_check"];
+//   } else if (wo.projectType === "cable_harness") {
+//     stages = ["picking", "cable_harness", "labelling", "quality_check"];
+//   } else {
+//     stages = ["picking", "assembly", "quality_check"];
+//   }
+
+//   const formatStageName = (key) => {
+//     const map = {
+//       picking: "Picking",
+//       cable_harness: "Cable Harness",
+//       assembly: "Assembly",
+//       labelling: "Labelling",
+//       quality_check: "Quality Check",
+//       picking_assembly: "Picking & Assembly",
+//     };
+//     return map[key] || key;
+//   };
+
+//   // 🔥 FIX: Track which stages are complete
+//   let lastCompletedStage = null;
+//   let currentStage = null;
+  
+//   for (let i = 0; i < stages.length; i++) {
+//     const stageKey = stages[i];
+//     const doneQty = getStageQty(stageKey);
+//     const hasShortage = hasStageShortage(stageKey);
+    
+//     console.log(`[Status] Stage ${stageKey}: doneQty=${doneQty}/${totalQty}, hasShortage=${hasShortage}`);
+    
+//     // Stage is fully complete (qty met, no shortage)
+//     if (doneQty >= totalQty && !hasShortage && totalQty > 0) {
+//       lastCompletedStage = stageKey;
+//       console.log(`[Status] Stage ${stageKey} is COMPLETE`);
+//       continue;
+//     }
+    
+//     // Stage has some progress or shortage
+//     if (doneQty > 0 || hasShortage) {
+//       currentStage = stageKey;
+//       console.log(`[Status] Stage ${stageKey} is IN PROGRESS`);
+//       break;
+//     }
+    
+//     // Stage not started yet
+//     if (doneQty === 0 && !hasShortage) {
+//       // If previous stage is complete, this stage is pending
+//       if (lastCompletedStage === stages[i - 1]) {
+//         currentStage = stageKey;
+//         console.log(`[Status] Stage ${stageKey} is PENDING (waiting to start)`);
+//       } else {
+//         currentStage = stageKey;
+//       }
+//       break;
+//     }
+//   }
+
+//   // 🔥 Determine final status
+//   // Case 1: All stages complete
+//   const allStagesComplete = stages.every(key => {
+//     const doneQty = getStageQty(key);
+//     const hasShortage = hasStageShortage(key);
+//     return doneQty >= totalQty && !hasShortage;
+//   });
+  
+//   if (allStagesComplete && totalQty > 0) {
+//     console.log(`[Status] ALL STAGES COMPLETE -> Completed`);
+//     wo.status = "Completed";
+//     wo.isProductionComplete = true;
+//     wo.isInProduction = false;
+//     wo.completeDate = new Date();
+//     return;
+//   }
+  
+//   // Case 2: Current stage found
+//   if (currentStage) {
+//     const doneQty = getStageQty(currentStage);
+//     const hasShortage = hasStageShortage(currentStage);
+    
+//     if (doneQty >= totalQty && !hasShortage && totalQty > 0) {
+//       wo.status = `${formatStageName(currentStage)} Done`;
+//       console.log(`[Status] ${formatStageName(currentStage)} Done`);
+//     } else {
+//       wo.status = `${formatStageName(currentStage)} In Progress`;
+//       console.log(`[Status] ${formatStageName(currentStage)} In Progress`);
+//     }
+//     wo.isInProduction = true;
+//     wo.isProductionComplete = false;
+//     return;
+//   }
+  
+//   // Case 3: Last completed stage found but no current stage
+//   if (lastCompletedStage) {
+//     wo.status = `${formatStageName(lastCompletedStage)} Done`;
+//     console.log(`[Status] ${formatStageName(lastCompletedStage)} Done (last completed)`);
+//     wo.isInProduction = true;
+//     wo.isProductionComplete = false;
+//     return;
+//   }
+  
+//   // Case 4: No progress at all
+//   const hasAnyProgress = wo.processHistory?.some(p => p.qty > 0 || p.details?.length > 0);
+//   if (!hasAnyProgress) {
+//     wo.status = "Not Start Yet";
+//     wo.isInProduction = false;
+//   } else {
+//     wo.status = "In Progress";
+//     wo.isInProduction = true;
+//   }
+//   wo.isProductionComplete = false;
+  
+//   console.log(`[Status] FINAL STATUS: ${wo.status}`);
+// };
+// ============================================================
+// UPDATE WORK ORDER STATUS (FIXED)
+// ============================================================
+
+// const updateWorkOrderStatus = (wo) => {
+//   const totalQty = Number(wo.quantity || 0);
+  
+//   // If no quantity, return
+//   if (totalQty === 0) {
+//     wo.status = "Not Start Yet";
+//     return;
+//   }
+
+//   const getStageQty = (key) =>
+//     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//   const hasStageShortage = (key) => {
+//     const entry = wo.processHistory?.find((p) => p.process === key);
+//     return entry?.details?.some(
+//       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
+//     );
+//   };
+
+//   // Define stages based on project type
+//   let stages = [];
+  
+//   if (wo.projectType === "other") {
+//     stages = ["picking_assembly", "quality_check"];
+//   } 
+//   else if (wo.projectType === "box_build") {
+//     stages = ["picking", "assembly", "quality_check"];
+//   } 
+//   else if (wo.projectType === "cable_harness") {
+//     stages = ["picking", "cable_harness", "labelling", "quality_check"];
+//   }
+//   else {
+//     stages = ["picking", "assembly", "quality_check"];
+//   }
+
+//   const formatStageName = (key) => {
+//     const map = {
+//       picking: "Picking",
+//       cable_harness: "Cable Harness",
+//       assembly: "Assembly",
+//       labelling: "Labelling",
+//       quality_check: "Quality Check",
+//       picking_assembly: "Picking & Assembly",
+//     };
+//     return map[key] || key;
+//   };
+
+//   let hasAnyProgress = wo.processHistory?.some(p => p.qty > 0 || p.details?.length > 0) || false;
+  
+//   // Check which stage we're on
+//   let currentStageIndex = -1;
+//   let lastCompletedStageIndex = -1;
+  
+//   for (let i = 0; i < stages.length; i++) {
+//     const stageKey = stages[i];
+//     const doneQty = getStageQty(stageKey);
+//     const hasShortage = hasStageShortage(stageKey);
+//     const isComplete = doneQty >= totalQty && !hasShortage;
+    
+//     if (isComplete) {
+//       lastCompletedStageIndex = i;
+//       continue;
+//     }
+    
+//     // If not complete, this is current stage
+//     if (doneQty > 0 || hasShortage) {
+//       currentStageIndex = i;
+//       break;
+//     }
+    
+//     // If stage has no progress and we haven't found current, this is current
+//     if (currentStageIndex === -1 && doneQty === 0 && !hasShortage) {
+//       // If previous stage is complete, this is current
+//       if (lastCompletedStageIndex === i - 1 || i === 0) {
+//         currentStageIndex = i;
+//         break;
+//       }
+//     }
+//   }
+
+//   // 🔥 If all stages are complete
+//   const allComplete = stages.every(key => {
+//     const doneQty = getStageQty(key);
+//     const hasShortage = hasStageShortage(key);
+//     return doneQty >= totalQty && !hasShortage;
+//   });
+  
+//   if (allComplete && totalQty > 0) {
+//     wo.status = "Completed";
+//     wo.isProductionComplete = true;
+//     wo.isInProduction = false;
+//     wo.completeDate = new Date();
+//     return;
+//   }
+
+//   // 🔥 If current stage found
+//   if (currentStageIndex !== -1) {
+//     const currentStageKey = stages[currentStageIndex];
+//     const currentDoneQty = getStageQty(currentStageKey);
+//     const hasShortage = hasStageShortage(currentStageKey);
+    
+//     // If current stage is fully done (qty met, no shortage)
+//     if (currentDoneQty >= totalQty && !hasShortage) {
+//       wo.status = `${formatStageName(currentStageKey)} Done`;
+//     } else {
+//       wo.status = `${formatStageName(currentStageKey)} In Progress`;
+//     }
+//     wo.isInProduction = true;
+//     wo.isProductionComplete = false;
+//     return;
+//   }
+
+//   // 🔥 If last stage completed but not all (partial)
+//   if (lastCompletedStageIndex !== -1 && lastCompletedStageIndex < stages.length - 1) {
+//     const lastCompletedKey = stages[lastCompletedStageIndex];
+//     wo.status = `${formatStageName(lastCompletedKey)} Done`;
+//     wo.isInProduction = true;
+//     wo.isProductionComplete = false;
+//     return;
+//   }
+
+//   // 🔥 Not started
+//   if (!hasAnyProgress) {
+//     wo.status = "Not Start Yet";
+//     wo.isInProduction = false;
+//     wo.isProductionComplete = false;
+//   } else {
+//     wo.status = "In Progress";
+//     wo.isInProduction = true;
+//     wo.isProductionComplete = false;
+//   }
+// };
+
+// ============================================================
+// MAP STAGE TO PROCESS KEY
+// ============================================================
+
+// const mapStageToProcessKey = (stage) => {
+//   const stageLower = stage?.toLowerCase();
+  
+//   switch (stageLower) {
+//     case "picking":
+//       return "picking";
+//     case "cable harness":
+//     case "cable_harness":
+//       return "cable_harness";
+//     case "assembly":
+//       return "assembly";
+//     case "labelling":
+//       return "labelling";
+//     case "quality check":
+//     case "quality_check":
+//       return "quality_check";
+//     case "picking/assembly":
+//     case "picking_assembly":
+//       return "picking_assembly";
+//     default:
+//       return null;
+//   }
+// };
+
+
+// export const saveWorkOrderStage = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const {
+//       stage,
+//       comments,
+//       stageQty,
+//       materials = [],
+//     } = req.body;
+
+//     const wo = await WorkOrder.findById(id);
+//     if (!wo) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Work order not found",
+//       });
+//     }
+
+//     const processKey = mapStageToProcessKey(stage);
+//     if (!processKey) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid stage",
+//       });
+//     }
+
+//     const additionalQty = Number(stageQty || 0);
+//     const userId = req.user?._id;
+
+//     console.log(`===== SAVING ${stage} (${processKey}) =====`);
+//     console.log(`additionalQty: ${additionalQty}`);
+
+//     const getStageQty = (key) =>
+//       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//     const pickingDone = getStageQty("picking");
+//     const cableHarnessDone = getStageQty("cable_harness");
+//     const assemblyDone = getStageQty("assembly");
+//     const labellingDone = getStageQty("labelling");
+//     const qcDone = getStageQty("quality_check");
+//     const pickingAssemblyDone = getStageQty("picking_assembly");
+
+//     const hasShortage = materials.some(
+//       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
+//     );
+
+//     // ============================================================
+//     // VALIDATIONS
+//     // ============================================================
+
+//     if (wo.projectType === "other") {
+//       if (processKey === "picking_assembly") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingAssemblyDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking & Assembly quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > pickingAssemblyDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed Picking & Assembly quantity",
+//           });
+//         }
+//       }
+//     }
+//     else if (wo.projectType === "box_build") {
+//       if (processKey === "picking") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "assembly") {
+//         if (assemblyDone + additionalQty > pickingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Assembly cannot exceed picked quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > assemblyDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed assembly quantity",
+//           });
+//         }
+//       }
+//     }
+//     else if (wo.projectType === "cable_harness") {
+//       if (processKey === "picking") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "cable_harness") {
+//         if (cableHarnessDone + additionalQty > pickingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cable Harness cannot exceed picked quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "labelling") {
+//         if (labellingDone + additionalQty > cableHarnessDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Labelling cannot exceed Cable Harness quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > labellingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed Labelling quantity",
+//           });
+//         }
+//       }
+//     }
+
+//     // ============================================================
+//     // INVENTORY DEDUCTION (Only for Picking stage)
+//     // ============================================================
+
+//     if (processKey === "picking") {
+//       const existingProcess = wo.processHistory?.find(p => p.process === "picking");
+
+//       for (const material of materials) {
+//         const currentPickedQty = Number(material.pickedQty || 0);
+//         if (currentPickedQty <= 0) continue;
+
+//         const previousEntries = existingProcess?.details?.filter(
+//           (d) => String(d.mpnId) === String(material.mpnId)
+//         ) || [];
+        
+//         const totalAlreadyPicked = previousEntries.reduce(
+//           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
+//         );
+
+//         const totalRequiredQty = Number(material.quantity || 0) * Number(wo.quantity || 0);
+//         const remainingAllowed = totalRequiredQty - totalAlreadyPicked;
+
+//         if (currentPickedQty > remainingAllowed) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Max allowed for ${material.mpn}: ${remainingAllowed}`,
+//           });
+//         }
+
+//         const inventory = await Inventory.findOne({ mpnId: material.mpnId }).populate("mpnId");
+//         if (!inventory) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Inventory not found for ${material.mpn}`,
+//           });
+//         }
+
+//         const baseQty = await convertToInventoryUom({
+//           qty: currentPickedQty,
+//           fromUom: material.uomId,
+//           toUom: inventory.mpnId.UOM,
+//         });
+
+//         if (inventory.balanceQuantity < baseQty) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Insufficient stock for ${material.mpn}`,
+//           });
+//         }
+
+//         inventory.balanceQuantity -= baseQty;
+//         await inventory.save();
+//       }
+//     }
+
+//     // ============================================================
+//     // PROCESS HISTORY UPDATE
+//     // ============================================================
+
+//     if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
+
+//     let existing = wo.processHistory.find((p) => p.process === processKey);
+
+//     console.log(`Existing ${processKey} stage:`, existing ? `qty=${existing.qty}` : "not found");
+
+//     if (existing) {
+//       // 🔥 CRITICAL FIX: Add the additional quantity
+//       const oldQty = existing.qty || 0;
+//       existing.qty = oldQty + additionalQty;
+//       console.log(`Updated ${processKey} qty: ${oldQty} + ${additionalQty} = ${existing.qty}`);
+      
+//       existing.completedBy = userId;
+//       existing.completedAt = new Date();
+//       existing.comments = existing.comments || [];
+//       if (comments) {
+//         existing.comments.push({ 
+//           comment: comments, 
+//           commentedBy: userId,
+//           commentedAt: new Date()
+//         });
+//       }
+
+//       // Update details if materials provided
+//       if (materials.length > 0) {
+//         // Create a map of final status per mpnId
+//         const finalStatusPerMpn = {};
+        
+//         // First, add all previous entries
+//         for (const prevDetail of (existing.details || [])) {
+//           const mpnId = String(prevDetail.mpnId);
+//           if (!finalStatusPerMpn[mpnId]) {
+//             finalStatusPerMpn[mpnId] = {
+//               totalPickedQty: 0,
+//               latestShortage: prevDetail.shortage,
+//               latestShortageQty: prevDetail.shortageQty,
+//               quantity: prevDetail.quantity,
+//               uomId: prevDetail.uomId,
+//               uom: prevDetail.uom,
+//               mpn: prevDetail.mpn,
+//             };
+//           }
+//           finalStatusPerMpn[mpnId].totalPickedQty += Number(prevDetail.pickedQty || 0);
+//         }
+        
+//         // Then, add current materials
+//         for (const material of materials) {
+//           const mpnId = String(material.mpnId);
+//           const currentPickedQty = Number(material.pickedQty || 0);
+          
+//           if (!finalStatusPerMpn[mpnId]) {
+//             finalStatusPerMpn[mpnId] = {
+//               totalPickedQty: 0,
+//               quantity: material.quantity,
+//               uomId: material.uomId,
+//               uom: material.uom,
+//               mpn: material.mpn,
+//             };
+//           }
+//           finalStatusPerMpn[mpnId].totalPickedQty += currentPickedQty;
+//           finalStatusPerMpn[mpnId].latestShortage = material.shortage;
+//           finalStatusPerMpn[mpnId].latestShortageQty = material.shortageQty;
+//         }
+        
+//         // Calculate final shortage status
+//         const finalDetails = [];
+//         for (const mpnId in finalStatusPerMpn) {
+//           const data = finalStatusPerMpn[mpnId];
+//           const totalRequired = Number(data.quantity || 1) * Number(wo.quantity || 0);
+          
+//           let finalShortage = data.latestShortage;
+//           let finalShortageQty = data.latestShortageQty;
+          
+//           if (data.totalPickedQty >= totalRequired) {
+//             finalShortage = false;
+//             finalShortageQty = 0;
+//           }
+          
+//           finalDetails.push({
+//             mpnId: mpnId,
+//             mpn: data.mpn,
+//             pickedQty: data.totalPickedQty,
+//             shortage: finalShortage,
+//             shortageQty: finalShortageQty,
+//             quantity: data.quantity,
+//             uomId: data.uomId,
+//             uom: data.uom,
+//             pickedAt: new Date(),
+//           });
+//         }
+        
+//         existing.details = finalDetails;
+//       }
+//     } else {
+//       // New process history entry
+//       console.log(`Creating new ${processKey} stage with qty: ${additionalQty}`);
+      
+//       const materialsWithDetails = materials.map((m) => ({
+//         mpnId: m.mpnId,
+//         mpn: m.mpn,
+//         pickedQty: Number(m.pickedQty || 0),
+//         shortage: m.shortage || false,
+//         shortageQty: m.shortageQty || 0,
+//         quantity: m.quantity,
+//         uomId: m.uomId,
+//         uom: m.uom,
+//         pickedAt: new Date(),
+//       }));
+
+//       wo.processHistory.push({
+//         process: processKey,
+//         qty: additionalQty,
+//         completedBy: userId,
+//         completedAt: new Date(),
+//         createdAt: new Date(),
+//         comments: comments ? [{ 
+//           comment: comments, 
+//           commentedBy: userId,
+//           commentedAt: new Date()
+//         }] : [],
+//         details: materialsWithDetails,
+//       });
+//     }
+
+//     // ============================================================
+//     // UPDATE STATUS
+//     // ============================================================
+    
+//     updateWorkOrderStatus(wo);
+//     await wo.save();
+
+//     console.log(`Final status: ${wo.status}`);
+
+//     return res.json({
+//       success: true,
+//       message: `${stage} saved successfully`,
+//       data: wo,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
+
+// ============================================================
+// UPDATE WORK ORDER STATUS (FIXED)
+// ============================================================
+
+// const updateWorkOrderStatus = (wo) => {
+//   const totalQty = Number(wo.quantity || 0);
+  
+//   const getStageQty = (key) =>
+//     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//   const hasStageShortage = (key) => {
+//     const entry = wo.processHistory?.find((p) => p.process === key);
+//     if (!entry?.details) return false;
+    
+//     // 🔥 Check if ANY detail has shortage = true
+//     return entry.details.some(d => d.shortage === true);
+//   };
+
+//   // Define stages based on project type
+//   let stages = [];
+//   if (wo.projectType === "other") {
+//     stages = ["picking_assembly", "quality_check"];
+//   } else if (wo.projectType === "box_build") {
+//     stages = ["picking", "assembly", "quality_check"];
+//   } else if (wo.projectType === "cable_harness") {
+//     stages = ["picking", "cable_harness", "labelling", "quality_check"];
+//   } else {
+//     stages = ["picking", "assembly", "quality_check"];
+//   }
+
+//   const formatStageName = (key) => {
+//     const map = {
+//       picking: "Picking",
+//       cable_harness: "Cable Harness",
+//       assembly: "Assembly",
+//       labelling: "Labelling",
+//       quality_check: "Quality Check",
+//       picking_assembly: "Picking & Assembly",
+//     };
+//     return map[key] || key;
+//   };
+
+//   console.log(`===== STATUS UPDATE =====`);
+//   console.log(`Project Type: ${wo.projectType}`);
+//   console.log(`Total Qty: ${totalQty}`);
+  
+//   // 🔥 Find which stage has shortage or production quantity
+//   let activeStage = null;
+//   let activeStageStatus = null;
+  
+//   for (let i = 0; i < stages.length; i++) {
+//     const stageKey = stages[i];
+//     const doneQty = getStageQty(stageKey);
+//     const hasShortage = hasStageShortage(stageKey);
+    
+//     console.log(`Stage ${stageKey}: doneQty=${doneQty}, hasShortage=${hasShortage}`);
+    
+//     // 🔥 Stage is active if:
+//     // 1. It has production quantity (doneQty > 0), OR
+//     // 2. It has shortage (hasShortage === true)
+//     if (doneQty > 0 || hasShortage) {
+//       if (doneQty >= totalQty && !hasShortage && totalQty > 0) {
+//         activeStage = stageKey;
+//         activeStageStatus = "done";
+//       } else {
+//         activeStage = stageKey;
+//         activeStageStatus = "in_progress";
+//       }
+//       console.log(`  -> ACTIVE: ${activeStage} (${activeStageStatus})`);
+//       break;
+//     }
+//   }
+  
+//   // 🔥 If no stage has production or shortage, check for completed stages
+//   if (!activeStage) {
+//     for (let i = stages.length - 1; i >= 0; i--) {
+//       const stageKey = stages[i];
+//       const doneQty = getStageQty(stageKey);
+//       if (doneQty >= totalQty && totalQty > 0) {
+//         activeStage = stageKey;
+//         activeStageStatus = "done";
+//         console.log(`  -> COMPLETED: ${activeStage}`);
+//         break;
+//       }
+//     }
+//   }
+  
+//   // 🔥 If still no active stage, default to first stage
+//   if (!activeStage && stages.length > 0) {
+//     activeStage = stages[0];
+//     activeStageStatus = "pending";
+//     console.log(`  -> DEFAULT: ${activeStage}`);
+//   }
+
+//   // Set status
+//   if (activeStage) {
+//     if (activeStageStatus === "done") {
+//       wo.status = `${formatStageName(activeStage)} Done`;
+//     } else if (activeStageStatus === "in_progress") {
+//       wo.status = `${formatStageName(activeStage)} In Progress`;
+//     } else {
+//       wo.status = "Not Start Yet";
+//     }
+//     wo.isInProduction = true;
+//     wo.isProductionComplete = false;
+//   }
+  
+//   // Check all stages complete
+//   const allStagesComplete = stages.every(key => {
+//     const doneQty = getStageQty(key);
+//     const hasShortage = hasStageShortage(key);
+//     return doneQty >= totalQty && !hasShortage;
+//   });
+  
+//   if (allStagesComplete && totalQty > 0) {
+//     wo.status = "Completed";
+//     wo.isProductionComplete = true;
+//     wo.isInProduction = false;
+//     wo.completeDate = new Date();
+//   }
+  
+//   console.log(`FINAL STATUS: ${wo.status}`);
+// };
+
+// ============================================================
+// MAP STAGE TO PROCESS KEY
+// ============================================================
+
+// const mapStageToProcessKey = (stage) => {
+//   const stageLower = stage?.toLowerCase();
+  
+//   switch (stageLower) {
+//     case "picking":
+//       return "picking";
+//     case "cable harness":
+//     case "cable_harness":
+//       return "cable_harness";
+//     case "assembly":
+//       return "assembly";
+//     case "labelling":
+//       return "labelling";
+//     case "quality check":
+//     case "quality_check":
+//       return "quality_check";
+//     case "picking/assembly":
+//     case "picking_assembly":
+//       return "picking_assembly";
+//     default:
+//       return null;
+//   }
+// };
+
+// export const saveWorkOrderStage = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const {
+//       stage,
+//       comments,
+//       stageQty,
+//       materials = [],
+//     } = req.body;
+
+//     const wo = await WorkOrder.findById(id);
+//     if (!wo) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Work order not found",
+//       });
+//     }
+
+//     const processKey = mapStageToProcessKey(stage);
+//     if (!processKey) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid stage",
+//       });
+//     }
+
+//     const additionalQty = Number(stageQty || 0);
+//     const userId = req.user?._id;
+
+//     const getStageQty = (key) =>
+//       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//     const pickingDone = getStageQty("picking");
+//     const cableHarnessDone = getStageQty("cable_harness");
+//     const assemblyDone = getStageQty("assembly");
+//     const labellingDone = getStageQty("labelling");
+//     const qcDone = getStageQty("quality_check");
+//     const pickingAssemblyDone = getStageQty("picking_assembly");
+
+//     const hasShortage = materials.some(
+//       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
+//     );
+
+//     // ============================================================
+//     // VALIDATIONS
+//     // ============================================================
+
+//     if (wo.projectType === "other") {
+//       if (processKey === "picking_assembly") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingAssemblyDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking & Assembly quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > pickingAssemblyDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed Picking & Assembly quantity",
+//           });
+//         }
+//       }
+//     }
+//     else if (wo.projectType === "box_build") {
+//       if (processKey === "picking") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "assembly") {
+//         if (assemblyDone + additionalQty > pickingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Assembly cannot exceed picked quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > assemblyDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed assembly quantity",
+//           });
+//         }
+//       }
+//     }
+//     else if (wo.projectType === "cable_harness") {
+//       if (processKey === "picking") {
+//         if (hasShortage && additionalQty > 0) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cannot enter Produce Qty while shortage exists",
+//           });
+//         }
+//         if (pickingDone + additionalQty > wo.quantity) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Picking quantity exceeds work order quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "cable_harness") {
+//         if (cableHarnessDone + additionalQty > pickingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Cable Harness cannot exceed picked quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "labelling") {
+//         if (labellingDone + additionalQty > cableHarnessDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Labelling cannot exceed Cable Harness quantity",
+//           });
+//         }
+//       }
+//       if (processKey === "quality_check") {
+//         if (qcDone + additionalQty > labellingDone) {
+//           return res.status(400).json({
+//             success: false,
+//             message: "QC cannot exceed Labelling quantity",
+//           });
+//         }
+//       }
+//     }
+
+//     // ============================================================
+//     // INVENTORY DEDUCTION
+//     // ============================================================
+
+//     if (processKey === "picking") {
+//       const existingProcess = wo.processHistory?.find(p => p.process === "picking");
+
+//       for (const material of materials) {
+//         const currentPickedQty = Number(material.pickedQty || 0);
+//         if (currentPickedQty <= 0) continue;
+
+//         const previousEntries = existingProcess?.details?.filter(
+//           (d) => String(d.mpnId) === String(material.mpnId)
+//         ) || [];
+        
+//         const totalAlreadyPicked = previousEntries.reduce(
+//           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
+//         );
+
+//         const totalRequiredQty = Number(material.quantity || 0) * Number(wo.quantity || 0);
+//         const remainingAllowed = totalRequiredQty - totalAlreadyPicked;
+
+//         if (currentPickedQty > remainingAllowed) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Max allowed for ${material.mpn}: ${remainingAllowed}`,
+//           });
+//         }
+
+//         const inventory = await Inventory.findOne({ mpnId: material.mpnId }).populate("mpnId");
+//         if (!inventory) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Inventory not found for ${material.mpn}`,
+//           });
+//         }
+
+//         const baseQty = await convertToInventoryUom({
+//           qty: currentPickedQty,
+//           fromUom: material.uomId,
+//           toUom: inventory.mpnId.UOM,
+//         });
+
+//         if (inventory.balanceQuantity < baseQty) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Insufficient stock for ${material.mpn}`,
+//           });
+//         }
+
+//         inventory.balanceQuantity -= baseQty;
+//         await inventory.save();
+//       }
+//     }
+
+//     // ============================================================
+//     // PROCESS HISTORY UPDATE
+//     // ============================================================
+
+//     if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
+
+//     let existing = wo.processHistory.find((p) => p.process === processKey);
+
+//     if (existing) {
+//       // Update qty
+//       existing.qty = (existing.qty || 0) + additionalQty;
+//       existing.completedBy = userId;
+//       existing.completedAt = new Date();
+//       existing.comments = existing.comments || [];
+//       if (comments) {
+//         existing.comments.push({ 
+//           comment: comments, 
+//           commentedBy: userId,
+//           commentedAt: new Date()
+//         });
+//       }
+
+//       // Update details for this stage
+//       if (materials.length > 0) {
+//         // Create a map for this stage only
+//         const stageDetailsMap = {};
+        
+//         // Add existing details for this stage
+//         for (const detail of (existing.details || [])) {
+//           const mpnId = String(detail.mpnId);
+//           stageDetailsMap[mpnId] = {
+//             ...detail,
+//             pickedQty: Number(detail.pickedQty || 0),
+//           };
+//         }
+        
+//         // Update with new materials
+//         for (const material of materials) {
+//           const mpnId = String(material.mpnId);
+//           const currentPickedQty = Number(material.pickedQty || 0);
+          
+//           if (stageDetailsMap[mpnId]) {
+//             stageDetailsMap[mpnId].pickedQty += currentPickedQty;
+//             stageDetailsMap[mpnId].shortage = material.shortage;
+//             stageDetailsMap[mpnId].shortageQty = material.shortageQty || 0;
+//             stageDetailsMap[mpnId].pickedAt = new Date();
+//           } else {
+//             stageDetailsMap[mpnId] = {
+//               mpnId: material.mpnId,
+//               mpn: material.mpn,
+//               pickedQty: currentPickedQty,
+//               shortage: material.shortage || false,
+//               shortageQty: material.shortageQty || 0,
+//               quantity: material.quantity,
+//               uomId: material.uomId,
+//               uom: material.uom,
+//               pickedAt: new Date(),
+//             };
+//           }
+//         }
+        
+//         existing.details = Object.values(stageDetailsMap);
+//       }
+//     } else {
+//       // New stage
+//       const materialsWithDetails = materials.map((m) => ({
+//         mpnId: m.mpnId,
+//         mpn: m.mpn,
+//         pickedQty: Number(m.pickedQty || 0),
+//         shortage: m.shortage || false,
+//         shortageQty: m.shortageQty || 0,
+//         quantity: m.quantity,
+//         uomId: m.uomId,
+//         uom: m.uom,
+//         pickedAt: new Date(),
+//       }));
+
+//       wo.processHistory.push({
+//         process: processKey,
+//         qty: additionalQty,
+//         completedBy: userId,
+//         completedAt: new Date(),
+//         createdAt: new Date(),
+//         comments: comments ? [{ 
+//           comment: comments, 
+//           commentedBy: userId,
+//           commentedAt: new Date()
+//         }] : [],
+//         details: materialsWithDetails,
+//       });
+//     }
+
+//     // ============================================================
+//     // UPDATE STATUS - FINAL FIX
+//     // ============================================================
+    
+//     updateWorkOrderStatus(wo);
+//     await wo.save();
+
+//     return res.json({
+//       success: true,
+//       message: `${stage} saved successfully`,
+//       data: wo,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
+
+// ============================================================
+// UPDATE WORK ORDER STATUS - COMPLETE FIX
+// ============================================================
+
 export const saveWorkOrderStage = async (req, res) => {
   try {
     const { id } = req.params;
@@ -6195,7 +7667,6 @@ export const saveWorkOrderStage = async (req, res) => {
       stage,
       comments,
       stageQty,
-      pickedQuantities = {},
       materials = [],
     } = req.body;
 
@@ -6207,7 +7678,8 @@ export const saveWorkOrderStage = async (req, res) => {
       });
     }
 
-    const processKey = mapStageToProcessKey(stage)?.toLowerCase();
+    const processKey = mapStageToProcessKey(stage);
+    console.log('----processKey',processKey)
     if (!processKey) {
       return res.status(400).json({
         success: false,
@@ -6215,117 +7687,154 @@ export const saveWorkOrderStage = async (req, res) => {
       });
     }
 
-    const qty = Number(stageQty || 0);
+    const additionalQty = Number(stageQty || 0);
     const userId = req.user?._id;
 
     const getStageQty = (key) =>
       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
 
     const pickingDone = getStageQty("picking");
+    const cableHarnessDone = getStageQty("cable_harness");
     const assemblyDone = getStageQty("assembly");
-    const qcDone = getStageQty("quality_check");
     const labellingDone = getStageQty("labelling");
+    const qcDone = getStageQty("quality_check");
+    const pickingAssemblyDone = getStageQty("picking_assembly");
 
     const hasShortage = materials.some(
       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
     );
 
-    // --------------------------------------------------
-    // ❗ VALIDATIONS
-    // --------------------------------------------------
+    // ============================================================
+    // VALIDATIONS
+    // ============================================================
+
+    if (wo.projectType === "other") {
+      if (processKey === "picking_assembly") {
+        if (hasShortage && additionalQty > 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Cannot enter Produce Qty while shortage exists",
+          });
+        }
+        if (pickingAssemblyDone + additionalQty > wo.quantity) {
+          return res.status(400).json({
+            success: false,
+            message: "Picking & Assembly quantity exceeds work order quantity",
+          });
+        }
+      }
+      if (processKey === "quality_check") {
+        if (qcDone + additionalQty > pickingAssemblyDone) {
+          return res.status(400).json({
+            success: false,
+            message: "QC cannot exceed Picking & Assembly quantity",
+          });
+        }
+      }
+    }
+    else if (wo.projectType === "box_build") {
+      if (processKey === "picking") {
+        if (hasShortage && additionalQty > 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Cannot enter Produce Qty while shortage exists",
+          });
+        }
+        if (pickingDone + additionalQty > wo.quantity) {
+          return res.status(400).json({
+            success: false,
+            message: "Picking quantity exceeds work order quantity",
+          });
+        }
+      }
+      if (processKey === "assembly") {
+        if (assemblyDone + additionalQty > pickingDone) {
+          return res.status(400).json({
+            success: false,
+            message: "Assembly cannot exceed picked quantity",
+          });
+        }
+      }
+      if (processKey === "quality_check") {
+        if (qcDone + additionalQty > assemblyDone) {
+          return res.status(400).json({
+            success: false,
+            message: "QC cannot exceed assembly quantity",
+          });
+        }
+      }
+    }
+    else if (wo.projectType === "cable_harness") {
+      if (processKey === "picking") {
+        if (hasShortage && additionalQty > 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Cannot enter Produce Qty while shortage exists",
+          });
+        }
+        if (pickingDone + additionalQty > wo.quantity) {
+          return res.status(400).json({
+            success: false,
+            message: "Picking quantity exceeds work order quantity",
+          });
+        }
+      }
+      if (processKey === "cable_harness") {
+        if (cableHarnessDone + additionalQty > pickingDone) {
+          return res.status(400).json({
+            success: false,
+            message: "Cable Harness cannot exceed picked quantity",
+          });
+        }
+      }
+      if (processKey === "labelling") {
+        if (labellingDone + additionalQty > cableHarnessDone) {
+          return res.status(400).json({
+            success: false,
+            message: "Labelling cannot exceed Cable Harness quantity",
+          });
+        }
+      }
+      if (processKey === "quality_check") {
+        if (qcDone + additionalQty > labellingDone) {
+          return res.status(400).json({
+            success: false,
+            message: "QC cannot exceed Labelling quantity",
+          });
+        }
+      }
+    }
+
+    // ============================================================
+    // INVENTORY DEDUCTION
+    // ============================================================
 
     if (processKey === "picking") {
-      if (hasShortage && qty > 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Cannot enter Produce Qty while shortage exists. Resolve shortage first.",
-        });
-      }
+      const existingProcess = wo.processHistory?.find(p => p.process === "picking");
 
-      if (qty > wo.quantity) {
-        return res.status(400).json({
-          success: false,
-          message: "Picking quantity exceeds work order quantity",
-        });
-      }
-    }
+      for (const material of materials) {
+        const currentPickedQty = Number(material.pickedQty || 0);
+        if (currentPickedQty <= 0) continue;
 
-    if (processKey === "assembly") {
-      if (qty > pickingDone) {
-        return res.status(400).json({
-          success: false,
-          message: "Assembly cannot exceed picked quantity",
-        });
-      }
-    }
+        const previousEntries = existingProcess?.details?.filter(
+          (d) => String(d.mpnId) === String(material.mpnId)
+        ) || [];
+        
+        const totalAlreadyPicked = previousEntries.reduce(
+          (sum, entry) => sum + Number(entry.pickedQty || 0), 0
+        );
 
-    if (processKey === "quality_check") {
-      const prevQty =
-        wo.projectType === "other"
-          ? getStageQty("picking_assembly")
-          : getStageQty("assembly");
+        const totalRequiredQty = Number(material.quantity || 0) * Number(wo.quantity || 0);
+        const remainingAllowed = totalRequiredQty - totalAlreadyPicked;
 
-      if (qcDone + qty > prevQty) {
-        return res.status(400).json({
-          success: false,
-          message: "QC cannot exceed previous stage quantity",
-        });
-      }
-    }
-
-    if (processKey === "labelling") {
-
-      console.log('------sss',{
-  labellingDone,
-  qty,
-  assemblyDone,
-});
-      if (labellingDone + qty > assemblyDone) {
-        return res.status(400).json({
-          success: false,
-          message: "Labelling cannot exceed assembly completed",
-        });
-      }
-    }
-
-    // --------------------------------------------------
-    // 📦 INVENTORY DEDUCTION (SAFE)
-    // --------------------------------------------------
-
-    if (processKey === "picking") {
-      const existingProcess = wo.processHistory?.find(
-        (p) => p.process === "picking"
-      );
-
-      for (let i = 0; i < materials.length; i++) {
-        const material = materials[i];
-        const pickedQty = Number(pickedQuantities[i] || 0);
-        if (!pickedQty) continue;
-
-
-        console.log('------existingProcess',existingProcess)
-        const alreadyPickedQty =
-          existingProcess?.details
-            ?.filter((d) => String(d.mpnId) === String(material.mpnId))
-            ?.reduce((sum, d) => sum + Number(d.alreadyPicked || 0), 0) || 0;
-
-        const totalRequiredQty =
-          Number(material.quantity || 0) * Number(wo.quantity || 0);
-
-        const remainingAllowed = totalRequiredQty - alreadyPickedQty;
-        console.log('--------pickedQty',pickedQty,remainingAllowed)
-        if (pickedQty > remainingAllowed) {
+        if (currentPickedQty > remainingAllowed) {
           return res.status(400).json({
             success: false,
             message: `Max allowed for ${material.mpn}: ${remainingAllowed}`,
           });
         }
 
-        const inventory = await Inventory.findOne({
-          mpnId: material.mpnId,
-        }).populate("mpnId");
-
+        const inventory = await Inventory.findOne({ mpnId: material.mpnId }).populate("mpnId");
         if (!inventory) {
           return res.status(400).json({
             success: false,
@@ -6334,7 +7843,7 @@ export const saveWorkOrderStage = async (req, res) => {
         }
 
         const baseQty = await convertToInventoryUom({
-          qty: pickedQty,
+          qty: currentPickedQty,
           fromUom: material.uomId,
           toUom: inventory.mpnId.UOM,
         });
@@ -6351,46 +7860,145 @@ export const saveWorkOrderStage = async (req, res) => {
       }
     }
 
-    // --------------------------------------------------
-    // 🧠 PROCESS HISTORY UPDATE
-    // --------------------------------------------------
+    // ============================================================
+    // PROCESS HISTORY UPDATE
+    // ============================================================
 
     if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
 
-    const materialsWithQty = materials.map((m, i) => ({
-      ...m,
-      qty: Number(pickedQuantities[i] || 0),
-    }));
-
     let existing = wo.processHistory.find((p) => p.process === processKey);
 
-    if (existing) {
-      existing.qty += qty;
+    // 🔥 CRITICAL FIX: For Cable Harness stage with stageQty > 0
+    if (processKey === "cable_harness" && additionalQty > 0) {
+      console.log("🔧 Cable Harness: stageQty > 0, clearing shortages");
+      
+      if (existing) {
+        // Update existing stage
+        existing.qty = (existing.qty || 0) + additionalQty;
+        existing.completedBy = userId;
+        existing.completedAt = new Date();
+        
+        // Clear shortages from details
+        if (existing.details && existing.details.length > 0) {
+          for (const detail of existing.details) {
+            detail.shortage = false;
+            detail.shortageQty = 0;
+          }
+        }
+        
+        // Add comment
+        existing.comments = existing.comments || [];
+        if (comments) {
+          existing.comments.push({ 
+            comment: comments, 
+            commentedBy: userId,
+            commentedAt: new Date()
+          });
+        }
+      } else {
+        // Create new stage with no shortages
+        wo.processHistory.push({
+          process: "cable_harness",
+          qty: additionalQty,
+          completedBy: userId,
+          completedAt: new Date(),
+          createdAt: new Date(),
+          comments: comments ? [{ 
+            comment: comments, 
+            commentedBy: userId,
+            commentedAt: new Date()
+          }] : [],
+          details: [],
+        });
+      }
+    }
+    else if (existing) {
+      // Normal update for other stages or cable_harness with stageQty = 0
+      existing.qty = (existing.qty || 0) + additionalQty;
       existing.completedBy = userId;
       existing.completedAt = new Date();
-
       existing.comments = existing.comments || [];
-      existing.comments.push({ comment: comments, commentedBy: userId });
+      if (comments) {
+        existing.comments.push({ 
+          comment: comments, 
+          commentedBy: userId,
+          commentedAt: new Date()
+        });
+      }
 
-      existing.details = [...(existing.details || []), ...materialsWithQty];
-    } else {
+      // Update details for this stage
+      if (materials.length > 0) {
+        const stageDetailsMap = {};
+        
+        for (const detail of (existing.details || [])) {
+          const mpnId = String(detail.mpnId);
+          stageDetailsMap[mpnId] = {
+            ...detail,
+            pickedQty: Number(detail.pickedQty || 0),
+          };
+        }
+        
+        for (const material of materials) {
+          const mpnId = String(material.mpnId);
+          const currentPickedQty = Number(material.pickedQty || 0);
+          
+          if (stageDetailsMap[mpnId]) {
+            stageDetailsMap[mpnId].pickedQty += currentPickedQty;
+            stageDetailsMap[mpnId].shortage = material.shortage;
+            stageDetailsMap[mpnId].shortageQty = material.shortageQty || 0;
+            stageDetailsMap[mpnId].pickedAt = new Date();
+          } else {
+            stageDetailsMap[mpnId] = {
+              mpnId: material.mpnId,
+              mpn: material.mpn,
+              pickedQty: currentPickedQty,
+              shortage: material.shortage || false,
+              shortageQty: material.shortageQty || 0,
+              quantity: material.quantity,
+              uomId: material.uomId,
+              uom: material.uom,
+              pickedAt: new Date(),
+            };
+          }
+        }
+        
+        existing.details = Object.values(stageDetailsMap);
+      }
+    } 
+    else {
+      // New stage
+      const materialsWithDetails = materials.map((m) => ({
+        mpnId: m.mpnId,
+        mpn: m.mpn,
+        pickedQty: Number(m.pickedQty || 0),
+        shortage: m.shortage || false,
+        shortageQty: m.shortageQty || 0,
+        quantity: m.quantity,
+        uomId: m.uomId,
+        uom: m.uom,
+        pickedAt: new Date(),
+      }));
+
       wo.processHistory.push({
         process: processKey,
-        qty,
+        qty: additionalQty,
         completedBy: userId,
         completedAt: new Date(),
         createdAt: new Date(),
-        comments: [{ comment: comments, commentedBy: userId }],
-        details: materialsWithQty,
+        comments: comments ? [{ 
+          comment: comments, 
+          commentedBy: userId,
+          commentedAt: new Date()
+        }] : [],
+        details: materialsWithDetails,
       });
     }
 
-    // --------------------------------------------------
-    // 📊 STATUS ENGINE
-    // --------------------------------------------------
-
+    // ============================================================
+    // UPDATE STATUS
+    // ============================================================
+    
     updateWorkOrderStatus(wo);
-
     await wo.save();
 
     return res.json({
@@ -6407,30 +8015,55 @@ export const saveWorkOrderStage = async (req, res) => {
   }
 };
 
+// ============================================================
+// UPDATE WORK ORDER STATUS
+// ============================================================
+
 const updateWorkOrderStatus = (wo) => {
   const totalQty = Number(wo.quantity || 0);
 
   const getStageQty = (key) =>
     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
 
-  const hasStageShortage = (key) => {
-    const entry = wo.processHistory?.find((p) => p.process === key);
-    return entry?.details?.some(
-      (m) => m.shortage || Number(m.shortageQty || 0) > 0
-    );
-  };
+ const hasStageShortage = (key) => {
+  const entry = wo.processHistory?.find((p) => p.process === key);
+  if (!entry?.details) return false;
 
-  const stages =
-    wo.projectType === "other"
-      ? ["picking_assembly", "quality_check"]
-      : wo.projectType === "box_build"
-      ? ["picking", "assembly", "quality_check"]
-      : ["picking", "assembly", "labelling", "quality_check"];
+  const doneQty = entry.qty || 0;
+
+  // 🔥 FIX: if stage qty complete → ignore shortage
+  if (doneQty >= totalQty) return false;
+
+  if (doneQty >= totalQty && entry?.details) {
+  entry.details.forEach(d => {
+    d.shortage = false;
+    d.shortageQty = 0;
+  });
+}
+
+  return entry.details.some(
+    (d) => d.shortage === true || Number(d.shortageQty || 0) > 0
+  );
+};
+
+
+
+  let stages = [];
+  if (wo.projectType === "cable_harness") {
+    stages = ["picking", "cable_harness", "labelling", "quality_check"];
+  } else if (wo.projectType === "box_build") {
+    stages = ["picking", "assembly", "quality_check"];
+  } else if (wo.projectType === "other") {
+    stages = ["picking_assembly", "quality_check"];
+  } else {
+    stages = ["picking", "assembly", "quality_check"];
+  }
 
   const formatStageName = (key) => {
     const map = {
       picking: "Picking",
-      assembly: wo.projectType === "box_build" ? "Assembly" : "Cable Harness",
+      cable_harness: "Cable Harness",
+      assembly: "Assembly",
       labelling: "Labelling",
       quality_check: "Quality Check",
       picking_assembly: "Picking & Assembly",
@@ -6438,45 +8071,39 @@ const updateWorkOrderStatus = (wo) => {
     return map[key] || key;
   };
 
-  let hasAnyProgress =
-    Array.isArray(wo.processHistory) &&
-    wo.processHistory.some(
-      (p) =>
-        (p.qty && p.qty > 0) ||
-        (Array.isArray(p.details) && p.details.length > 0)
-    );
+  // --------------------------------------------------
+  // 🔥 MAIN FIX LOGIC
+  // --------------------------------------------------
 
-  let currentStage = null;
   let lastCompletedStage = null;
+  let currentStage = null;
 
-  for (const key of stages) {
+  for (let i = 0; i < stages.length; i++) {
+    const key = stages[i];
     const doneQty = getStageQty(key);
     const shortage = hasStageShortage(key);
 
-    if (doneQty >= totalQty && !shortage && totalQty > 0) {
+    const isComplete = doneQty >= totalQty && !shortage;
+
+    if (isComplete) {
       lastCompletedStage = key;
-      continue;
+      continue; // check next stage
     }
 
-    if (doneQty > 0 || shortage) {
-      currentStage = key;
-      break;
-    }
-
-    if (doneQty === 0) break;
+    // First incomplete stage
+    currentStage = key;
+    break;
   }
 
-  // 🔄 In Progress
-  if (currentStage) {
-    wo.status = `${formatStageName(currentStage)} In Progress`;
-    wo.isInProduction = true;
-    return;
-  }
+  // --------------------------------------------------
+  // 🎉 ALL COMPLETE
+  // --------------------------------------------------
 
-  // ✅ Completed
-  const anyShortage = stages.some((key) => hasStageShortage(key));
   const allComplete =
-    stages.every((key) => getStageQty(key) >= totalQty) && !anyShortage;
+    stages.every(
+      (key) =>
+        getStageQty(key) >= totalQty && !hasStageShortage(key)
+    ) && totalQty > 0;
 
   if (allComplete) {
     wo.status = "Completed";
@@ -6486,22 +8113,633 @@ const updateWorkOrderStatus = (wo) => {
     return;
   }
 
-  // 🟡 Partial done
-  if (lastCompletedStage) {
+  // --------------------------------------------------
+  // ✅ LAST STAGE JUST COMPLETED
+  // --------------------------------------------------
+
+  if (lastCompletedStage && !currentStage) {
     wo.status = `${formatStageName(lastCompletedStage)} Done`;
     wo.isInProduction = true;
+    wo.isProductionComplete = false;
     return;
   }
 
-  // ❌ Not Started ONLY if no activity
-  if (!hasAnyProgress) {
-    wo.status = "Not Start Yet";
-    wo.isInProduction = false;
-  } else {
-    wo.status = "In Progress";
+  // --------------------------------------------------
+  // 🔄 CURRENT STAGE RUNNING
+  // --------------------------------------------------
+
+  if (currentStage) {
+    const doneQty = getStageQty(currentStage);
+    const shortage = hasStageShortage(currentStage);
+
+    if (doneQty > 0 || shortage) {
+      wo.status = `${formatStageName(currentStage)} In Progress`;
+      wo.isInProduction = true;
+      wo.isProductionComplete = false;
+      return;
+    }
+  }
+
+  // --------------------------------------------------
+  // 🟡 ONLY PREVIOUS DONE (IMPORTANT FIX)
+  // --------------------------------------------------
+
+  if (lastCompletedStage) {
+    wo.status = `${formatStageName(lastCompletedStage)} Done`;
     wo.isInProduction = true;
+    wo.isProductionComplete = false;
+    return;
+  }
+
+  // --------------------------------------------------
+  // ❌ NOT STARTED
+  // --------------------------------------------------
+
+  wo.status = "Not Start Yet";
+  wo.isInProduction = false;
+  wo.isProductionComplete = false;
+};
+
+// ============================================================
+// MAP STAGE TO PROCESS KEY
+// ============================================================
+
+const mapStageToProcessKey = (stage) => {
+  const stageLower = stage?.toLowerCase();
+  
+  switch (stageLower) {
+    case "picking":
+      return "picking";
+    case "cable harness":
+      return "cable_harness";
+    case "assembly":
+      return "assembly";
+    case "labelling":
+      return "labelling";
+    case "quality check":
+    case "quality_check":
+      return "quality_check";
+    case "picking/assembly":
+    case "picking_assembly":
+      return "picking_assembly";
+    default:
+      return null;
   }
 };
+
+
+// export const saveWorkOrderStage = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const {
+//       stage,
+//       comments,
+//       stageQty,
+//       pickedQuantities = {},
+//       materials = [],
+//     } = req.body;
+
+//     const wo = await WorkOrder.findById(id);
+//     if (!wo) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Work order not found",
+//       });
+//     }
+
+//     const processKey = mapStageToProcessKey(stage)?.toLowerCase();
+//     if (!processKey) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid stage",
+//       });
+//     }
+
+//     const qty = Number(stageQty || 0);
+//     const userId = req.user?._id;
+
+//     const getStageQty = (key) =>
+//       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//     const pickingDone = getStageQty("picking");
+//     const assemblyDone = getStageQty("assembly");
+//     const qcDone = getStageQty("quality_check");
+//     const labellingDone = getStageQty("labelling");
+
+//     const hasShortage = materials.some(
+//       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
+//     );
+
+//     // --------------------------------------------------
+//     // ❗ VALIDATIONS
+//     // --------------------------------------------------
+
+//     if (processKey === "picking") {
+//       if (hasShortage && qty > 0) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "Cannot enter Produce Qty while shortage exists. Resolve shortage first.",
+//         });
+//       }
+
+//       if (pickingDone + qty > wo.quantity) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Picking quantity exceeds work order quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "assembly") {
+//       if (assemblyDone + qty > pickingDone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Assembly cannot exceed picked quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "quality_check") {
+//       const prevQty =
+//         wo.projectType === "other"
+//           ? getStageQty("picking_assembly")
+//           : getStageQty("assembly");
+
+//       if (qcDone + qty > prevQty) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "QC cannot exceed previous stage quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "labelling") {
+//       if (labellingDone + qty > assemblyDone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Labelling cannot exceed assembly completed",
+//         });
+//       }
+//     }
+
+//     // --------------------------------------------------
+//     // 📦 INVENTORY DEDUCTION (FIXED)
+//     // --------------------------------------------------
+
+//     if (processKey === "picking") {
+//       const existingProcess = wo.processHistory?.find(
+//         (p) => p.process === "picking"
+//       );
+
+//       for (const material of materials) {
+//         // 🔥 FIX: Use material.pickedQty directly (this is the delta/current picking quantity)
+//         const currentPickedQty = Number(material.pickedQty || 0);
+        
+//         // Skip if nothing is being picked in this transaction
+//         if (currentPickedQty <= 0) continue;
+
+//         // Get previously picked quantity from history
+//         const previousEntries = existingProcess?.details?.filter(
+//           (d) => String(d.mpnId) === String(material.mpnId)
+//         ) || [];
+        
+//         const alreadyPickedQty = previousEntries.reduce(
+//           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
+//         );
+
+//         const totalRequiredQty =
+//           Number(material.quantity || 0) * Number(wo.quantity || 0);
+
+//         const remainingAllowed = totalRequiredQty - alreadyPickedQty;
+
+//         // Validate we're not picking more than remaining
+//         if (currentPickedQty > remainingAllowed) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Max allowed for ${material.mpn}: ${remainingAllowed}. You tried: ${currentPickedQty}`,
+//           });
+//         }
+
+//         // Find inventory and deduct
+//         const inventory = await Inventory.findOne({
+//           mpnId: material.mpnId,
+//         }).populate("mpnId");
+
+//         if (!inventory) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Inventory not found for ${material.mpn}`,
+//           });
+//         }
+
+//         const baseQty = await convertToInventoryUom({
+//           qty: currentPickedQty,
+//           fromUom: material.uomId,
+//           toUom: inventory.mpnId.UOM,
+//         });
+
+//         if (inventory.balanceQuantity < baseQty) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Insufficient stock for ${material.mpn}. Available: ${inventory.balanceQuantity}, Required: ${baseQty}`,
+//           });
+//         }
+
+//         // Deduct the CURRENT picking quantity only
+//         inventory.balanceQuantity -= baseQty;
+//         await inventory.save();
+        
+//         console.log(`✅ Deducted ${baseQty} ${inventory.mpnId.UOM} for ${material.mpn}`);
+//       }
+//     }
+
+//     // --------------------------------------------------
+//     // 🧠 PROCESS HISTORY UPDATE
+//     // --------------------------------------------------
+
+//     if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
+
+//     // Format materials for history - store the picked quantity for this transaction
+//     const materialsWithQty = materials.map((m) => ({
+//       mpnId: m.mpnId,
+//       mpn: m.mpn,
+//       pickedQty: Number(m.pickedQty || 0),  // Store the delta
+//       previousPickedQty: m.previousPickedQty || 0,
+//       shortage: m.shortage || false,
+//       shortageQty: m.shortageQty || 0,
+//       quantity: m.quantity,
+//       uomId: m.uomId,
+//       pickedAt: new Date(),
+//     }));
+
+//     let existing = wo.processHistory.find((p) => p.process === processKey);
+
+//     if (existing) {
+//       existing.qty += qty;
+//       existing.completedBy = userId;
+//       existing.completedAt = new Date();
+
+//       existing.comments = existing.comments || [];
+//       existing.comments.push({ 
+//         comment: comments, 
+//         commentedBy: userId,
+//         commentedAt: new Date()
+//       });
+
+//       existing.details = [...(existing.details || []), ...materialsWithQty];
+//     } else {
+//       wo.processHistory.push({
+//         process: processKey,
+//         qty,
+//         completedBy: userId,
+//         completedAt: new Date(),
+//         createdAt: new Date(),
+//         comments: [{ 
+//           comment: comments, 
+//           commentedBy: userId,
+//           commentedAt: new Date()
+//         }],
+//         details: materialsWithQty,
+//       });
+//     }
+
+//     // --------------------------------------------------
+//     // 📊 STATUS ENGINE
+//     // --------------------------------------------------
+
+//     updateWorkOrderStatus(wo);
+
+//     await wo.save();
+
+//     return res.json({
+//       success: true,
+//       message: `${stage} saved successfully`,
+//       data: wo,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
+
+// export const saveWorkOrderStage = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const {
+//       stage,
+//       comments,
+//       stageQty,
+//       pickedQuantities = {},
+//       materials = [],
+//     } = req.body;
+
+//     const wo = await WorkOrder.findById(id);
+//     if (!wo) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Work order not found",
+//       });
+//     }
+
+//     const processKey = mapStageToProcessKey(stage)?.toLowerCase();
+//     if (!processKey) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid stage",
+//       });
+//     }
+
+//     const qty = Number(stageQty || 0);
+//     const userId = req.user?._id;
+
+//     const getStageQty = (key) =>
+//       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//     const pickingDone = getStageQty("picking");
+//     const assemblyDone = getStageQty("assembly");
+//     const qcDone = getStageQty("quality_check");
+//     const labellingDone = getStageQty("labelling");
+
+//     const hasShortage = materials.some(
+//       (m) => m.shortage === true || Number(m.shortageQty || 0) > 0
+//     );
+
+//     // --------------------------------------------------
+//     // ❗ VALIDATIONS
+//     // --------------------------------------------------
+
+//     if (processKey === "picking") {
+//       if (hasShortage && qty > 0) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "Cannot enter Produce Qty while shortage exists. Resolve shortage first.",
+//         });
+//       }
+
+//       if (qty > wo.quantity) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Picking quantity exceeds work order quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "assembly") {
+//       if (qty > pickingDone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Assembly cannot exceed picked quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "quality_check") {
+//       const prevQty =
+//         wo.projectType === "other"
+//           ? getStageQty("picking_assembly")
+//           : getStageQty("assembly");
+
+//       if (qcDone + qty > prevQty) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "QC cannot exceed previous stage quantity",
+//         });
+//       }
+//     }
+
+//     if (processKey === "labelling") {
+
+//       console.log('------sss',{
+//   labellingDone,
+//   qty,
+//   assemblyDone,
+// });
+//       if (labellingDone + qty > assemblyDone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Labelling cannot exceed assembly completed",
+//         });
+//       }
+//     }
+
+//     // --------------------------------------------------
+//     // 📦 INVENTORY DEDUCTION (SAFE)
+//     // --------------------------------------------------
+
+//     if (processKey === "picking") {
+//       const existingProcess = wo.processHistory?.find(
+//         (p) => p.process === "picking"
+//       );
+
+//       for (let i = 0; i < materials.length; i++) {
+//         const material = materials[i];
+//         const pickedQty = Number(pickedQuantities[i] || 0);
+//         if (!pickedQty) continue;
+
+
+//         console.log('------existingProcess',existingProcess)
+//         const alreadyPickedQty =
+//           existingProcess?.details
+//             ?.filter((d) => String(d.mpnId) === String(material.mpnId))
+//             ?.reduce((sum, d) => sum + Number(d.alreadyPicked || 0), 0) || 0;
+
+//         const totalRequiredQty =
+//           Number(material.quantity || 0) * Number(wo.quantity || 0);
+
+//         const remainingAllowed = totalRequiredQty - alreadyPickedQty;
+//         console.log('--------pickedQty',pickedQty,remainingAllowed)
+//         if (pickedQty > remainingAllowed) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Max allowed for ${material.mpn}: ${remainingAllowed}`,
+//           });
+//         }
+
+//         const inventory = await Inventory.findOne({
+//           mpnId: material.mpnId,
+//         }).populate("mpnId");
+
+//         if (!inventory) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Inventory not found for ${material.mpn}`,
+//           });
+//         }
+
+//         const baseQty = await convertToInventoryUom({
+//           qty: pickedQty,
+//           fromUom: material.uomId,
+//           toUom: inventory.mpnId.UOM,
+//         });
+
+//         if (inventory.balanceQuantity < baseQty) {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Insufficient stock for ${material.mpn}`,
+//           });
+//         }
+
+//         inventory.balanceQuantity -= baseQty;
+//         await inventory.save();
+//       }
+//     }
+
+//     // --------------------------------------------------
+//     // 🧠 PROCESS HISTORY UPDATE
+//     // --------------------------------------------------
+
+//     if (!Array.isArray(wo.processHistory)) wo.processHistory = [];
+
+//     const materialsWithQty = materials.map((m, i) => ({
+//       ...m,
+//       qty: Number(pickedQuantities[i] || 0),
+//     }));
+
+//     let existing = wo.processHistory.find((p) => p.process === processKey);
+
+//     if (existing) {
+//       existing.qty += qty;
+//       existing.completedBy = userId;
+//       existing.completedAt = new Date();
+
+//       existing.comments = existing.comments || [];
+//       existing.comments.push({ comment: comments, commentedBy: userId });
+
+//       existing.details = [...(existing.details || []), ...materialsWithQty];
+//     } else {
+//       wo.processHistory.push({
+//         process: processKey,
+//         qty,
+//         completedBy: userId,
+//         completedAt: new Date(),
+//         createdAt: new Date(),
+//         comments: [{ comment: comments, commentedBy: userId }],
+//         details: materialsWithQty,
+//       });
+//     }
+
+//     // --------------------------------------------------
+//     // 📊 STATUS ENGINE
+//     // --------------------------------------------------
+
+//     updateWorkOrderStatus(wo);
+
+//     await wo.save();
+
+//     return res.json({
+//       success: true,
+//       message: `${stage} saved successfully`,
+//       data: wo,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
+
+// const updateWorkOrderStatus = (wo) => {
+//   const totalQty = Number(wo.quantity || 0);
+
+//   const getStageQty = (key) =>
+//     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
+
+//   const hasStageShortage = (key) => {
+//     const entry = wo.processHistory?.find((p) => p.process === key);
+//     return entry?.details?.some(
+//       (m) => m.shortage || Number(m.shortageQty || 0) > 0
+//     );
+//   };
+
+//   const stages =
+//     wo.projectType === "other"
+//       ? ["picking_assembly", "quality_check"]
+//       : wo.projectType === "box_build"
+//       ? ["picking", "assembly", "quality_check"]
+//       : ["picking", "assembly", "labelling", "quality_check"];
+
+//   const formatStageName = (key) => {
+//     const map = {
+//       picking: "Picking",
+//       assembly: wo.projectType === "box_build" ? "Assembly" : "Cable Harness",
+//       labelling: "Labelling",
+//       quality_check: "Quality Check",
+//       picking_assembly: "Picking & Assembly",
+//     };
+//     return map[key] || key;
+//   };
+
+//   let hasAnyProgress =
+//     Array.isArray(wo.processHistory) &&
+//     wo.processHistory.some(
+//       (p) =>
+//         (p.qty && p.qty > 0) ||
+//         (Array.isArray(p.details) && p.details.length > 0)
+//     );
+
+//   let currentStage = null;
+//   let lastCompletedStage = null;
+
+//   for (const key of stages) {
+//     const doneQty = getStageQty(key);
+//     const shortage = hasStageShortage(key);
+
+//     if (doneQty >= totalQty && !shortage && totalQty > 0) {
+//       lastCompletedStage = key;
+//       continue;
+//     }
+
+//     if (doneQty > 0 || shortage) {
+//       currentStage = key;
+//       break;
+//     }
+
+//     if (doneQty === 0) break;
+//   }
+
+//   // 🔄 In Progress
+//   if (currentStage) {
+//     wo.status = `${formatStageName(currentStage)} In Progress`;
+//     wo.isInProduction = true;
+//     return;
+//   }
+
+//   // ✅ Completed
+//   const anyShortage = stages.some((key) => hasStageShortage(key));
+//   const allComplete =
+//     stages.every((key) => getStageQty(key) >= totalQty) && !anyShortage;
+
+//   if (allComplete) {
+//     wo.status = "Completed";
+//     wo.isProductionComplete = true;
+//     wo.isInProduction = false;
+//     wo.completeDate = new Date();
+//     return;
+//   }
+
+//   // 🟡 Partial done
+//   if (lastCompletedStage) {
+//     wo.status = `${formatStageName(lastCompletedStage)} Done`;
+//     wo.isInProduction = true;
+//     return;
+//   }
+
+//   // ❌ Not Started ONLY if no activity
+//   if (!hasAnyProgress) {
+//     wo.status = "Not Start Yet";
+//     wo.isInProduction = false;
+//   } else {
+//     wo.status = "In Progress";
+//     wo.isInProduction = true;
+//   }
+// };
 
 
 // export const saveWorkOrderStage = async (req, res) => {
@@ -6741,28 +8979,28 @@ const updateWorkOrderStatus = (wo) => {
 //   }
 // };
 
-const mapStageToProcessKey = (stage) => {
-  switch (stage) {
-    case "Picking":
-      return "picking";
+// const mapStageToProcessKey = (stage) => {
+//   switch (stage) {
+//     case "Picking":
+//       return "picking";
 
-    case "Cable Harness":
-    case "Assembly":
-      return "assembly";
+//     case "Cable Harness":
+//     case "Assembly":
+//       return "assembly";
 
-    case "Labelling":
-      return "labelling";
+//     case "Labelling":
+//       return "labelling";
 
-    case "Quality Check":
-      return "quality_check";
+//     case "Quality Check":
+//       return "quality_check";
 
-    case "Picking/Assembly":
-      return "picking_assembly";
+//     case "Picking/Assembly":
+//       return "picking_assembly";
 
-    default:
-      return null;
-  }
-};
+//     default:
+//       return null;
+//   }
+// };
 
 // const updateWorkOrderStatus = (wo) => {
 //   const type = wo.projectType;
@@ -6919,30 +9157,27 @@ export const importTotalMpnNeeded = async (req, res) => {
     // 3️⃣ FLEXIBLE HEADERS
     // -------------------------
     const pickDrawingNo = (r) =>
-      r["Drawing No"] ?? r["DrawingNo"] ?? r["drawingNo"] ?? r["Drawing"] ?? r["drawing"] ?? "";
+      r["Drawing No"] ?? r["DrawingNo"] ?? r["drawingNo"] ?? r["Drawing"] ?? "";
 
     const pickQty = (r) =>
-      r["Qty"] ?? r["QTY"] ?? r["qty"] ?? r["Quantity"] ?? r["quantity"] ?? "";
+      r["Qty"] ?? r["QTY"] ?? r["qty"] ?? r["Quantity"] ?? "";
+
+    const norm = (v) => String(v || "").trim();
+    const toNum = (v) => {
+      const n = Number(v);
+      return isNaN(n) ? null : n;
+    };
 
     // -------------------------
     // 4️⃣ AGGREGATE DRAWINGS
     // -------------------------
     const qtyByDrawingNo = new Map();
-    const invalidRows = [];
 
-    rows.forEach((r, idx) => {
+    rows.forEach((r) => {
       const drawingNo = norm(pickDrawingNo(r));
       const qty = toNum(pickQty(r));
 
-      if (!drawingNo || qty === null) {
-        invalidRows.push({
-          row: idx + 2,
-          drawingNo,
-          qty: pickQty(r),
-          reason: "Invalid Drawing No or Qty",
-        });
-        return;
-      }
+      if (!drawingNo || qty === null) return;
 
       qtyByDrawingNo.set(drawingNo, (qtyByDrawingNo.get(drawingNo) || 0) + qty);
     });
@@ -6951,7 +9186,6 @@ export const importTotalMpnNeeded = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "No valid rows found",
-        invalidRows,
       });
     }
 
@@ -6968,8 +9202,6 @@ export const importTotalMpnNeeded = async (req, res) => {
     const drawingIdByNo = new Map(
       drawings.map((d) => [String(d.drawingNo), String(d._id)])
     );
-
-    const notFoundDrawings = drawingNos.filter((dn) => !drawingIdByNo.has(dn));
 
     // -------------------------
     // 6️⃣ FETCH COSTING ITEMS
@@ -6989,7 +9221,7 @@ export const importTotalMpnNeeded = async (req, res) => {
     });
 
     // -------------------------
-    // 7️⃣ MPN CALCULATION (CORE)
+    // 7️⃣ MPN CALCULATION (FIXED)
     // -------------------------
     const mpnUsageMap = new Map();
     const mpnIdSet = new Set();
@@ -7005,11 +9237,15 @@ export const importTotalMpnNeeded = async (req, res) => {
         if (!ci.mpn) continue;
 
         const mpnId = String(ci.mpn);
+        const uomId = ci.uom ? String(ci.uom) : "no_uom";
+
+        const key = `${mpnId}_${uomId}`; // ✅ FIX
+
         mpnIdSet.add(mpnId);
 
         const needed = Number(ci.quantity || 0) * inputQty;
 
-        const prev = mpnUsageMap.get(mpnId) || {
+        const prev = mpnUsageMap.get(key) || {
           mpnId,
           description: ci.description || "",
           manufacturer: ci.manufacturer || "",
@@ -7018,15 +9254,8 @@ export const importTotalMpnNeeded = async (req, res) => {
         };
 
         prev.totalNeeded += needed;
-        mpnUsageMap.set(mpnId, prev);
+        mpnUsageMap.set(key, prev);
       }
-    }
-
-    if (!mpnUsageMap.size) {
-      return res.status(400).json({
-        success: false,
-        message: "No MPN usage calculated",
-      });
     }
 
     // -------------------------
@@ -7051,23 +9280,55 @@ export const importTotalMpnNeeded = async (req, res) => {
     const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
     const uomMap = new Map(uomDocs.map((u) => [String(u._id), u]));
 
+    // -------------------------
+    // 9️⃣ INVENTORY + STOCK UOM
+    // -------------------------
     const invDocs = await Inventory.find({
       mpnId: { $in: mpnObjectIds },
-    }).lean();
+    }).populate({
+    path: "mpnId",
+    select: "UOM",
+    populate: {
+      path: "UOM",
+      select: "code",
+    },
+  }).lean();
+
+  console.log('--------invDocs',invDocs?.[0]?.mpnId)
 
     const invMap = new Map();
+
     invDocs.forEach((inv) => {
-      const key = String(inv.mpnId);
-      invMap.set(key, (invMap.get(key) || 0) + Number(inv.balanceQuantity || 0));
-    });
+  const key = String(inv.mpnId?._id); // ✅ FIXED
+
+  invMap.set(key, {
+    qty: (invMap.get(key)?.qty || 0) + Number(inv.balanceQuantity || 0),
+    stockUom: inv.mpnId?.UOM || "", // ✅ direct code
+  });
+});
+
+    const invUomIds = [
+      ...new Set(invDocs.map((i) => i.uom).filter(Boolean).map(String)),
+    ];
+
+    const invUomDocs = await UOM.find({ _id: { $in: invUomIds } }).lean();
+    const invUomMap = new Map(invUomDocs.map((u) => [String(u._id), u]));
 
     // -------------------------
-    // 9️⃣ BUILD EXCEL
+    // 🔟 BUILD EXCEL
     // -------------------------
-    const excelRows = [...mpnUsageMap.values()].map((row) => {
+    const excelRows = await Promise.all([...mpnUsageMap.values()].map(async (row) => {
       const mpn = mpnMap.get(row.mpnId);
       const uom = row.uomId ? uomMap.get(String(row.uomId)) : null;
-      const stock = invMap.get(row.mpnId) || 0;
+
+      const invData = invMap.get(String(row.mpnId)) || {}; // ✅ ensure string
+      const stock = await convertToInventoryUom({
+        qty: invData.qty,
+        fromUom: row.uomId,
+        toUom: invData.stockUom?._id,
+      });
+      console.log('------stock',stock)
+const stockUom = invData.stockUom?.code || "";
 
       return {
         "MPN": mpn?.mpn || mpn?.MPN || "",
@@ -7076,9 +9337,11 @@ export const importTotalMpnNeeded = async (req, res) => {
         "UOM": uom?.code || "",
         "Total Needed": row.totalNeeded,
         "Current Stock": stock,
+        "Stock UOM": stockUom, // ✅ NEW COLUMN
         "Shortfall": Math.max(0, row.totalNeeded - stock),
       };
-    });
+    }))
+      
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(excelRows);
@@ -7095,7 +9358,7 @@ export const importTotalMpnNeeded = async (req, res) => {
     });
 
     // -------------------------
-    // 🔟 RESPONSE
+    // RESPONSE
     // -------------------------
     res.setHeader(
       "Content-Type",

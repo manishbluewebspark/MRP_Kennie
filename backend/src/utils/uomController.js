@@ -70,9 +70,9 @@ export const convertToInventoryUom = async ({
   fromUom,     // supplier UOM (FT / M / CM etc)
   toUom,       // MPN Master UOM
 }) => {
-  // console.log('----ccc',qty,
-  // fromUom,     // supplier UOM (FT / M / CM etc)
-  // toUom,)
+  console.log('----ccc',qty,
+  fromUom,     // supplier UOM (FT / M / CM etc)
+  toUom,)
   const quantity = Number(qty);
   if (!Number.isFinite(quantity) || quantity === 0) return 0;
 
@@ -155,6 +155,30 @@ export const convertToInventoryUom = async ({
 //       return pricePerMeter;
 //   }
 // };
+
+export const convertToBaseUOM = (qty, from, to) => {
+  console.log('---------qty', qty, from, to);
+
+  if (!qty || !from || !to) return qty;
+
+  const map = {
+    MM: 0.001,
+    CM: 0.01,
+    M: 1,
+    FT: 0.3048,
+    IN: 0.0254,
+  };
+
+  // ✅ IMPORTANT FIX
+  if (!(from in map) || !(to in map)) {
+    return qty; // ❗ no conversion
+  }
+
+  const fromFactor = map[from];
+  const toFactor = map[to];
+
+  return (qty * fromFactor) / toFactor;
+};
 
 
 export const convertLengthUnitPrice = (price, from, to) => {

@@ -236,18 +236,25 @@ const DeliveryOrderPage = () => {
 
     const columns = [
         {
+            title: "Drawing No",
+            dataIndex: "drawingNo",
+            key: "drawingNo",
+            sorter: true,
+            render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+        },
+        {
             title: "Work Order No",
             dataIndex: "workOrderNo",
             key: "workOrderNo",
             sorter: true,
-            render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+            render: (text) => <span style={{ fontSize: '14px' }}>{text}</span>
         },
         {
             title: "Project No",
             dataIndex: "projectNo",
             key: "projectNo",
             sorter: true,
-            render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+            render: (text) => <span style={{ fontSize: '14px' }}>{text}</span>
         },
         // {
         //     title: "Customer",
@@ -281,13 +288,7 @@ const DeliveryOrderPage = () => {
             sorter: true,
             render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
         },
-        {
-            title: "Drawing No",
-            dataIndex: "drawingNo",
-            key: "drawingNo",
-            sorter: true,
-            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
-        },
+        
         // {
         //     title: "POS Number",
         //     dataIndex: "posNumber",
