@@ -750,6 +750,7 @@ export const createDrawing = async (req, res) => {
 // 🟢 UPDATE DRAWING
 export const updateDrawing = async (req, res) => {
   try {
+    console.log('--------',req.body)
     const { id } = req.params;
     const userId = req.user.id;
     const data = req.body;
@@ -781,9 +782,31 @@ export const updateDrawing = async (req, res) => {
 
 
     // Update total price if qty or unitPrice changes
-    const qty = data.qty ?? existing.qty;
-    const unitPrice = data.unitPrice ?? existing.unitPrice;
-    data.totalPrice = qty * unitPrice;
+    // const qty = data.qty ?? existing.qty;
+    // const unitPrice = data.unitPrice ?? existing.unitPrice;
+    // data.totalPrice = qty * unitPrice;
+
+    
+    const materialTotal = data.materialTotal ?? existing.materialTotal ?? 0;
+const manhourTotal = data.manhourTotal ?? existing.manhourTotal ?? 0;
+const packingTotal = data.packingTotal ?? existing.packingTotal ?? 0;
+
+const materialMarkup = data.materialMarkup ?? existing.materialMarkup ?? 0;
+const manhourMarkup = data.manhourMarkup ?? existing.manhourMarkup ?? 0;
+const packingMarkup = data.packingMarkup ?? existing.packingMarkup ?? 0;
+
+// base price (without markup)
+data.totalPrice = materialTotal + manhourTotal + packingTotal;
+
+// with markup
+const materialFinal = materialTotal * (1 + materialMarkup / 100);
+const manhourFinal = manhourTotal * (1 + manhourMarkup / 100);
+const packingFinal = packingTotal * (1 + packingMarkup / 100);
+
+data.totalPriceWithMarkup =
+  materialFinal + manhourFinal + packingFinal;
+
+
     data.lastEditedBy = userId;
     const updated = await Drawing.findByIdAndUpdate(id, data, { new: true, runValidators: true })
       .populate("projectId", "name code")

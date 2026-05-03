@@ -1145,7 +1145,7 @@ export const importWorkOrders = async (req, res) => {
         .json({ success: false, message: "Sheet is empty" });
     }
 
-    // console.log("🔍 Sample Row:", rows);
+    console.log("🔍 Sample Row:", rows);
 
     // ✅ 3) Existing WO numbers (uniqueness)
     const existingWOs = await WorkOrder.find({})
@@ -1326,7 +1326,7 @@ export const importWorkOrders = async (req, res) => {
       const woDoc = {
         workOrderNo,
         poNumber,
-        projectNo: row["Project No"]?.toString().trim() || "",
+        projectNo: row["ProjectNo"]?.toString().trim() || "",
         drawingId,
         projectId: drawing?.projectId || null,
         projectType,
