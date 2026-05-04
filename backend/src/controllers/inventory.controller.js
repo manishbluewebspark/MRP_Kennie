@@ -114,7 +114,7 @@ async function buildDemandMap() {
     if (woQty <= 0) continue;
 
     let needed = Number(ci.quantity || 0) * woQty;
-    console.log('--------uom',ci)
+    console.log('--------uom', ci)
     // 🔥 convert to M (inventory base UOM)
     const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code;
     const toUOM = ci?.mpn?.UOM?.code;
@@ -220,7 +220,7 @@ export const getInventoryList = async (req, res) => {
     let pendingPOs = [];
     if (mpnIdsOnList.length) {
       pendingPOs = await PurchaseOrders.find({
-        status: { $in: ["Emailed", "Approved","Acknowledged", "Partially Received"] },
+        status: { $in: ["Emailed", "Approved", "Acknowledged", "Partially Received"] },
         "items.mpn": { $in: mpnIdsOnList },
       })
         .select(
@@ -263,9 +263,9 @@ export const getInventoryList = async (req, res) => {
         }
 
         entry.purchaseData.push({
-          _id:po._id,
-          idNumber:it?.idNumber,
-          mpn:it.mpn,
+          _id: po._id,
+          idNumber: it?.idNumber,
+          mpn: it.mpn,
           poNumber: po.poNumber,
           supplier: po.supplier || { name: "N/A" },
           quantity: remainingQty,
@@ -304,7 +304,7 @@ export const getInventoryList = async (req, res) => {
 
       const balanceQty = toNum(item.balanceQuantity);
       const incomingQty = toNum(item.calculatedIncomingQty);
-   const demandQty = Number(demandMap.get(mpnIdStr) || 0);
+      const demandQty = Number(demandMap.get(mpnIdStr) || 0);
 
       // ✅ raw net (for internal / analytics)
       const netQty = calcNetQty(balanceQty, incomingQty, demandQty);
@@ -339,7 +339,7 @@ export const getInventoryList = async (req, res) => {
 
         Status: netQty < 0 ? "Out of Stock" : "Low Stock",
         purchaseData: item.purchaseData,
-        adjustLog:item?.adjustmentLogs
+        adjustLog: item?.adjustmentLogs
       };
     });
 
@@ -1554,8 +1554,9 @@ export const getMaterialShortages = async (req, res) => {
     const regex = search ? new RegExp(search, "i") : null;
 
     inventories.forEach((inv) => {
-      (inv.workOrders || []).forEach((wo) => {
 
+      (inv.workOrders || []).forEach((wo) => {
+        console.log('-----search', inv)
         // ✅ WorkOrder filter
         if (workOrderId && String(wo.workOrderId) !== String(workOrderId)) {
           return;
@@ -1563,10 +1564,14 @@ export const getMaterialShortages = async (req, res) => {
 
         // ✅ SEARCH FILTER (MPN / description / workOrderNo)
         if (regex) {
+          const mpn = inv?.mpnId?.MPN?.toString() || "";
+          const description = inv?.mpnId?.description?.toString() || "";
+          const workOrderNo = wo?.workOrderNo?.toString() || "";
+
           const match =
-            regex.test(inv?.mpnId?.MPN || "") ||
-            regex.test(inv?.mpnId?.description || "") ||
-            regex.test(wo?.workOrderNo || "");
+            regex.test(mpn) ||
+            regex.test(description) ||
+            regex.test(workOrderNo);
 
           if (!match) return;
         }

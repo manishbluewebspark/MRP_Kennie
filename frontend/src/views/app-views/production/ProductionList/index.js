@@ -243,12 +243,20 @@ const ProductionPage = () => {
 
     const columns = [
         {
+            title: "Drawing No",
+            dataIndex: "drawingNo",
+            key: "drawingNo",
+            sorter: true,
+            render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+        },
+        {
             title: "Work Order No",
             dataIndex: "workOrderNo",
             key: "workOrderNo",
             sorter: true,
             // sorter: (a, b) => a.workOrderNo.localeCompare(b.workOrderNo),
-            render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+            
+            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
         },
         {
             title: "Project No",
@@ -289,13 +297,7 @@ const ProductionPage = () => {
             sorter: true,
             render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
         },
-        {
-            title: "Drawing No",
-            dataIndex: "drawingNo",
-            key: "drawingNo",
-            sorter: true,
-            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
-        },
+        
         // {
         //     title: "POS Number",
         //     dataIndex: "posNumber",

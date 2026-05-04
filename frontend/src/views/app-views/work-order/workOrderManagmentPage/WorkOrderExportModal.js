@@ -13,6 +13,7 @@ const WorkOrderExportModal = ({
   projectOptions = [],  // [{ value:"K-Tools", label:"K-Tools" }] OR strings
   poOptions = [],       // strings
   workOrderOptions = [],// strings
+  statusOptions = []
 }) => {
   const [form] = Form.useForm();
 
@@ -37,6 +38,7 @@ const WorkOrderExportModal = ({
       poFrom: undefined,
       poTo: undefined,
       workOrderNos: undefined,
+      status:undefined
     });
   };
 
@@ -94,6 +96,7 @@ const WorkOrderExportModal = ({
                   poFrom: undefined,
                   poTo: undefined,
                   workOrderNos: undefined,
+                  status:undefined
                 });
               }}
             >
@@ -118,6 +121,7 @@ const WorkOrderExportModal = ({
             <Radio value="po">PO No</Radio>
             <Radio value="poRange">PO No Range</Radio>
             <Radio value="wo">Work Order No</Radio>
+             <Radio value="status">Status</Radio>
           </Radio.Group>
         </Form.Item>
 
@@ -165,6 +169,23 @@ const WorkOrderExportModal = ({
               </Form.Item>
             </Col>
           </Row>
+        )}
+
+         {/* PO multi */}
+        {filterMode === "status" && (
+          <Form.Item
+            name="status"
+            label="Select status"
+            rules={[{ required: true, message: "Select status" }]}
+          >
+            <Select mode="multiple" placeholder="Select status" showSearch>
+              {statusOptions.map((p) => (
+                <Option key={p.value} value={p.value}>
+                  {p.label}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
         )}
 
         {/* PO multi */}

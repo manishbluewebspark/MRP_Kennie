@@ -1385,7 +1385,10 @@ export const exportWorkOrders = async (req, res) => {
       drawingIds,
       posNos,
       workOrderNos,
+      status
     } = req.query;
+
+
 
     const query = {};
 
@@ -1427,6 +1430,22 @@ export const exportWorkOrders = async (req, res) => {
       query.posNo = {
         $in: Array.isArray(posNos) ? posNos : [posNos],
       };
+    }
+
+    const rawStatus = req.query.status || req.query["status[]"];
+
+    let statusArray = [];
+
+    if (Array.isArray(rawStatus)) {
+      statusArray = rawStatus;
+    } else if (typeof rawStatus === "string") {
+      statusArray = [rawStatus];
+    }
+
+    statusArray = statusArray.map((s) => s.trim());
+
+    if (req.query.filterMode === "status" && statusArray.length) {
+      query.status = { $in: statusArray };
     }
 
     if (filterMode === "wo" && workOrderNos) {
@@ -6346,7 +6365,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //         const previousEntries = existingProcess?.details?.filter(
 //           (d) => String(d.mpnId) === String(material.mpnId)
 //         ) || [];
-        
+
 //         const totalAlreadyPicked = previousEntries.reduce(
 //           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
 //         );
@@ -6410,10 +6429,10 @@ export const getCompleteWorkOrders = async (req, res) => {
 
 //     // Get previous details to calculate totals
 //     const previousDetails = existing?.details || [];
-    
+
 //     // Create a map of final status per mpnId
 //     const finalStatusPerMpn = {};
-    
+
 //     // First, add all previous entries
 //     for (const prevDetail of previousDetails) {
 //       const mpnId = String(prevDetail.mpnId);
@@ -6430,12 +6449,12 @@ export const getCompleteWorkOrders = async (req, res) => {
 //       }
 //       finalStatusPerMpn[mpnId].totalPickedQty += Number(prevDetail.pickedQty || 0);
 //     }
-    
+
 //     // Then, add current materials
 //     for (const material of materials) {
 //       const mpnId = String(material.mpnId);
 //       const currentPickedQty = Number(material.pickedQty || 0);
-      
+
 //       if (!finalStatusPerMpn[mpnId]) {
 //         finalStatusPerMpn[mpnId] = {
 //           totalPickedQty: 0,
@@ -6449,22 +6468,22 @@ export const getCompleteWorkOrders = async (req, res) => {
 //       finalStatusPerMpn[mpnId].latestShortage = material.shortage;
 //       finalStatusPerMpn[mpnId].latestShortageQty = material.shortageQty;
 //     }
-    
+
 //     // Calculate final shortage status for each mpnId
 //     const finalDetails = [];
 //     for (const mpnId in finalStatusPerMpn) {
 //       const data = finalStatusPerMpn[mpnId];
 //       const totalRequired = Number(data.quantity || 1) * Number(wo.quantity || 0);
-      
+
 //       // 🔥 If total picked qty equals required qty, NO shortage
 //       let finalShortage = data.latestShortage;
 //       let finalShortageQty = data.latestShortageQty;
-      
+
 //       if (data.totalPickedQty >= totalRequired) {
 //         finalShortage = false;
 //         finalShortageQty = 0;
 //       }
-      
+
 //       finalDetails.push({
 //         mpnId: mpnId,
 //         mpn: data.mpn,
@@ -6509,7 +6528,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     // ============================================================
 //     // UPDATE STATUS
 //     // ============================================================
-    
+
 //     updateWorkOrderStatus(wo);
 //     await wo.save();
 
@@ -6533,14 +6552,14 @@ export const getCompleteWorkOrders = async (req, res) => {
 
 // const updateWorkOrderStatus = (wo) => {
 //   const totalQty = Number(wo.quantity || 0);
-  
+
 //   const getStageQty = (key) =>
 //     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
 
 //   const hasStageShortage = (key) => {
 //     const entry = wo.processHistory?.find((p) => p.process === key);
 //     if (!entry?.details) return false;
-    
+
 //     // Get the latest entry per mpnId
 //     const latestPerMpn = {};
 //     for (const detail of entry.details) {
@@ -6549,7 +6568,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //         latestPerMpn[mpnId] = detail;
 //       }
 //     }
-    
+
 //     return Object.values(latestPerMpn).some(
 //       (d) => d.shortage === true || Number(d.shortageQty || 0) > 0
 //     );
@@ -6582,28 +6601,28 @@ export const getCompleteWorkOrders = async (req, res) => {
 //   // 🔥 FIX: Track which stages are complete
 //   let lastCompletedStage = null;
 //   let currentStage = null;
-  
+
 //   for (let i = 0; i < stages.length; i++) {
 //     const stageKey = stages[i];
 //     const doneQty = getStageQty(stageKey);
 //     const hasShortage = hasStageShortage(stageKey);
-    
+
 //     console.log(`[Status] Stage ${stageKey}: doneQty=${doneQty}/${totalQty}, hasShortage=${hasShortage}`);
-    
+
 //     // Stage is fully complete (qty met, no shortage)
 //     if (doneQty >= totalQty && !hasShortage && totalQty > 0) {
 //       lastCompletedStage = stageKey;
 //       console.log(`[Status] Stage ${stageKey} is COMPLETE`);
 //       continue;
 //     }
-    
+
 //     // Stage has some progress or shortage
 //     if (doneQty > 0 || hasShortage) {
 //       currentStage = stageKey;
 //       console.log(`[Status] Stage ${stageKey} is IN PROGRESS`);
 //       break;
 //     }
-    
+
 //     // Stage not started yet
 //     if (doneQty === 0 && !hasShortage) {
 //       // If previous stage is complete, this stage is pending
@@ -6624,7 +6643,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     const hasShortage = hasStageShortage(key);
 //     return doneQty >= totalQty && !hasShortage;
 //   });
-  
+
 //   if (allStagesComplete && totalQty > 0) {
 //     console.log(`[Status] ALL STAGES COMPLETE -> Completed`);
 //     wo.status = "Completed";
@@ -6633,12 +6652,12 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     wo.completeDate = new Date();
 //     return;
 //   }
-  
+
 //   // Case 2: Current stage found
 //   if (currentStage) {
 //     const doneQty = getStageQty(currentStage);
 //     const hasShortage = hasStageShortage(currentStage);
-    
+
 //     if (doneQty >= totalQty && !hasShortage && totalQty > 0) {
 //       wo.status = `${formatStageName(currentStage)} Done`;
 //       console.log(`[Status] ${formatStageName(currentStage)} Done`);
@@ -6650,7 +6669,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     wo.isProductionComplete = false;
 //     return;
 //   }
-  
+
 //   // Case 3: Last completed stage found but no current stage
 //   if (lastCompletedStage) {
 //     wo.status = `${formatStageName(lastCompletedStage)} Done`;
@@ -6659,7 +6678,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     wo.isProductionComplete = false;
 //     return;
 //   }
-  
+
 //   // Case 4: No progress at all
 //   const hasAnyProgress = wo.processHistory?.some(p => p.qty > 0 || p.details?.length > 0);
 //   if (!hasAnyProgress) {
@@ -6670,7 +6689,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     wo.isInProduction = true;
 //   }
 //   wo.isProductionComplete = false;
-  
+
 //   console.log(`[Status] FINAL STATUS: ${wo.status}`);
 // };
 // ============================================================
@@ -6679,7 +6698,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 
 // const updateWorkOrderStatus = (wo) => {
 //   const totalQty = Number(wo.quantity || 0);
-  
+
 //   // If no quantity, return
 //   if (totalQty === 0) {
 //     wo.status = "Not Start Yet";
@@ -6698,7 +6717,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 
 //   // Define stages based on project type
 //   let stages = [];
-  
+
 //   if (wo.projectType === "other") {
 //     stages = ["picking_assembly", "quality_check"];
 //   } 
@@ -6725,28 +6744,28 @@ export const getCompleteWorkOrders = async (req, res) => {
 //   };
 
 //   let hasAnyProgress = wo.processHistory?.some(p => p.qty > 0 || p.details?.length > 0) || false;
-  
+
 //   // Check which stage we're on
 //   let currentStageIndex = -1;
 //   let lastCompletedStageIndex = -1;
-  
+
 //   for (let i = 0; i < stages.length; i++) {
 //     const stageKey = stages[i];
 //     const doneQty = getStageQty(stageKey);
 //     const hasShortage = hasStageShortage(stageKey);
 //     const isComplete = doneQty >= totalQty && !hasShortage;
-    
+
 //     if (isComplete) {
 //       lastCompletedStageIndex = i;
 //       continue;
 //     }
-    
+
 //     // If not complete, this is current stage
 //     if (doneQty > 0 || hasShortage) {
 //       currentStageIndex = i;
 //       break;
 //     }
-    
+
 //     // If stage has no progress and we haven't found current, this is current
 //     if (currentStageIndex === -1 && doneQty === 0 && !hasShortage) {
 //       // If previous stage is complete, this is current
@@ -6763,7 +6782,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     const hasShortage = hasStageShortage(key);
 //     return doneQty >= totalQty && !hasShortage;
 //   });
-  
+
 //   if (allComplete && totalQty > 0) {
 //     wo.status = "Completed";
 //     wo.isProductionComplete = true;
@@ -6777,7 +6796,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     const currentStageKey = stages[currentStageIndex];
 //     const currentDoneQty = getStageQty(currentStageKey);
 //     const hasShortage = hasStageShortage(currentStageKey);
-    
+
 //     // If current stage is fully done (qty met, no shortage)
 //     if (currentDoneQty >= totalQty && !hasShortage) {
 //       wo.status = `${formatStageName(currentStageKey)} Done`;
@@ -6816,7 +6835,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 
 // const mapStageToProcessKey = (stage) => {
 //   const stageLower = stage?.toLowerCase();
-  
+
 //   switch (stageLower) {
 //     case "picking":
 //       return "picking";
@@ -7000,7 +7019,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //         const previousEntries = existingProcess?.details?.filter(
 //           (d) => String(d.mpnId) === String(material.mpnId)
 //         ) || [];
-        
+
 //         const totalAlreadyPicked = previousEntries.reduce(
 //           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
 //         );
@@ -7056,7 +7075,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //       const oldQty = existing.qty || 0;
 //       existing.qty = oldQty + additionalQty;
 //       console.log(`Updated ${processKey} qty: ${oldQty} + ${additionalQty} = ${existing.qty}`);
-      
+
 //       existing.completedBy = userId;
 //       existing.completedAt = new Date();
 //       existing.comments = existing.comments || [];
@@ -7072,7 +7091,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //       if (materials.length > 0) {
 //         // Create a map of final status per mpnId
 //         const finalStatusPerMpn = {};
-        
+
 //         // First, add all previous entries
 //         for (const prevDetail of (existing.details || [])) {
 //           const mpnId = String(prevDetail.mpnId);
@@ -7089,12 +7108,12 @@ export const getCompleteWorkOrders = async (req, res) => {
 //           }
 //           finalStatusPerMpn[mpnId].totalPickedQty += Number(prevDetail.pickedQty || 0);
 //         }
-        
+
 //         // Then, add current materials
 //         for (const material of materials) {
 //           const mpnId = String(material.mpnId);
 //           const currentPickedQty = Number(material.pickedQty || 0);
-          
+
 //           if (!finalStatusPerMpn[mpnId]) {
 //             finalStatusPerMpn[mpnId] = {
 //               totalPickedQty: 0,
@@ -7108,21 +7127,21 @@ export const getCompleteWorkOrders = async (req, res) => {
 //           finalStatusPerMpn[mpnId].latestShortage = material.shortage;
 //           finalStatusPerMpn[mpnId].latestShortageQty = material.shortageQty;
 //         }
-        
+
 //         // Calculate final shortage status
 //         const finalDetails = [];
 //         for (const mpnId in finalStatusPerMpn) {
 //           const data = finalStatusPerMpn[mpnId];
 //           const totalRequired = Number(data.quantity || 1) * Number(wo.quantity || 0);
-          
+
 //           let finalShortage = data.latestShortage;
 //           let finalShortageQty = data.latestShortageQty;
-          
+
 //           if (data.totalPickedQty >= totalRequired) {
 //             finalShortage = false;
 //             finalShortageQty = 0;
 //           }
-          
+
 //           finalDetails.push({
 //             mpnId: mpnId,
 //             mpn: data.mpn,
@@ -7135,13 +7154,13 @@ export const getCompleteWorkOrders = async (req, res) => {
 //             pickedAt: new Date(),
 //           });
 //         }
-        
+
 //         existing.details = finalDetails;
 //       }
 //     } else {
 //       // New process history entry
 //       console.log(`Creating new ${processKey} stage with qty: ${additionalQty}`);
-      
+
 //       const materialsWithDetails = materials.map((m) => ({
 //         mpnId: m.mpnId,
 //         mpn: m.mpn,
@@ -7172,7 +7191,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     // ============================================================
 //     // UPDATE STATUS
 //     // ============================================================
-    
+
 //     updateWorkOrderStatus(wo);
 //     await wo.save();
 
@@ -7198,14 +7217,14 @@ export const getCompleteWorkOrders = async (req, res) => {
 
 // const updateWorkOrderStatus = (wo) => {
 //   const totalQty = Number(wo.quantity || 0);
-  
+
 //   const getStageQty = (key) =>
 //     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
 
 //   const hasStageShortage = (key) => {
 //     const entry = wo.processHistory?.find((p) => p.process === key);
 //     if (!entry?.details) return false;
-    
+
 //     // 🔥 Check if ANY detail has shortage = true
 //     return entry.details.some(d => d.shortage === true);
 //   };
@@ -7237,18 +7256,18 @@ export const getCompleteWorkOrders = async (req, res) => {
 //   console.log(`===== STATUS UPDATE =====`);
 //   console.log(`Project Type: ${wo.projectType}`);
 //   console.log(`Total Qty: ${totalQty}`);
-  
+
 //   // 🔥 Find which stage has shortage or production quantity
 //   let activeStage = null;
 //   let activeStageStatus = null;
-  
+
 //   for (let i = 0; i < stages.length; i++) {
 //     const stageKey = stages[i];
 //     const doneQty = getStageQty(stageKey);
 //     const hasShortage = hasStageShortage(stageKey);
-    
+
 //     console.log(`Stage ${stageKey}: doneQty=${doneQty}, hasShortage=${hasShortage}`);
-    
+
 //     // 🔥 Stage is active if:
 //     // 1. It has production quantity (doneQty > 0), OR
 //     // 2. It has shortage (hasShortage === true)
@@ -7264,7 +7283,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //       break;
 //     }
 //   }
-  
+
 //   // 🔥 If no stage has production or shortage, check for completed stages
 //   if (!activeStage) {
 //     for (let i = stages.length - 1; i >= 0; i--) {
@@ -7278,7 +7297,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //       }
 //     }
 //   }
-  
+
 //   // 🔥 If still no active stage, default to first stage
 //   if (!activeStage && stages.length > 0) {
 //     activeStage = stages[0];
@@ -7298,21 +7317,21 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     wo.isInProduction = true;
 //     wo.isProductionComplete = false;
 //   }
-  
+
 //   // Check all stages complete
 //   const allStagesComplete = stages.every(key => {
 //     const doneQty = getStageQty(key);
 //     const hasShortage = hasStageShortage(key);
 //     return doneQty >= totalQty && !hasShortage;
 //   });
-  
+
 //   if (allStagesComplete && totalQty > 0) {
 //     wo.status = "Completed";
 //     wo.isProductionComplete = true;
 //     wo.isInProduction = false;
 //     wo.completeDate = new Date();
 //   }
-  
+
 //   console.log(`FINAL STATUS: ${wo.status}`);
 // };
 
@@ -7322,7 +7341,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 
 // const mapStageToProcessKey = (stage) => {
 //   const stageLower = stage?.toLowerCase();
-  
+
 //   switch (stageLower) {
 //     case "picking":
 //       return "picking";
@@ -7502,7 +7521,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //         const previousEntries = existingProcess?.details?.filter(
 //           (d) => String(d.mpnId) === String(material.mpnId)
 //         ) || [];
-        
+
 //         const totalAlreadyPicked = previousEntries.reduce(
 //           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
 //         );
@@ -7569,7 +7588,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //       if (materials.length > 0) {
 //         // Create a map for this stage only
 //         const stageDetailsMap = {};
-        
+
 //         // Add existing details for this stage
 //         for (const detail of (existing.details || [])) {
 //           const mpnId = String(detail.mpnId);
@@ -7578,12 +7597,12 @@ export const getCompleteWorkOrders = async (req, res) => {
 //             pickedQty: Number(detail.pickedQty || 0),
 //           };
 //         }
-        
+
 //         // Update with new materials
 //         for (const material of materials) {
 //           const mpnId = String(material.mpnId);
 //           const currentPickedQty = Number(material.pickedQty || 0);
-          
+
 //           if (stageDetailsMap[mpnId]) {
 //             stageDetailsMap[mpnId].pickedQty += currentPickedQty;
 //             stageDetailsMap[mpnId].shortage = material.shortage;
@@ -7603,7 +7622,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //             };
 //           }
 //         }
-        
+
 //         existing.details = Object.values(stageDetailsMap);
 //       }
 //     } else {
@@ -7638,7 +7657,7 @@ export const getCompleteWorkOrders = async (req, res) => {
 //     // ============================================================
 //     // UPDATE STATUS - FINAL FIX
 //     // ============================================================
-    
+
 //     updateWorkOrderStatus(wo);
 //     await wo.save();
 
@@ -7679,7 +7698,7 @@ export const saveWorkOrderStage = async (req, res) => {
     }
 
     const processKey = mapStageToProcessKey(stage);
-    console.log('----processKey',processKey)
+    console.log('----processKey', processKey)
     if (!processKey) {
       return res.status(400).json({
         success: false,
@@ -7819,7 +7838,7 @@ export const saveWorkOrderStage = async (req, res) => {
         const previousEntries = existingProcess?.details?.filter(
           (d) => String(d.mpnId) === String(material.mpnId)
         ) || [];
-        
+
         const totalAlreadyPicked = previousEntries.reduce(
           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
         );
@@ -7871,13 +7890,13 @@ export const saveWorkOrderStage = async (req, res) => {
     // 🔥 CRITICAL FIX: For Cable Harness stage with stageQty > 0
     if (processKey === "cable_harness" && additionalQty > 0) {
       console.log("🔧 Cable Harness: stageQty > 0, clearing shortages");
-      
+
       if (existing) {
         // Update existing stage
         existing.qty = (existing.qty || 0) + additionalQty;
         existing.completedBy = userId;
         existing.completedAt = new Date();
-        
+
         // Clear shortages from details
         if (existing.details && existing.details.length > 0) {
           for (const detail of existing.details) {
@@ -7885,12 +7904,12 @@ export const saveWorkOrderStage = async (req, res) => {
             detail.shortageQty = 0;
           }
         }
-        
+
         // Add comment
         existing.comments = existing.comments || [];
         if (comments) {
-          existing.comments.push({ 
-            comment: comments, 
+          existing.comments.push({
+            comment: comments,
             commentedBy: userId,
             commentedAt: new Date()
           });
@@ -7903,8 +7922,8 @@ export const saveWorkOrderStage = async (req, res) => {
           completedBy: userId,
           completedAt: new Date(),
           createdAt: new Date(),
-          comments: comments ? [{ 
-            comment: comments, 
+          comments: comments ? [{
+            comment: comments,
             commentedBy: userId,
             commentedAt: new Date()
           }] : [],
@@ -7919,8 +7938,8 @@ export const saveWorkOrderStage = async (req, res) => {
       existing.completedAt = new Date();
       existing.comments = existing.comments || [];
       if (comments) {
-        existing.comments.push({ 
-          comment: comments, 
+        existing.comments.push({
+          comment: comments,
           commentedBy: userId,
           commentedAt: new Date()
         });
@@ -7929,7 +7948,7 @@ export const saveWorkOrderStage = async (req, res) => {
       // Update details for this stage
       if (materials.length > 0) {
         const stageDetailsMap = {};
-        
+
         for (const detail of (existing.details || [])) {
           const mpnId = String(detail.mpnId);
           stageDetailsMap[mpnId] = {
@@ -7937,11 +7956,11 @@ export const saveWorkOrderStage = async (req, res) => {
             pickedQty: Number(detail.pickedQty || 0),
           };
         }
-        
+
         for (const material of materials) {
           const mpnId = String(material.mpnId);
           const currentPickedQty = Number(material.pickedQty || 0);
-          
+
           if (stageDetailsMap[mpnId]) {
             stageDetailsMap[mpnId].pickedQty += currentPickedQty;
             stageDetailsMap[mpnId].shortage = material.shortage;
@@ -7961,10 +7980,10 @@ export const saveWorkOrderStage = async (req, res) => {
             };
           }
         }
-        
+
         existing.details = Object.values(stageDetailsMap);
       }
-    } 
+    }
     else {
       // New stage
       const materialsWithDetails = materials.map((m) => ({
@@ -7985,8 +8004,8 @@ export const saveWorkOrderStage = async (req, res) => {
         completedBy: userId,
         completedAt: new Date(),
         createdAt: new Date(),
-        comments: comments ? [{ 
-          comment: comments, 
+        comments: comments ? [{
+          comment: comments,
           commentedBy: userId,
           commentedAt: new Date()
         }] : [],
@@ -7997,7 +8016,7 @@ export const saveWorkOrderStage = async (req, res) => {
     // ============================================================
     // UPDATE STATUS
     // ============================================================
-    
+
     updateWorkOrderStatus(wo);
     await wo.save();
 
@@ -8025,26 +8044,26 @@ const updateWorkOrderStatus = (wo) => {
   const getStageQty = (key) =>
     wo.processHistory?.find((p) => p.process === key)?.qty || 0;
 
- const hasStageShortage = (key) => {
-  const entry = wo.processHistory?.find((p) => p.process === key);
-  if (!entry?.details) return false;
+  const hasStageShortage = (key) => {
+    const entry = wo.processHistory?.find((p) => p.process === key);
+    if (!entry?.details) return false;
 
-  const doneQty = entry.qty || 0;
+    const doneQty = entry.qty || 0;
 
-  // 🔥 FIX: if stage qty complete → ignore shortage
-  if (doneQty >= totalQty) return false;
+    // 🔥 FIX: if stage qty complete → ignore shortage
+    if (doneQty >= totalQty) return false;
 
-  if (doneQty >= totalQty && entry?.details) {
-  entry.details.forEach(d => {
-    d.shortage = false;
-    d.shortageQty = 0;
-  });
-}
+    if (doneQty >= totalQty && entry?.details) {
+      entry.details.forEach(d => {
+        d.shortage = false;
+        d.shortageQty = 0;
+      });
+    }
 
-  return entry.details.some(
-    (d) => d.shortage === true || Number(d.shortageQty || 0) > 0
-  );
-};
+    return entry.details.some(
+      (d) => d.shortage === true || Number(d.shortageQty || 0) > 0
+    );
+  };
 
 
 
@@ -8166,7 +8185,7 @@ const updateWorkOrderStatus = (wo) => {
 
 const mapStageToProcessKey = (stage) => {
   const stageLower = stage?.toLowerCase();
-  
+
   switch (stageLower) {
     case "picking":
       return "picking";
@@ -8295,7 +8314,7 @@ const mapStageToProcessKey = (stage) => {
 //       for (const material of materials) {
 //         // 🔥 FIX: Use material.pickedQty directly (this is the delta/current picking quantity)
 //         const currentPickedQty = Number(material.pickedQty || 0);
-        
+
 //         // Skip if nothing is being picked in this transaction
 //         if (currentPickedQty <= 0) continue;
 
@@ -8303,7 +8322,7 @@ const mapStageToProcessKey = (stage) => {
 //         const previousEntries = existingProcess?.details?.filter(
 //           (d) => String(d.mpnId) === String(material.mpnId)
 //         ) || [];
-        
+
 //         const alreadyPickedQty = previousEntries.reduce(
 //           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
 //         );
@@ -8349,7 +8368,7 @@ const mapStageToProcessKey = (stage) => {
 //         // Deduct the CURRENT picking quantity only
 //         inventory.balanceQuantity -= baseQty;
 //         await inventory.save();
-        
+
 //         console.log(`✅ Deducted ${baseQty} ${inventory.mpnId.UOM} for ${material.mpn}`);
 //       }
 //     }
@@ -9286,26 +9305,26 @@ export const importTotalMpnNeeded = async (req, res) => {
     const invDocs = await Inventory.find({
       mpnId: { $in: mpnObjectIds },
     }).populate({
-    path: "mpnId",
-    select: "UOM",
-    populate: {
-      path: "UOM",
-      select: "code",
-    },
-  }).lean();
+      path: "mpnId",
+      select: "UOM",
+      populate: {
+        path: "UOM",
+        select: "code",
+      },
+    }).lean();
 
-  console.log('--------invDocs',invDocs?.[0]?.mpnId)
+    console.log('--------invDocs', invDocs?.[0]?.mpnId)
 
     const invMap = new Map();
 
     invDocs.forEach((inv) => {
-  const key = String(inv.mpnId?._id); // ✅ FIXED
+      const key = String(inv.mpnId?._id); // ✅ FIXED
 
-  invMap.set(key, {
-    qty: (invMap.get(key)?.qty || 0) + Number(inv.balanceQuantity || 0),
-    stockUom: inv.mpnId?.UOM || "", // ✅ direct code
-  });
-});
+      invMap.set(key, {
+        qty: (invMap.get(key)?.qty || 0) + Number(inv.balanceQuantity || 0),
+        stockUom: inv.mpnId?.UOM || "", // ✅ direct code
+      });
+    });
 
     const invUomIds = [
       ...new Set(invDocs.map((i) => i.uom).filter(Boolean).map(String)),
@@ -9327,8 +9346,8 @@ export const importTotalMpnNeeded = async (req, res) => {
         fromUom: row.uomId,
         toUom: invData.stockUom?._id,
       });
-      console.log('------stock',stock)
-const stockUom = invData.stockUom?.code || "";
+      console.log('------stock', stock)
+      const stockUom = invData.stockUom?.code || "";
 
       return {
         "MPN": mpn?.mpn || mpn?.MPN || "",
@@ -9341,7 +9360,7 @@ const stockUom = invData.stockUom?.code || "";
         "Shortfall": Math.max(0, row.totalNeeded - stock),
       };
     }))
-      
+
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(excelRows);

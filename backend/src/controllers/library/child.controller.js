@@ -116,47 +116,141 @@ export const addChild = async (req, res) => {
 /**
  * Update Child
  */
+// export const updateChild = async (req, res) => {
+//   try {
+//     const childId = req.params.id;
+
+//     // 1️⃣ Find existing child
+//     const existingChild = await Child.findById(childId);
+//     if (!existingChild) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Child not found" });
+//     }
+
+//     // 2️⃣ Determine final values after update
+//     const newMpnId = req.body.mpn || existingChild.mpn;
+//     const newChildPartNo = req.body.childPartNo || existingChild.childPartNo;
+
+//     // 3️⃣ Validate new parent MPN exists (if changed)
+//     if (req.body.mpn) {
+//       const mpn = await MPN.findById(newMpnId);
+//       if (!mpn) {
+//         return res
+//           .status(404)
+//           .json({ success: false, message: "Parent MPN not found" });
+//       }
+//     }
+
+//     // 4️⃣ Check if same childPartNo is already linked to a different MPN
+//     const conflictChild = await Child.findOne({
+//       _id: { $ne: childId },         // ignore current child
+//       childPartNo: newChildPartNo,   // same childPartNo
+//       mpn: { $ne: newMpnId },        // but different MPN → not allowed
+//     });
+
+//     if (conflictChild) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "This child part number is already linked to another MPN.",
+//       });
+//     }
+
+//     // 5️⃣ Perform update
+//     const updatedChild = await Child.findByIdAndUpdate(
+//       childId,
+//       {
+//         ...req.body,
+//         mpn: newMpnId,
+//         childPartNo: newChildPartNo,
+//       },
+//       { new: true }
+//     );
+
+//     return res.json({
+//       success: true,
+//       message: "Child updated",
+//       data: updatedChild,
+//     });
+//   } catch (err) {
+//     return res
+//       .status(400)
+//       .json({ success: false, message: err.message || "Something went wrong" });
+//   }
+// };
+
+
 export const updateChild = async (req, res) => {
   try {
     const childId = req.params.id;
 
-    // 1️⃣ Find existing child
-    const existingChild = await Child.findById(childId);
-    if (!existingChild) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Child not found" });
+    // 1️⃣ Validate ID
+    if (!mongoose.Types.ObjectId.isValid(childId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid child ID",
+      });
     }
 
-    // 2️⃣ Determine final values after update
-    const newMpnId = req.body.mpn || existingChild.mpn;
-    const newChildPartNo = req.body.childPartNo || existingChild.childPartNo;
+    // 2️⃣ Find existing child
+    const existingChild = await Child.findById(childId);
+    if (!existingChild) {
+      return res.status(404).json({
+        success: false,
+        message: "Child not found",
+      });
+    }
 
-    // 3️⃣ Validate new parent MPN exists (if changed)
+    // 3️⃣ Normalize values
+    const newMpnId = req.body.mpn
+      ? new mongoose.Types.ObjectId(req.body.mpn)
+      : existingChild.mpn;
+
+    const newChildPartNo = (
+      req.body.childPartNo || existingChild.childPartNo
+    )
+      ?.toString()
+      .trim();
+
+    // 4️⃣ Validate MPN (if changed)
     if (req.body.mpn) {
-      const mpn = await MPN.findById(newMpnId);
-      if (!mpn) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Parent MPN not found" });
+      const mpnExists = await MPN.findById(newMpnId);
+      if (!mpnExists) {
+        return res.status(404).json({
+          success: false,
+          message: "Parent MPN not found",
+        });
       }
     }
 
-    // 4️⃣ Check if same childPartNo is already linked to a different MPN
+    // 5️⃣ Skip if nothing changed
+    if (
+      String(existingChild.mpn) === String(newMpnId) &&
+      existingChild.childPartNo === newChildPartNo
+    ) {
+      return res.json({
+        success: true,
+        message: "No changes detected",
+        data: existingChild,
+      });
+    }
+
+    // 6️⃣ Conflict check (same childPartNo with different MPN)
     const conflictChild = await Child.findOne({
-      _id: { $ne: childId },         // ignore current child
-      childPartNo: newChildPartNo,   // same childPartNo
-      mpn: { $ne: newMpnId },        // but different MPN → not allowed
+      _id: { $ne: childId },
+      childPartNo: newChildPartNo,
+      mpn: { $ne: newMpnId },
     });
 
     if (conflictChild) {
       return res.status(400).json({
         success: false,
-        message: "This child part number is already linked to another MPN.",
+        message:
+          "This child part number is already linked to another MPN.",
       });
     }
 
-    // 5️⃣ Perform update
+    // 7️⃣ Perform update
     const updatedChild = await Child.findByIdAndUpdate(
       childId,
       {
@@ -164,22 +258,25 @@ export const updateChild = async (req, res) => {
         mpn: newMpnId,
         childPartNo: newChildPartNo,
       },
-      { new: true }
+      {
+        new: true,
+        runValidators: true,
+      }
     );
 
     return res.json({
       success: true,
-      message: "Child updated",
+      message: "Child updated successfully",
       data: updatedChild,
     });
   } catch (err) {
-    return res
-      .status(400)
-      .json({ success: false, message: err.message || "Something went wrong" });
+    console.error("Update Child Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Something went wrong",
+    });
   }
 };
-
-
 /**
  * Delete Child
  */

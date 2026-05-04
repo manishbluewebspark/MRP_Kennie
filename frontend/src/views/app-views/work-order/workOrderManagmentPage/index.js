@@ -193,6 +193,10 @@ const DeliveryOrderPage = () => {
     const [moving, setMoving] = useState(false);
     const [lastWorkOrderNo, setLastOrderNumber] = useState('')
 
+    const statusOptions = [
+        {label:"Completed", value:"Completed"},
+        {label:"Picking In Progress", value:"Picking In Progress"}
+    ]
     const handleMoveToProduction = (record) => {
         setSelectedRecord(record);
         setisProductionvisible(true);
@@ -539,7 +543,7 @@ const DeliveryOrderPage = () => {
     // };
 
     const handleExport = async (filter) => {
-        // console.log("-------filter", filter);
+        console.log("-------filter", filter);
 
         try {
             const resp = await WorkOrderService.exportWorkOrders({
@@ -550,6 +554,7 @@ const DeliveryOrderPage = () => {
                 posNos: filter.posNos,
                 drawingIds: filter.drawingNos,
                 workOrderNos: filter.workOrderNos,
+                status:filter.status
             });
 
             let arrayBuffer;
@@ -951,6 +956,7 @@ const DeliveryOrderPage = () => {
                 projectOptions={projectOptions}
                 workOrderOptions={workOrderOptions}
                 customerOptions={list}
+                statusOptions={statusOptions}
             />
 
 
