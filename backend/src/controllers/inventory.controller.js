@@ -17,6 +17,15 @@ import mongoose from "mongoose";
 import CostingItems from "../models/CostingItem.js";
 import { convertQty, convertToBaseUOM } from "../utils/uomController.js";
 
+
+const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
+  const availableQty = Number(balanceQty) + Number(incomingQty);
+
+  const shortage = Number(demandQty) - availableQty;
+
+  return shortage > 0 ? shortage : 0;
+};
+
 // DemandQty map: mpnId -> totalDemandQty
 // async function buildDemandMap() {
 //   // 1) Workorders (filter status if you want)
@@ -309,11 +318,18 @@ export const getInventoryList = async (req, res) => {
       // ✅ raw net (for internal / analytics)
       const netQty = calcNetQty(balanceQty, incomingQty, demandQty);
 
-      // ✅ shortage shown to purchaser (only negative else 0)
-      const shortageQty = netQty < 0 ? netQty : 0;
+    const shortageQty = netQty < 0 ? Math.abs(netQty) : 0;
 
-      // ✅ optional: surplus (if you want)
-      const surplusQty = netQty > 0 ? netQty : 0;
+const surplusQty = netQty > 0 ? netQty : 0;
+
+
+let status = "In Stock";
+
+if (netQty < 0) {
+  status = "Out of Stock";
+} else if (netQty <= 10) {
+  status = "Low Stock";
+}
 
       return {
         _id: item._id,
@@ -337,7 +353,7 @@ export const getInventoryList = async (req, res) => {
         IncomingPoNumber: item.incomingPONumbers?.length ? item.incomingPONumbers.join(", ") : "",
         commitDate: item.earliestCommitDate ? new Date(item.earliestCommitDate).toLocaleDateString() : "",
 
-        Status: netQty < 0 ? "Out of Stock" : "Low Stock",
+        Status: status,
         purchaseData: item.purchaseData,
         adjustLog: item?.adjustmentLogs
       };

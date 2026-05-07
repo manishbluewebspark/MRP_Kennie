@@ -222,7 +222,7 @@ const PickingDetailModal = ({
         { title: "Description", dataIndex: "description", key: "description", width: 150 },
         { title: "MPN", dataIndex: "mpn", key: "mpn", width: 100 },
         { title: "UOM", dataIndex: "uom", key: "uom", width: 80 },
-        { title: "Total Qty", key: "totalQty", width: 80, render: (_, record) => record.maxQty },
+        { title: `Total Qty (×${workQty})`, key: "totalQty", width: 120, render: (_, record) => record.maxQty },
         { title: "Already Picked", dataIndex: "alreadyPicked", key: "alreadyPicked", width: 100 },
         { title: "Location", dataIndex: "storageLocation", key: "storageLocation", width: 110 },
     ];

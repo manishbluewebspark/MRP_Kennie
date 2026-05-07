@@ -263,7 +263,7 @@ const ProductionPage = () => {
             dataIndex: "projectNo",
             key: "projectNo",
             sorter: true,
-            render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+            render: (text) => <span style={{ fontSize: '14px' }}>{text}</span>
         },
         // {
         //     title: "Customer",
