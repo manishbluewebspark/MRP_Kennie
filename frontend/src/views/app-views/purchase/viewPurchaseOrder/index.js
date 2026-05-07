@@ -279,7 +279,7 @@ const PurchaseOrderDetailsPage = () => {
                   <Text>{fmtMoney(totals.sub)}</Text>
                 </div>
                 <div style={{ marginBottom: 8 }}>
-                  <Text strong>Tax (OST): </Text>
+                  <Text strong>Tax (GST): </Text>
                   <Text>{fmtMoney(totals.tax)}</Text>
                 </div>
                 <div style={{ marginBottom: 8 }}>

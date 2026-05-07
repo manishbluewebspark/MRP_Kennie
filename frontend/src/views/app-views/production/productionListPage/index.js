@@ -453,10 +453,12 @@ const CableAssemblyCard = ({
 
               // console.log('-----permissionAllowed', stage.permission, permissionAllowed)
 
-              const canClick =
-                permissionAllowed &&
-                sequenceAllowed &&
-                (stage.status === "new" || stage.status === "in_progress");
+              // const canClick =
+              //   permissionAllowed &&
+              //   sequenceAllowed &&
+              //   (stage.status === "new" || stage.status === "in_progress");
+
+              const canClick = permissionAllowed;
 
               // const canClick = sequenceAllowed && (status === "new" || status === "in_progress");
               // Completed = solid green (no blink)
@@ -498,7 +500,10 @@ const CableAssemblyCard = ({
                       if (!canClick) return;
                       setModalVisible(true);
                       setSelectWorkOrderData(record);
-                      setActiveStage(stage.label);
+                      setActiveStage({
+                        name: stage.label,
+                        status: stage.status,
+                      });
                     }}
                     style={{
                       width: 350,
@@ -601,7 +606,7 @@ const SkillLevelCostingList = () => {
   const [search, setSearch] = useState("");
   const [skillLevelCostings, setSkillLevelCostings] = useState([]);
   const [loading, setLoading] = useState(false);
-const [inputValue, setInputValue] = useState("");
+  const [inputValue, setInputValue] = useState("");
 
   const [activeTab, setActiveTab] = useState("active_production");
   const [modalVisible, setModalVisible] = useState(false);
@@ -804,6 +809,17 @@ const [inputValue, setInputValue] = useState("");
     }
   };
 
+  const renderQyoteTypeBadge = (type) => {
+    const typeConfig = {
+      cable_harness: { color: "purple", text: "Cable Harness" },
+      box_build: { color: "cyan", text: "Box Build" },
+      other: { color: "default", text: "Other" },
+    };
+
+    const cfg = typeConfig[type] || { color: "default", text: type };
+    return <Tag color={cfg.color}>{cfg.text}</Tag>;
+  };
+
   // const fetchWorkOrdersData = async () => {
   //   try {
   //     setLoading(true);
@@ -901,6 +917,13 @@ const [inputValue, setInputValue] = useState("");
 
   const recentCompletionsColumns = [
     {
+      title: "Drawing No",
+      dataIndex: "drawingNo",
+      key: "drawingNo",
+      sorter: true,
+      render: (text) => <strong style={{ fontSize: '14px' }}>{text}</strong>
+    },
+    {
       title: "Work Order",
       dataIndex: "workOrderNo",
       key: "workOrderNo",
@@ -916,14 +939,61 @@ const [inputValue, setInputValue] = useState("");
       ),
     },
     {
-      title: "Project",
-      key: "projectName",
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text>{record?.projectName || "-"}</Text>
-          <Text type="secondary">{record?.customerName || "-"}</Text>
-        </Space>
-      ),
+      title: "Project No",
+      dataIndex: "projectNo",
+      key: "projectNo",
+      sorter: true,
+      render: (text) => <span style={{ fontSize: '14px' }}>{text}</span>
+    },
+    {
+      title: "PO No",
+      dataIndex: "poNumber",
+      key: "poNumber",
+      sorter: true,
+      render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
+    },
+    {
+      title: "POS No",
+      dataIndex: "posNo",
+      key: "posNo",
+      sorter: true,
+      render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
+    },
+
+    {
+      title: "Need Date",
+      dataIndex: "needDate",
+      key: "needDate",
+      sorter: true,
+      render: (text) => <span style={{ fontSize: '12px', color: '#888' }}>
+        {text ? new Date(text).toLocaleDateString('en-GB') : 'N/A'}
+      </span>
+    },
+    {
+      title: "Commit Date",
+      dataIndex: "commitDate",
+      key: "commitDate",
+      sorter: true,
+      render: (text) => (
+        <Tag
+          style={{
+            borderRadius: '12px',
+            background: '#16A34A',
+            color: 'white',
+            border: 'none',
+            padding: '2px 10px'
+          }}
+        >
+          {text ? new Date(text).toLocaleDateString('en-GB') : 'N/A'}
+        </Tag>
+      )
+    },
+    {
+      title: "Project Type",
+      dataIndex: "projectType",
+      key: "projectType",
+      sorter: true,
+      render: renderQyoteTypeBadge
     },
     {
       title: "Qty",
@@ -1085,8 +1155,9 @@ const [inputValue, setInputValue] = useState("");
             placeholder="Search..."
             prefix={<SearchOutlined />}
             value={inputValue}
-            
-            onChange={(e) => {handleSearch(e.target.value)
+
+            onChange={(e) => {
+              handleSearch(e.target.value)
               setInputValue(e.target.value);
             }}
           />
@@ -1154,7 +1225,8 @@ const [inputValue, setInputValue] = useState("");
         }}
         onSave={handleSave}
         selectWorkOrderData={selectWorkOrderData}
-        stage={activeStage}
+        stage={activeStage?.name}
+        stageStatus={activeStage?.status}
       />
     </div>
   );

@@ -32,6 +32,7 @@ const PickingDetailModal = ({
     onSave,
     selectWorkOrderData,
     stage = "",
+    stageStatus = "",
 }) => {
 
     const normalize = (str = "") => str.toLowerCase().replace(/[\s_]+/g, "");
@@ -83,7 +84,7 @@ const PickingDetailModal = ({
 
                 savedDetails.forEach((savedItem) => {
                     const hasShortage = savedItem.shortage === true || Number(savedItem.shortageQty || 0) > 0;
-                    
+
                     if (hasShortage) {
                         // Find matching part by mpnId
                         const matchedPart = parts.find(p => String(p.mpnId) === String(savedItem.mpnId));
@@ -103,6 +104,8 @@ const PickingDetailModal = ({
             .catch((err) => console.error("Error loading child parts", err));
 
     }, [visible, selectWorkOrderData?.workOrderId]);
+
+    const isViewOnly = stageStatus === "completed";
 
     const stageConfig = useMemo(() => {
         const base = {
@@ -236,6 +239,7 @@ const PickingDetailModal = ({
             <div>
                 <InputNumber
                     min={0}
+                    disabled={isViewOnly}
                     max={record.remainingToPick}
                     style={{ width: "100%" }}
                     value={pickedQuantities[record.key] || 0}
@@ -266,6 +270,7 @@ const PickingDetailModal = ({
             return (
                 <Space>
                     <Checkbox
+                        disabled={isViewOnly}
                         checked={isChecked}
                         onChange={(e) => {
                             const checked = e.target.checked;
@@ -288,6 +293,7 @@ const PickingDetailModal = ({
                     />
                     {isChecked && (
                         <InputNumber
+                            disabled={isViewOnly}
                             min={1}
                             size="small"
                             value={shortageValue}
@@ -333,71 +339,71 @@ const PickingDetailModal = ({
         }
     };
 
-   const handleSave = () => {
-  form.validateFields().then((values) => {
-    const additionalQty = Number(stageQty || 0);
-    const hasShortage = Object.keys(shortageChecked).some(key => shortageChecked[key] === true);
-    const remainingAllowed = workQty - alreadyCompletedQty;
+    const handleSave = () => {
+        form.validateFields().then((values) => {
+            const additionalQty = Number(stageQty || 0);
+            const hasShortage = Object.keys(shortageChecked).some(key => shortageChecked[key] === true);
+            const remainingAllowed = workQty - alreadyCompletedQty;
 
-    if (hasShortage) {
-      if (additionalQty > 0) {
-        message.error("Cannot enter Produce Qty while shortage exists");
-        return;
-      }
-    } else {
-      if (!additionalQty || additionalQty <= 0) {
-        message.warning("Please enter Produce Quantity");
-        return;
-      }
-      if (additionalQty > remainingAllowed) {
-        message.error(`Max allowed: ${remainingAllowed}`);
-        return;
-      }
-    }
+            if (hasShortage) {
+                if (additionalQty > 0) {
+                    message.error("Cannot enter Produce Qty while shortage exists");
+                    return;
+                }
+            } else {
+                if (!additionalQty || additionalQty <= 0) {
+                    message.warning("Please enter Produce Quantity");
+                    return;
+                }
+                if (additionalQty > remainingAllowed) {
+                    message.error(`Max allowed: ${remainingAllowed}`);
+                    return;
+                }
+            }
 
-    // 🔥 FIX: Always send materials data, even if empty
-    // But when stageQty > 0, we need to clear shortages
-    const formattedMaterials = dataSource.map((item) => {
-      const currentPickedQty = Number(pickedQuantities[item.key] || 0);
-      const recordKey = String(item.mpnId);
-      let isShortage = shortageChecked[recordKey] === true;
-      let shortageQty = isShortage ? Number(shortageInputs[recordKey] || 0) : 0;
-      
-      // 🔥 CRITICAL: If stageQty > 0, automatically clear shortage for this item
-      if (additionalQty > 0) {
-        isShortage = false;
-        shortageQty = 0;
-      }
+            // 🔥 FIX: Always send materials data, even if empty
+            // But when stageQty > 0, we need to clear shortages
+            const formattedMaterials = dataSource.map((item) => {
+                const currentPickedQty = Number(pickedQuantities[item.key] || 0);
+                const recordKey = String(item.mpnId);
+                let isShortage = shortageChecked[recordKey] === true;
+                let shortageQty = isShortage ? Number(shortageInputs[recordKey] || 0) : 0;
 
-      return {
-        mpnId: item.mpnId,
-        mpn: item.mpn,
-        pickedQty: currentPickedQty,
-        shortage: isShortage,
-        shortageQty: shortageQty,
-        quantity: item.quantity,
-        uomId: item.uomId,
-        uom: item.uom,
-      };
-    });
+                // 🔥 CRITICAL: If stageQty > 0, automatically clear shortage for this item
+                if (additionalQty > 0) {
+                    isShortage = false;
+                    shortageQty = 0;
+                }
 
-    // 🔥 Filter out items with no pickedQty and no shortage
-    const materialsToSend = formattedMaterials.filter(
-      m => m.pickedQty > 0 || m.shortage === true
-    );
+                return {
+                    mpnId: item.mpnId,
+                    mpn: item.mpn,
+                    pickedQty: currentPickedQty,
+                    shortage: isShortage,
+                    shortageQty: shortageQty,
+                    quantity: item.quantity,
+                    uomId: item.uomId,
+                    uom: item.uom,
+                };
+            });
 
-    const payload = {
-      stage,
-      comments: values.comments || "",
-      stageQty: additionalQty,
-      materials: materialsToSend,
-      workOrderId: wo.workOrderId,
+            // 🔥 Filter out items with no pickedQty and no shortage
+            const materialsToSend = formattedMaterials.filter(
+                m => m.pickedQty > 0 || m.shortage === true
+            );
+
+            const payload = {
+                stage,
+                comments: values.comments || "",
+                stageQty: additionalQty,
+                materials: materialsToSend,
+                workOrderId: wo.workOrderId,
+            };
+
+            console.log("Saving payload:", JSON.stringify(payload, null, 2));
+            onSave?.(payload);
+        });
     };
-
-    console.log("Saving payload:", JSON.stringify(payload, null, 2));
-    onSave?.(payload);
-  });
-};
 
     return (
         <Modal
@@ -407,8 +413,19 @@ const PickingDetailModal = ({
             onCancel={onCancel}
             width={1200}
             footer={[
-                <Button key="cancel" onClick={onCancel}>Cancel</Button>,
-                <Button key="save" type="primary" onClick={handleSave}>{stageConfig.rightBtnText}</Button>,
+                <Button key="cancel" onClick={onCancel}>
+                    {isViewOnly ? "Close" : "Cancel"}
+                </Button>,
+
+                !isViewOnly && (
+                    <Button
+                        key="save"
+                        type="primary"
+                        onClick={handleSave}
+                    >
+                        {stageConfig.rightBtnText}
+                    </Button>
+                ),
             ]}
         >
             <Card title={stageConfig.mainCardTitle} size="small" style={{ marginBottom: 16 }}>
@@ -424,6 +441,7 @@ const PickingDetailModal = ({
                     <div>
                         <Text strong>{stageConfig.labels.single}</Text>
                         <InputNumber
+                            disabled={isViewOnly}
                             min={0}
                             max={remainingQty}
                             value={stageQty}
@@ -455,7 +473,7 @@ const PickingDetailModal = ({
                 )}
                 <Form form={form} layout="vertical">
                     <Form.Item name="comments" label="Add New Comment">
-                        <TextArea rows={3} />
+                        <TextArea rows={3} disabled={isViewOnly} />
                     </Form.Item>
                 </Form>
             </Card>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Table, Button, Space, Tag, message, Card, Modal, Drawer, Divider, Tooltip, Tabs, Col, Radio } from "antd";
-import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, CloseOutlined, PlayCircleOutlined, PlayCircleFilled, ClockCircleOutlined, ExperimentOutlined, ToolOutlined, HourglassOutlined, CheckCircleOutlined, PauseCircleOutlined, LoadingOutlined, BarcodeOutlined, TagsOutlined } from "@ant-design/icons";
+import { EditOutlined, DeleteOutlined, PlusOutlined, ExclamationCircleOutlined, CloseOutlined, PlayCircleOutlined, PlayCircleFilled, ClockCircleOutlined, ExperimentOutlined, ToolOutlined, HourglassOutlined, CheckCircleOutlined, PauseCircleOutlined, LoadingOutlined, BarcodeOutlined, TagsOutlined, DeleteFilled } from "@ant-design/icons";
 import { hasPermission } from "utils/auth";
 import ActionButtons from "components/ActionButtons";
 import GlobalTableActions from "components/GlobalTableActions";
@@ -19,6 +19,7 @@ import SystemSettingsService from "services/SystemSettingsService";
 import WorkOrderExportModal from "./WorkOrderExportModal";
 import GlobalFilterModal from "components/GlobalFilterModal";
 import { fetchCustomers } from "store/slices/customerSlice";
+import ConfirmDeleteModal from "components/ConfirmDeleteModal";
 const { confirm } = Modal;
 
 const fmt = (d) => (d ? dayjs(d).format("DD/MM/YYYY") : "-");
@@ -174,6 +175,11 @@ const DeliveryOrderPage = () => {
     const [activeTab, setActiveTab] = useState("NON_PRODUCTION");
 
 
+    const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [deleteMode, setDeleteMode] = useState("single");
+    const [deleteId, setDeleteId] = useState(null);
+
     const { workOrderSettings } = useSelector(
         (state) => state.systemSettings
     );
@@ -194,14 +200,82 @@ const DeliveryOrderPage = () => {
     const [lastWorkOrderNo, setLastOrderNumber] = useState('')
 
     const statusOptions = [
-        {label:"Completed", value:"Completed"},
-        {label:"Picking In Progress", value:"Picking In Progress"}
+        { label: "Completed", value: "Completed" },
+        { label: "Picking In Progress", value: "Picking In Progress" }
     ]
     const handleMoveToProduction = (record) => {
         setSelectedRecord(record);
         setisProductionvisible(true);
         setMoveToProdId(record?._id)
     }
+
+       const rowSelection = {
+        selectedRowKeys,
+        preserveSelectedRowKeys: true,
+        onChange: (keys) => setSelectedRowKeys(keys),
+    };
+
+    const handleDeleteSelected = () => {
+        if (!selectedRowKeys.length) {
+            message.warning("Please select at least one work order");
+            return;
+        }
+
+        setDeleteMode("bulk");
+        setDeleteModalVisible(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        try {
+            setLoading(true);
+
+            message.loading({
+                content: "Deleting...",
+                key: "workOrderDelete",
+            });
+
+            if (deleteMode === "bulk") {
+
+                // ✅ BULK DELETE API
+                await WorkOrderService.deleteBulkWorkOrders({
+                    ids: selectedRowKeys,
+                });
+
+                message.success({
+                    content: "Selected work orders deleted",
+                    key: "workOrderDelete",
+                });
+
+                setSelectedRowKeys([]);
+
+            } else {
+
+                // ✅ SINGLE DELETE API
+                await WorkOrderService.deleteWorkOrder(deleteId);
+
+                message.success({
+                    content: "Work order deleted",
+                    key: "workOrderDelete",
+                });
+            }
+
+            setDeleteModalVisible(false);
+            setDeleteId(null);
+
+            fetchWorkOrders();
+
+        } catch (err) {
+            console.error(err);
+
+            message.error({
+                content: "Failed to delete work orders",
+                key: "workOrderDelete",
+            });
+
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const filterConfig = [
         {
@@ -292,7 +366,7 @@ const DeliveryOrderPage = () => {
             sorter: true,
             render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
         },
-        
+
         // {
         //     title: "POS Number",
         //     dataIndex: "posNumber",
@@ -373,7 +447,20 @@ const DeliveryOrderPage = () => {
             render: renderQyoteTypeBadge
         },
         {
-            title: "Actions",
+            title: (
+        <Space>
+            Actions
+
+            {hasPermission("work_order.work_order_managment:create_edit_delete") && (
+                <Button
+                    danger
+                    size="small"
+                    icon={<DeleteFilled style={{ color: "#FF4D4F" }} />}
+                    onClick={handleDeleteSelected}
+                />
+            )}
+        </Space>
+    ),
             key: "actions",
             width: 150,
             render: (_, record) => (
@@ -389,6 +476,8 @@ const DeliveryOrderPage = () => {
             )
         }
     ];
+
+ 
 
     const handleEdit = (record) => {
         setEditingWorkOrder(record);
@@ -554,7 +643,7 @@ const DeliveryOrderPage = () => {
                 posNos: filter.posNos,
                 drawingIds: filter.drawingNos,
                 workOrderNos: filter.workOrderNos,
-                status:filter.status
+                status: filter.status
             });
 
             let arrayBuffer;
@@ -876,37 +965,38 @@ const DeliveryOrderPage = () => {
             {/* Table */}
             <Card>
                 <Table
-                    columns={columns}
-                    dataSource={data}
-                    loading={loading}
-                    pagination={{
-                        current: page,
-                        pageSize: limit,
-                        total: totalCount,
-                    }}
-                    onChange={(pagination, filters, sorter) => {
-                        const sortField = sorter?.field;
-                        const sortOrder =
-                            sorter?.order === "ascend"
-                                ? "asc"
-                                : sorter?.order === "descend"
-                                    ? "desc"
-                                    : undefined;
+                columns={columns}
+                dataSource={data}
+                loading={loading}
+                rowSelection={rowSelection}
+                pagination={{
+                    current: page,
+                    pageSize: limit,
+                    total: totalCount,
+                }}
+                onChange={(pagination, filters, sorter) => {
+                    const sortField = sorter?.field;
 
-                        setPage(pagination.current);
-                        setLimit(pagination.pageSize);
+                    const sortOrder =
+                        sorter?.order === "ascend"
+                            ? "asc"
+                            : sorter?.order === "descend"
+                                ? "desc"
+                                : undefined;
 
-                        fetchWorkOrders({
-                            page: pagination.current,
-                            limit: pagination.pageSize,
-                            search,
-                            sortBy: sortField,
-                            sortOrder,
-                            activeTab,
-                        });
-                    }}
-                />
+                    setPage(pagination.current);
+                    setLimit(pagination.pageSize);
 
+                    fetchWorkOrders({
+                        page: pagination.current,
+                        limit: pagination.pageSize,
+                        search,
+                        sortBy: sortField,
+                        sortOrder,
+                        activeTab,
+                    });
+                }}
+            />
             </Card>
 
             <CreateWorkOrderModal
@@ -1076,7 +1166,14 @@ const DeliveryOrderPage = () => {
 
 
 
-
+            <ConfirmDeleteModal
+                open={deleteModalVisible}
+                loading={loading}
+                mode={deleteMode}
+                count={selectedRowKeys.length}
+                onCancel={() => !loading && setDeleteModalVisible(false)}
+                onConfirm={handleConfirmDelete}
+            />
         </div>
     );
 };

@@ -151,6 +151,7 @@ const PurchaseOrderSchema = new Schema(
         "Completed",
         "Acknowledged",         // fully received
         "Pending Approval",
+        "Approved",
         "Rejected"
       ],
       default: "Pending",

@@ -4781,6 +4781,7 @@ export const getDeliveryOrders = async (req, res) => {
           doNumber: 1,
           delivered: 1,
           createdAt: 1,
+          posNo: 1,
           poNumber: "$displayPONumber",
           qty: { $ifNull: ["$quantity", 0] },
 
@@ -4809,6 +4810,7 @@ export const getDeliveryOrders = async (req, res) => {
                 { workOrderNo: { $regex: search, $options: "i" } },
                 { poNumber: { $regex: search, $options: "i" } },
                 { drawingName: { $regex: search, $options: "i" } },
+                { posNo: { $regex: search, $options: "i" } },
                 { drawingCode: { $regex: search, $options: "i" } },
                 { projectName: { $regex: search, $options: "i" } },
                 { customerName: { $regex: search, $options: "i" } },
@@ -6046,165 +6048,662 @@ export const exportEachMPNUsage = async (req, res) => {
   }
 };
 
-
 export const getCompleteWorkOrders = async (req, res) => {
   try {
-    let { page = 1, limit = 20, search = "" } = req.query;
+    let {
+      page = 1,
+      limit = 10,
+      search = "",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      projectId,
+      drawingId,
+      posNo,
+    } = req.query;
 
-    page = Number(page) || 1;
-    limit = Number(limit) || 20;
-    const skip = (page - 1) * limit;
+    page = parseInt(page, 10) || 1;
+    limit = parseInt(limit, 10) || 10;
 
-    // ✔️ Only completed work orders
-    const baseQuery = { status: "Completed" };
+    const query = {
+      status: "Completed", // ✅ always completed
+    };
 
-    if (search) {
-      baseQuery.$or = [
-        { workOrderNo: { $regex: search, $options: "i" } },
-        { poNumber: { $regex: search, $options: "i" } },
+    // ✅ Filters
+    if (projectId) {
+      query.projectNo = projectId;
+    }
+
+    if (drawingId && mongoose.Types.ObjectId.isValid(drawingId)) {
+      query.drawingId = new mongoose.Types.ObjectId(drawingId);
+    }
+
+    if (
+      posNo !== undefined &&
+      posNo !== null &&
+      String(posNo).trim() !== ""
+    ) {
+      query.posNo = String(posNo).trim();
+    }
+
+    // ✅ Search
+    if (search && String(search).trim()) {
+      const s = String(search).trim();
+
+      const orConditions = [
+        { workOrderNo: { $regex: s, $options: "i" } },
+        { poNumber: { $regex: s, $options: "i" } },
+        { projectNo: { $regex: s, $options: "i" } },
       ];
+
+      if (!isNaN(s)) {
+        orConditions.push({ posNo: Number(s) });
+      }
+
+      query.$or = orConditions;
     }
 
-    // 1️⃣ Fetch completed work orders
-    const [workOrders, total] = await Promise.all([
-      WorkOrder.find(baseQuery)
-        .sort({ completeDate: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      WorkOrder.countDocuments(baseQuery),
-    ]);
+    // ✅ Sort
+    const sortOptions = {
+      [sortBy]: sortOrder === "desc" ? -1 : 1,
+    };
 
-    if (!workOrders.length) {
-      return res.json({
-        success: true,
-        message: "No completed work orders",
-        data: [],
-        pagination: { total: 0, page, limit, pages: 0 },
-      });
-    }
+    // ✅ Total
+    const total = await WorkOrder.countDocuments(query);
 
-    // 2️⃣ Collect Project & Drawing IDs
-    const projectIds = [];
+    // ✅ Fetch WorkOrders
+    let workOrders = await WorkOrder.find(query)
+      .sort(sortOptions)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    // ***************************************
+    // ✅ Collect ALL drawingIds
+    // ***************************************
     const drawingIds = [];
 
     workOrders.forEach((wo) => {
-      if (wo.projectId) projectIds.push(String(wo.projectId));
-      // items removed? → OR if items exist, pickup drawingId
-      (wo.items || []).forEach((it) => {
-        if (it.drawingId) drawingIds.push(String(it.drawingId));
-      });
-    });
-
-    // 3️⃣ Fetch Projects
-    const projectDocs = await Project.find({
-      _id: { $in: projectIds },
-    })
-      .select("projectName customerId")
-      .lean();
-
-    const projectMap = new Map();
-    projectDocs.forEach((p) => {
-      projectMap.set(String(p._id), {
-        name: p.projectName,
-        customerId: p.customerId,
-      });
-    });
-
-    // 4️⃣ Fetch Customers
-    const customerIds = projectDocs
-      .map((p) => p.customerId)
-      .filter(Boolean)
-      .map((id) => String(id));
-
-    const customerDocs = await Customer.find({
-      _id: { $in: customerIds },
-    })
-      .select("companyName")
-      .lean();
-
-    const customerMap = new Map();
-    customerDocs.forEach((c) => {
-      customerMap.set(String(c._id), c.companyName);
-    });
-
-    // 5️⃣ Fetch Drawings
-    const drawingDocs = await Drawing.find({
-      _id: { $in: drawingIds },
-    })
-      .select("drawingNo")
-      .lean();
-
-    const drawingMap = new Map();
-    drawingDocs.forEach((d) => {
-      drawingMap.set(String(d._id), d.drawingNo);
-    });
-
-    // 6️⃣ Final flat mapped list
-    const finalList = [];
-
-    workOrders.forEach((wo) => {
-      const proj = projectMap.get(String(wo.projectId)) || {};
-      const customerName = customerMap.get(proj.customerId) || null;
-
-      // WorkOrder level — if NO `items` → single row
-      if (!wo.items || wo.items.length === 0) {
-        finalList.push({
-          workOrderId: wo._id,
-          workOrderNo: wo.workOrderNo || null,
-          poNumber: wo.poNumber || null,
-          projectName: proj?.name || null,
-          customerName,
-
-          drawingNo: null,
-          posNo: null,
-          quantity: wo?.quantity,
-
-          projectType: wo.projectType || null,
-          completeDate: wo.completeDate || wo.updatedAt || null,
-          status: wo.status,
-        });
-      } else {
-        // If items exist → each item in new row
-        wo.items.forEach((it) => {
-          finalList.push({
-            workOrderId: wo._id,
-            workOrderNo: wo.workOrderNo || null,
-            poNumber: wo.poNumber || null,
-            projectName: proj?.name || null,
-            customerName,
-
-            drawingNo: drawingMap.get(String(it.drawingId)) || null,
-            posNo: it.posNo ?? null,
-            quantity: it.quantity ?? 0,
-
-            projectType: it.projectType || wo.projectType,
-            completeDate: wo.completeDate || wo.updatedAt || null,
-            status: wo.status,
-          });
-        });
+      // ✅ Main drawingId
+      if (wo.drawingId) {
+        drawingIds.push(String(wo.drawingId));
       }
+
+      // ✅ Items drawingId
+      (wo.items || []).forEach((it) => {
+        if (it.drawingId) {
+          drawingIds.push(String(it.drawingId));
+        }
+      });
     });
 
-    return res.json({
+    const uniqueDrawingIds = [...new Set(drawingIds)];
+
+    // ***************************************
+    // ✅ Drawing Map
+    // ***************************************
+    let drawingMap = new Map();
+
+    if (uniqueDrawingIds.length) {
+      const drawingDocs = await Drawing.find({
+        _id: {
+          $in: uniqueDrawingIds.map(
+            (id) => new mongoose.Types.ObjectId(id)
+          ),
+        },
+      })
+        .select("drawingNo projectType quoteType")
+        .lean();
+
+      drawingMap = new Map(
+        drawingDocs.map((d) => [String(d._id), d])
+      );
+    }
+
+    // ***************************************
+    // ✅ Costing Items
+    // ***************************************
+    let costingMap = new Map();
+
+    if (uniqueDrawingIds.length) {
+      const costingItems = await CostingItems.find({
+        drawingId: {
+          $in: uniqueDrawingIds.map(
+            (id) => new mongoose.Types.ObjectId(id)
+          ),
+        },
+      })
+        .select("drawingId quoteType")
+        .lean();
+
+      for (const item of costingItems) {
+        const key = String(item.drawingId);
+
+        if (!costingMap.has(key)) {
+          costingMap.set(key, new Set());
+        }
+
+        costingMap
+          .get(key)
+          .add((item.quoteType || "").toLowerCase());
+      }
+    }
+
+    const requiredTypes = ["material", "manhour"];
+
+    // ***************************************
+    // ✅ Final Response
+    // ***************************************
+    workOrders = workOrders.map((wo) => {
+
+      // ✅ item drawingId first
+      const itemDrawingId =
+        wo?.items?.[0]?.drawingId || wo?.drawingId;
+
+      const d = drawingMap.get(String(itemDrawingId));
+
+      const types =
+        costingMap.get(String(itemDrawingId)) || new Set();
+
+      const missingTypes = requiredTypes.filter(
+        (t) => !types.has(t)
+      );
+
+      const isCostingComplete =
+        missingTypes.length === 0;
+
+      return {
+        ...wo,
+
+        // ✅ IMPORTANT FIX
+        drawingNo: d?.drawingNo || null,
+
+        projectType:
+          d?.projectType ||
+          d?.quoteType ||
+          wo?.projectType ||
+          null,
+
+        // ✅ extra fields
+        poNumber: wo?.poNumber || null,
+        posNo: wo?.posNo || wo?.items?.[0]?.posNo || null,
+        needDate:
+          wo?.needDate ||
+          wo?.items?.[0]?.needDate ||
+          null,
+
+        isCostingComplete,
+      };
+    });
+
+    // ✅ Last Work Order
+    const lastWorkOrder = await WorkOrder.findOne()
+      .sort({ createdAt: -1 })
+      .select("workOrderNo")
+      .lean();
+
+    const lastWorkOrderNo =
+      lastWorkOrder?.workOrderNo || null;
+
+    return res.status(200).json({
       success: true,
-      message: "Completed work orders fetched successfully",
-      data: finalList,
+      data: workOrders,
+      lastWorkOrderNo,
+
       pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        itemsPerPage: limit,
       },
     });
+
   } catch (error) {
     console.error("getCompleteWorkOrders error:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
+
+// export const getCompleteWorkOrders = async (req, res) => {
+//   try {
+//     let { page = 1, limit = 20, search = "" } = req.query;
+
+//     page = Number(page) || 1;
+//     limit = Number(limit) || 20;
+
+//     const skip = (page - 1) * limit;
+
+//     // ✅ Only completed work orders
+//     const baseQuery = {
+//       status: "Completed",
+//     };
+
+//     // ✅ Search
+//     if (search && String(search).trim()) {
+//       const s = String(search).trim();
+
+//       baseQuery.$or = [
+//         { workOrderNo: { $regex: s, $options: "i" } },
+//         { poNumber: { $regex: s, $options: "i" } },
+//       ];
+
+//       // optional numeric POS search
+//       if (!isNaN(s)) {
+//         baseQuery.$or.push({
+//           "items.posNo": Number(s),
+//         });
+//       }
+//     }
+
+//     // ✅ Fetch completed work orders
+//     const [workOrders, total] = await Promise.all([
+//       WorkOrder.find(baseQuery)
+//         .sort({ completeDate: -1 })
+//         .skip(skip)
+//         .limit(limit)
+//         .lean(),
+
+//       WorkOrder.countDocuments(baseQuery),
+//     ]);
+
+//     if (!workOrders.length) {
+//       return res.json({
+//         success: true,
+//         message: "No completed work orders",
+//         data: [],
+//         pagination: {
+//           total: 0,
+//           page,
+//           limit,
+//           pages: 0,
+//         },
+//       });
+//     }
+
+//     // =========================================================
+//     // Collect IDs
+//     // =========================================================
+
+//     const projectIds = [];
+//     const drawingIds = [];
+
+//     workOrders.forEach((wo) => {
+//   if (wo.projectId) {
+//     projectIds.push(String(wo.projectId));
+//   }
+
+//   // ✅ WorkOrder level drawingId
+//   if (wo.drawingId) {
+//     drawingIds.push(String(wo.drawingId));
+//   }
+
+//   // ✅ Item level drawingId
+//   (wo.items || []).forEach((it) => {
+//     if (it.drawingId) {
+//       drawingIds.push(String(it.drawingId));
+//     }
+//   });
+// });
+
+//     // =========================================================
+//     // Projects
+//     // =========================================================
+
+//     const projectDocs = await Project.find({
+//       _id: { $in: projectIds },
+//     })
+//       .select("projectName customerId")
+//       .lean();
+
+//     const projectMap = new Map();
+
+//     projectDocs.forEach((p) => {
+//       projectMap.set(String(p._id), {
+//         name: p.projectName,
+//         customerId: p.customerId,
+//       });
+//     });
+
+//     // =========================================================
+//     // Customers
+//     // =========================================================
+
+//     const customerIds = projectDocs
+//       .map((p) => p.customerId)
+//       .filter(Boolean)
+//       .map((id) => String(id));
+
+//     const customerDocs = await Customer.find({
+//       _id: { $in: customerIds },
+//     })
+//       .select("companyName")
+//       .lean();
+
+//     const customerMap = new Map();
+
+//     customerDocs.forEach((c) => {
+//       customerMap.set(String(c._id), c.companyName);
+//     });
+
+//     // =========================================================
+//     // Drawings
+//     // =========================================================
+
+//     const drawingDocs = await Drawing.find({
+//       _id: { $in: drawingIds },
+//     })
+//       .select("drawingNo projectType quoteType")
+//       .lean();
+
+//     const drawingMap = new Map();
+
+//     drawingDocs.forEach((d) => {
+//       drawingMap.set(String(d._id), {
+//         drawingNo: d.drawingNo,
+//         projectType: d.projectType || d.quoteType || null,
+//       });
+//     });
+
+//     // =========================================================
+//     // Final Response List
+//     // =========================================================
+
+//     const finalList = [];
+
+//     workOrders.forEach((wo) => {
+//       const proj = projectMap.get(String(wo.projectId)) || {};
+
+//       const customerName =
+//         customerMap.get(String(proj.customerId)) || null;
+
+//       // =====================================================
+//       // NO ITEMS
+//       // =====================================================
+
+//       if (!wo.items || wo.items.length === 0) {
+//         finalList.push({
+//           workOrderId: wo._id,
+
+//           workOrderNo: wo.workOrderNo || null,
+//           poNumber: wo.poNumber || null,
+
+//           projectName: proj?.name || null,
+//           customerName,
+
+//           drawingNo: null,
+
+//           posNo: wo?.posNo || null,
+
+//           quantity: Number(wo?.quantity || 0),
+
+//           needDate: wo?.needDate || null,
+
+//           projectType: wo.projectType || null,
+
+//           completeDate:
+//             wo.completeDate ||
+//             wo.updatedAt ||
+//             null,
+
+//           status: wo.status || null,
+//         });
+//       }
+
+//       // =====================================================
+//       // ITEMS EXISTS
+//       // =====================================================
+
+//       else {
+//         wo.items.forEach((it) => {
+//          const drawingId =
+//   it.drawingId ||
+//   wo.drawingId;
+
+// const drawing =
+//   drawingMap.get(String(drawingId)) || {};
+
+//           finalList.push({
+//             workOrderId: wo._id,
+
+//             // ✅ Main fields
+//             workOrderNo: wo.workOrderNo || null,
+
+//             poNumber:
+//               wo.poNumber ||
+//               it.poNumber ||
+//               null,
+
+//             // ✅ Project
+//             projectName: proj?.name || null,
+//             customerName,
+
+//             // ✅ Drawing
+//             drawingNo:
+//   drawingMap.get(String(wo.drawingId))?.drawingNo || null,
+
+//             // ✅ POS
+//             posNo:
+//               it.posNo ||
+//               wo.posNo ||
+//               null,
+
+//             // ✅ Qty
+//             quantity: Number(it.quantity || 0),
+
+//             // ✅ Need Date
+//             needDate:
+//               it.needDate ||
+//               wo.needDate ||
+//               null,
+
+//             // ✅ Project Type
+//             projectType:
+//               it.projectType ||
+//               drawing?.projectType ||
+//               wo.projectType ||
+//               null,
+
+//             // ✅ Dates
+//             completeDate:
+//               wo.completeDate ||
+//               wo.updatedAt ||
+//               null,
+
+//             // ✅ Status
+//             status: wo.status || null,
+//           });
+//         });
+//       }
+//     });
+
+//     // =========================================================
+//     // Response
+//     // =========================================================
+
+//     return res.json({
+//       success: true,
+//       message: "Completed work orders fetched successfully",
+
+//       data: finalList,
+
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         pages: Math.ceil(total / limit),
+//       },
+//     });
+//   } catch (error) {
+//     console.error("getCompleteWorkOrders error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+// export const getCompleteWorkOrders = async (req, res) => {
+//   try {
+//     let { page = 1, limit = 20, search = "" } = req.query;
+
+//     page = Number(page) || 1;
+//     limit = Number(limit) || 20;
+//     const skip = (page - 1) * limit;
+
+//     // ✔️ Only completed work orders
+//     const baseQuery = { status: "Completed" };
+
+//     if (search) {
+//       baseQuery.$or = [
+//         { workOrderNo: { $regex: search, $options: "i" } },
+//         { poNumber: { $regex: search, $options: "i" } },
+//       ];
+//     }
+
+//     // 1️⃣ Fetch completed work orders
+//     const [workOrders, total] = await Promise.all([
+//       WorkOrder.find(baseQuery)
+//         .sort({ completeDate: -1 })
+//         .skip(skip)
+//         .limit(limit)
+//         .lean(),
+//       WorkOrder.countDocuments(baseQuery),
+//     ]);
+
+//     if (!workOrders.length) {
+//       return res.json({
+//         success: true,
+//         message: "No completed work orders",
+//         data: [],
+//         pagination: { total: 0, page, limit, pages: 0 },
+//       });
+//     }
+
+//     // 2️⃣ Collect Project & Drawing IDs
+//     const projectIds = [];
+//     const drawingIds = [];
+
+//     workOrders.forEach((wo) => {
+//       if (wo.projectId) projectIds.push(String(wo.projectId));
+//       // items removed? → OR if items exist, pickup drawingId
+//       (wo.items || []).forEach((it) => {
+//         if (it.drawingId) drawingIds.push(String(it.drawingId));
+//       });
+//     });
+
+//     // 3️⃣ Fetch Projects
+//     const projectDocs = await Project.find({
+//       _id: { $in: projectIds },
+//     })
+//       .select("projectName customerId")
+//       .lean();
+
+//     const projectMap = new Map();
+//     projectDocs.forEach((p) => {
+//       projectMap.set(String(p._id), {
+//         name: p.projectName,
+//         customerId: p.customerId,
+//       });
+//     });
+
+//     // 4️⃣ Fetch Customers
+//     const customerIds = projectDocs
+//       .map((p) => p.customerId)
+//       .filter(Boolean)
+//       .map((id) => String(id));
+
+//     const customerDocs = await Customer.find({
+//       _id: { $in: customerIds },
+//     })
+//       .select("companyName")
+//       .lean();
+
+//     const customerMap = new Map();
+//     customerDocs.forEach((c) => {
+//       customerMap.set(String(c._id), c.companyName);
+//     });
+
+//     // 5️⃣ Fetch Drawings
+//     const drawingDocs = await Drawing.find({
+//       _id: { $in: drawingIds },
+//     })
+//       .select("drawingNo")
+//       .lean();
+
+//     const drawingMap = new Map();
+//     drawingDocs.forEach((d) => {
+//       drawingMap.set(String(d._id), d.drawingNo);
+//     });
+
+//     // 6️⃣ Final flat mapped list
+//     const finalList = [];
+
+//     workOrders.forEach((wo) => {
+//       const proj = projectMap.get(String(wo.projectId)) || {};
+//       const customerName = customerMap.get(proj.customerId) || null;
+
+//       // WorkOrder level — if NO `items` → single row
+//       if (!wo.items || wo.items.length === 0) {
+//         finalList.push({
+//           workOrderId: wo._id,
+//           workOrderNo: wo.workOrderNo || null,
+//           poNumber: wo.poNumber || null,
+//           projectName: proj?.name || null,
+//           customerName,
+
+//           drawingNo: null,
+//           posNo: null,
+//           quantity: wo?.quantity,
+
+//           projectType: wo.projectType || null,
+//           completeDate: wo.completeDate || wo.updatedAt || null,
+//           status: wo.status,
+//         });
+//       } else {
+//         // If items exist → each item in new row
+//         wo.items.forEach((it) => {
+//           finalList.push({
+//             workOrderId: wo._id,
+//             workOrderNo: wo.workOrderNo || null,
+//             poNumber: wo.poNumber || null,
+//             projectName: proj?.name || null,
+//             customerName,
+
+//             drawingNo: drawingMap.get(String(it.drawingId)) || null,
+//             posNo: it.posNo ?? null,
+//             quantity: it.quantity ?? 0,
+
+//             projectType: it.projectType || wo.projectType,
+//             completeDate: wo.completeDate || wo.updatedAt || null,
+//             status: wo.status,
+//           });
+//         });
+//       }
+//     });
+
+//     return res.json({
+//       success: true,
+//       message: "Completed work orders fetched successfully",
+//       data: finalList,
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         pages: Math.ceil(total / limit),
+//       },
+//     });
+//   } catch (error) {
+//     console.error("getCompleteWorkOrders error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 
 // export const saveWorkOrderStage = async (req, res) => {
@@ -9849,3 +10348,34 @@ export const getFilterData = async (req, res) => {
 // };
 
 
+export const deleteBulkWorkOrders = async (req, res) => {
+    try {
+
+        const { ids } = req.body;
+
+        if (!ids || !Array.isArray(ids) || !ids.length) {
+            return res.status(400).json({
+                success: false,
+                message: "Please provide work order ids",
+            });
+        }
+
+        await WorkOrder.deleteMany({
+            _id: { $in: ids },
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Work orders deleted successfully",
+        });
+
+    } catch (error) {
+
+        console.error("deleteBulkWorkOrders error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};

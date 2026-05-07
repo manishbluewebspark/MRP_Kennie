@@ -55,6 +55,9 @@ WorkOrderService.deleteWorkOrder = (id) => {
   });
 };
 
+WorkOrderService.deleteBulkWorkOrders = (data) =>
+  fetch({ url: `/work-orders/bulk-delete`, method: "delete",data });
+
 // Update work order status
 WorkOrderService.updateWorkOrderStatus = (id, status) => {
   return fetch({
@@ -156,10 +159,11 @@ WorkOrderService.getAllProductionWorkOrders = (params) => {
   });
 };
 
-WorkOrderService.getCompleteWorkOrders = () => {
+WorkOrderService.getCompleteWorkOrders = (params) => {
   return fetch({
     url: `/work-orders/workOrder/getCompleteWorkOrders`,
-    method: "get"
+    method: "get",
+    params
   });
 };
 

@@ -1705,7 +1705,7 @@ export const getCompleteDrawingsMTO = async (req, res) => {
     // 2️⃣ Fetch WorkOrders (no pagination yaha, aggregation drawing level par hai)
     const workOrders = await WorkOrder.find(woQuery)
       .select(
-        "drawingId doNumber quantity status completeDate  delivered projectId workOrderNo isInProduction"
+        "drawingId doNumber quantity poNumber status completeDate  delivered projectId workOrderNo isInProduction"
       )
       .lean();
 
@@ -1808,6 +1808,7 @@ export const getCompleteDrawingsMTO = async (req, res) => {
           projects: new Set(),
           customers: new Set(),
           doNumbers: new Set(), // ✅ add
+          poNumbers: new Set(),
           completeDates: []
         };
       }
@@ -1830,6 +1831,9 @@ export const getCompleteDrawingsMTO = async (req, res) => {
         agg.doNumbers.add(wo.doNumber);
       }
 
+      if (wo?.poNumber) {
+  agg.poNumbers.add(wo.poNumber);
+}
 
       if (customerName) {
         agg.customers.add(customerName);
@@ -1867,6 +1871,7 @@ export const getCompleteDrawingsMTO = async (req, res) => {
         drawingNo: agg.drawingNo,
         description: agg.description,
         balanceQty,
+        poNumbers: Array.from(agg.poNumbers),
         outgoingQty,
         doNumbers: Array.from(agg.doNumbers), // ✅ array of DOs
         workOrders: Array.from(agg.workOrders),

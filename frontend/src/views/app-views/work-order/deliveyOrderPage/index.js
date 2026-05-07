@@ -47,6 +47,7 @@ const DeliveryOrderPage = () => {
     return {
       key: wo._id,
       _id: wo._id,
+      posNo:wo?.posNo,
       workOrderNo: wo.workOrderNo,
       drawingNo: wo?.drawingName || wo?.drawingNo || "-",
       project: wo.projectName || "-",
@@ -395,6 +396,12 @@ const handleExportWork = async () => {
       title: "PO Number",
       dataIndex: "poNumber",
       key: "poNumber",
+      render: (text) => <span style={{ fontSize: 13, color: "#666" }}>{text}</span>,
+    },
+     {
+      title: "POS Number",
+      dataIndex: "posNo",
+      key: "posNo",
       render: (text) => <span style={{ fontSize: 13, color: "#666" }}>{text}</span>,
     },
     {

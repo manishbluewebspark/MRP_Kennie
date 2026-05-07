@@ -85,6 +85,12 @@ const [selectedDORecord, setSelectedDORecord] = useState(null);
             key: "workOrders",
             render: (arr) => arr?.join(", "),
         },
+          {
+            title: "PO No.",
+            dataIndex: "poNumbers",
+            key: "poNumbers",
+            render: (arr) => arr?.join(", "),
+        },
         {
             title: "Project",
             dataIndex: "projects",
