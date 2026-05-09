@@ -29,7 +29,8 @@ import Child from "../models/library/Child.js";
 import path from "path";
 import ejs from 'ejs'
 import puppeteer from 'puppeteer'
-import { convertQty, convertToInventoryUom } from "../utils/uomController.js";
+import { convertFromMeter, convertQty, convertToInventoryUom, convertToMeter, convertUom } from "../utils/uomController.js";
+import { getProcess, getUserName } from "../utils/helpers.js";
 
 function generateWorkOrderNumber(lastWorkOrderNo) {
   const now = new Date();
@@ -261,7 +262,13 @@ export const getAllWorkOrders = async (req, res) => {
     if (status) query.status = status;
 
     if (activeTab === "PRODUCTION") {
-      query.isInProduction = true;
+      query.$or = [
+        { isInProduction: true },
+        {
+          isProductionComplete: true,
+          status: "Quality Check Done",
+        },
+      ];
     }
 
     if (activeTab === "show_all") {
@@ -375,13 +382,31 @@ export const getAllWorkOrders = async (req, res) => {
       };
     });
 
-    // ⭐ Last WorkOrderNo (same as your code)
-    const lastWorkOrder = await WorkOrder.findOne()
-      .sort({ createdAt: -1 })
-      .select("workOrderNo")
-      .lean();
+    const lastWorkOrder = await WorkOrder.aggregate([
+      {
+        $addFields: {
+          numericPart: {
+            $toInt: {
+              $arrayElemAt: [
+                { $split: ["$workOrderNo", "-"] },
+                1,
+              ],
+            },
+          },
+        },
+      },
+      {
+        $sort: {
+          numericPart: -1,
+        },
+      },
+      {
+        $limit: 1,
+      },
+    ]);
 
-    const lastWorkOrderNo = lastWorkOrder?.workOrderNo || null;
+    const lastWorkOrderNo =
+      lastWorkOrder?.[0]?.workOrderNo || null;
 
     return res.status(200).json({
       success: true,
@@ -536,6 +561,17 @@ const mergeItems = (items = []) => {
 //     return res.status(500).json({ success: false, message: error.message });
 //   }
 // };
+const generateNextWorkOrderNo = (baseWorkOrderNo, index) => {
+  const parts = baseWorkOrderNo.split("-");
+
+  const prefix = parts[0]; // WO2605
+  const numberPart = parts[1]; // 00001
+
+  const nextNumber =
+    String(Number(numberPart) + index).padStart(numberPart.length, "0");
+
+  return `${prefix}-${nextNumber}`;
+};
 
 
 
@@ -731,9 +767,7 @@ export const createWorkOrder = async (req, res) => {
         );
       }
 
-      // 👉 suffix generate: A, B, C...
-      const suffix = indexToLetter(index); // 0->A, 1->B...
-      const lineWorkOrderNo = `${workOrderNo}-${suffix}`;
+      const lineWorkOrderNo = generateNextWorkOrderNo(workOrderNo, index);
 
       const updateDoc = {
         workOrderNo: lineWorkOrderNo,
@@ -741,6 +775,7 @@ export const createWorkOrder = async (req, res) => {
         drawingId: it.drawingId,
         projectId,
         projectType,
+        projectNo,
         posNo: it.posNo || index + 1,    // line no 1,2,3...
         quantity: qty,
         uom,
@@ -1246,56 +1281,36 @@ export const importWorkOrders = async (req, res) => {
       const poNumber = row["PONO"]?.toString().trim() || "";
 
       // --- Work Order No (Excel se ya auto) ---
-      const excelWO = row["WorkOrder No"]
-        ? row["WorkOrder No"].toString().trim()
+      // --- Work Order No (Excel se ya auto) ---
+      const excelWO = row["WorkorderNo"]
+        ? row["WorkorderNo"].toString().trim()
         : "";
+
+      console.log('------excelWO', excelWO)
 
       let workOrderNo;
 
       if (excelWO) {
-        const baseWO = excelWO;
-        const comboKey = `${baseWO}__${poNumber}`;
+        // ✅ Excel wala WO use karo
+        workOrderNo = excelWO;
 
-        // Is (WO + PO) combo ko kitni baar pehle dekh chuke hain
-        let count = excelDuplicateMap.get(comboKey) || 0;
-
-        let candidate;
-
-        while (true) {
-          if (count === 0) {
-            // Pehli baar → original hi rakho
-            candidate = baseWO;
-          } else {
-            // 2nd, 3rd, ... time → -A, -B, -C ...
-            const suffixChar = String.fromCharCode(
-              "A".charCodeAt(0) + (count - 1)
-            );
-            candidate = `${baseWO}-${suffixChar}`;
-          }
-
-          // Agar yeh candidate DB ya current batch me already hai to next letter try karo
-          if (!usedWONumbers.has(candidate)) {
-            break;
-          }
-
-          count++;
+        // ✅ Agar duplicate hai to next WO generate karo
+        while (usedWONumbers.has(workOrderNo)) {
+          workOrderNo = generateWorkOrderNumber(workOrderNo);
         }
-
-        // Next time same (WO + PO) aaye to count se start kare
-        excelDuplicateMap.set(comboKey, count + 1);
-
-        workOrderNo = candidate;
       } else {
-        // Agar Excel me WorkOrder No khaali hai to auto-generate
-        workOrderNo = generateWorkOrderNumber(lastWorkOrderNo || undefined);
+        // ✅ Agar Excel me nahi hai to auto generate karo
+        workOrderNo = generateWorkOrderNumber(
+          lastWorkOrderNo || undefined
+        );
 
-        // Safety: jab tak unique na mile tab tak next number lo
+        // ✅ Safety duplicate check
         while (usedWONumbers.has(workOrderNo)) {
           workOrderNo = generateWorkOrderNumber(workOrderNo);
         }
       }
 
-      // Ab yeh number use ho chuka hai
+      // ✅ mark as used
       usedWONumbers.add(workOrderNo);
       lastWorkOrderNo = workOrderNo;
 
@@ -1455,9 +1470,15 @@ export const exportWorkOrders = async (req, res) => {
     }
 
     // 🔹 FETCH FILTERED WORK ORDERS
+    // const workOrders = await WorkOrder.find(query)
+    //   .populate("drawingId", "drawingNo description")
+    //   .populate("projectId", "projectName")
+    //   .lean();
+
     const workOrders = await WorkOrder.find(query)
       .populate("drawingId", "drawingNo description")
       .populate("projectId", "projectName")
+      .populate("processHistory.completedBy", "name fullName")
       .lean();
 
     if (!workOrders.length) {
@@ -1478,40 +1499,164 @@ export const exportWorkOrders = async (req, res) => {
     const formatDate = (d) =>
       d ? new Date(d).toLocaleDateString("en-GB") : "";
 
-    const rows = workOrders.map((wo) => ({
-      "Imported Date": formatDate(wo.createdAt),
-      "Project No": wo.projectNo || "",
-      "WorkOrder No": wo.workOrderNo || "",
-      "PO NO": wo.poNumber || "",
-      "POS NO": wo.posNo || "",
-      "Drawingno": wo.drawingId?.drawingNo || "",
-      "Description": wo.drawingId?.description || "",
-      "Actual_Qty": wo.quantity || "",
-      "Prod_Qty": getProdQty(wo.processHistory),
-      "Commit Date": formatDate(wo.commitDate),
-      "Need Date": formatDate(wo.needDate),
-      "Status": wo.status || "",
-      "Remark": wo.remarks || "",
-    }));
+    const rows = workOrders.map((wo) => {
+      const picking = getProcess(wo, "picking");
+      const harness = getProcess(
+        wo,
+        "cable_harness"
+      );
+      const labelling = getProcess(
+        wo,
+        "labelling"
+      );
+      const qc = getProcess(
+        wo,
+        "quality_check"
+      );
+
+      // ✅ shortages from ALL process details
+      const shortages = [];
+
+      (wo.processHistory || []).forEach((ph) => {
+        (ph.details || []).forEach((d) => {
+          if (
+            d.shortage === true ||
+            Number(d.shortageQty || 0) > 0
+          ) {
+            shortages.push({
+              qty: d.shortageQty || 0,
+              mpn: d.mpn || "",
+              manufacturer:
+                d.manufacturer || "",
+            });
+          }
+        });
+      });
+
+      const row = {
+        "Imported_Date": formatDate(
+          wo.createdAt
+        ),
+
+        "Project No": wo.projectNo || "",
+
+        "WorkOrder No":
+          wo.workOrderNo || "",
+
+        "PO NO": wo.poNumber || "",
+
+        "POS NO": wo.posNo || "",
+
+        "Drawingno":
+          wo.drawingId?.drawingNo || "",
+
+        "Description":
+          wo.drawingId?.description || "",
+
+        "Actual_Qty": wo.quantity || 0,
+
+        "Prod_Qty": qc.qty || 0,
+
+        "Commit Date": formatDate(
+          wo.commitDate
+        ),
+
+        "Need Date": formatDate(
+          wo.needDate
+        ),
+
+        "Status": wo.status || "",
+
+        "Remark": wo.remarks || "",
+
+        // PICKING
+        "PickerName": getUserName(
+          picking
+        ),
+
+        "PickStartdate": formatDate(
+          picking.createdAt
+        ),
+
+        "PickEnddate": formatDate(
+          picking.completedAt
+        ),
+
+        "Picking ProduceQty":
+          picking.qty || 0,
+
+        // HARNESS
+        "HarnessName": getUserName(
+          harness
+        ),
+
+        "Harness Startdate":
+          formatDate(harness.createdAt),
+
+        "Harness Enddate":
+          formatDate(
+            harness.completedAt
+          ),
+
+        "Harness ProduceQty":
+          harness.qty || 0,
+
+        // LABELLING
+        "Labeller Name":
+          getUserName(labelling),
+
+        "Labelling Startdate":
+          formatDate(
+            labelling.createdAt
+          ),
+
+        "Labelling Enddate":
+          formatDate(
+            labelling.completedAt
+          ),
+
+        "Labelling Produce Qty":
+          labelling.qty || 0,
+
+        // QC
+        "QcName": getUserName(qc),
+
+        "QcStartdate": formatDate(
+          qc.createdAt
+        ),
+
+        "QcEnddate": formatDate(
+          qc.completedAt
+        ),
+
+        "Qc Produce Qty": qc.qty || 0,
+      };
+
+      // ✅ dynamic shortage columns
+      for (let i = 0; i < 12; i++) {
+        const s = shortages[i];
+
+        row[`Shortage${i + 1}`] =
+          s?.qty || 0;
+
+        row[`MPN No.${i + 1}`] =
+          s?.mpn || "";
+
+        row[`Manufacturer${i + 1}`] =
+          s?.manufacturer || "";
+      }
+
+      return row;
+    });
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
 
-    ws["!cols"] = [
-      { wch: 22 }, // Project No
-      { wch: 22 }, // Project No
-      { wch: 20 }, // WorkOrder No
-      { wch: 16 }, // PO NO
-      { wch: 10 }, // POS NO
-      { wch: 26 }, // Drawing No  🔥 wider
-      { wch: 35 }, // Description 🔥 widest
-      { wch: 12 }, // Order_Qty
-      { wch: 12 }, // Prod_Qty
-      { wch: 16 }, // Commit Date
-      { wch: 16 }, // Need Date
-      { wch: 14 }, // Status 🔥 medium
-      { wch: 30 }, // Remark
-    ]
+    ws["!cols"] = Object.keys(rows[0]).map(
+      (k) => ({
+        wch: Math.max(k.length + 5, 18),
+      })
+    );
 
     XLSX.utils.book_append_sheet(wb, ws, "WorkOrders");
 
@@ -4173,77 +4318,86 @@ export const getAllChilPartByDrawingId = async (req, res) => {
 export const getTotalMPNNeeded = async (req, res) => {
   try {
     const {
-      drawingDate,   // ISO date
-      customer,      // customerId
-      project,       // projectId
-      drawingRange,  // range1 / range2 / range3
+      drawingDate,
+      customer,
+      project,
+      drawingRange,
     } = req.query;
 
-    // -------------------------
-    // 1️⃣ FILTER DRAWINGS FIRST
-    // -------------------------
+    // =========================================================
+    // 1️⃣ DRAWING FILTERS
+    // =========================================================
+
     const drawingFilters = {};
 
-    // Drawing Range Logic
-    if (drawingRange === "range1") { drawingFilters.drawingNo = { $gte: 0, $lte: 50 }; }
-    if (drawingRange === "range2") { drawingFilters.drawingNo = { $gte: 51, $lte: 100 }; }
-    if (drawingRange === "range3") { drawingFilters.drawingNo = { $gte: 101, $lte: 200 }; }
+    if (drawingRange === "range1") {
+      drawingFilters.drawingNo = { $gte: 0, $lte: 50 };
+    }
 
-    // Customer Filter
-    if (customer) drawingFilters.customerId = customer;
+    if (drawingRange === "range2") {
+      drawingFilters.drawingNo = { $gte: 51, $lte: 100 };
+    }
 
-    // Project Filter
-    if (project) drawingFilters.projectId = project;
+    if (drawingRange === "range3") {
+      drawingFilters.drawingNo = { $gte: 101, $lte: 200 };
+    }
 
-    // Drawing Date Filter
+    if (customer) {
+      drawingFilters.customerId = customer;
+    }
+
+    if (project) {
+      drawingFilters.projectId = project;
+    }
+
     if (drawingDate) {
       const dateOnly = new Date(drawingDate);
+
       const nextDay = new Date(dateOnly);
       nextDay.setDate(nextDay.getDate() + 1);
 
-      drawingFilters.createdAt = { $gte: dateOnly, $lt: nextDay };
+      drawingFilters.createdAt = {
+        $gte: dateOnly,
+        $lt: nextDay,
+      };
     }
 
-    // Fetch only filtered drawings
-    const filteredDrawings = await Drawing.find(drawingFilters).select("_id").lean();
+    const filteredDrawings = await Drawing.find(drawingFilters)
+      .select("_id drawingNo")
+      .lean();
 
     if (!filteredDrawings.length) {
       return res.json({
         status: true,
-        message: "No drawings match filter criteria",
+        message: "No drawings found",
         data: [],
       });
     }
 
-    const filteredDrawingIds = filteredDrawings.map((d) => d._id.toString());
+    const drawingIds = filteredDrawings.map((d) => d._id);
 
-    // -------------------------
-    // 2️⃣ FILTER WORK ORDERS
-    // -------------------------
+    // =========================================================
+    // 2️⃣ WORK ORDERS
+    // =========================================================
+
     const workOrders = await WorkOrder.find({
-      // status: "No Progress Yet",
-      drawingId: { $in: filteredDrawingIds },
+      drawingId: { $in: drawingIds },
     }).lean();
 
     if (!workOrders.length) {
       return res.json({
         status: true,
-        message: "No work orders found for selected filters",
+        message: "No work orders found",
         data: [],
       });
     }
 
-    const drawingIdStrs = filteredDrawingIds;
-
-    const drawingObjectIds = drawingIdStrs.map(
-      (id) => new mongoose.Types.ObjectId(id)
-    );
-
-    // -------------------------
+    // =========================================================
     // 3️⃣ COSTING ITEMS
-    // -------------------------
+    // =========================================================
+
     const costingItems = await CostingItems.find({
-      drawingId: { $in: drawingObjectIds },
+      drawingId: { $in: drawingIds },
       quoteType: "material",
     }).lean();
 
@@ -4255,117 +4409,230 @@ export const getTotalMPNNeeded = async (req, res) => {
       });
     }
 
-    // Group costing per drawing
-    const costingByDrawing = new Map();
-    costingItems.forEach((ci) => {
-      const key = String(ci.drawingId);
-      const arr = costingByDrawing.get(key) || [];
-      arr.push(ci);
-      costingByDrawing.set(key, arr);
-    });
+    // =========================================================
+    // 4️⃣ GROUP COSTING BY DRAWING
+    // =========================================================
 
-    // -------------------------
-    // 4️⃣ MPN USAGE AGGREGATION
-    // -------------------------
+    const costingByDrawing = new Map();
+
+    for (const ci of costingItems) {
+      const key = String(ci.drawingId);
+
+      if (!costingByDrawing.has(key)) {
+        costingByDrawing.set(key, []);
+      }
+
+      costingByDrawing.get(key).push(ci);
+    }
+
+    // =========================================================
+    // 5️⃣ BUILD REQUIRED QTY
+    // =========================================================
+
     const mpnUsageMap = new Map();
-    const mpnIdStrSet = new Set();
+    const mpnIds = new Set();
 
     for (const wo of workOrders) {
-      const dId = String(wo.drawingId);
-      const costArr = costingByDrawing.get(dId);
-      if (!costArr) continue;
+      const drawingId = String(wo.drawingId);
 
-      const woQty = Number(wo.quantity || 1);
+      const costingArr =
+        costingByDrawing.get(drawingId) || [];
 
-      for (const ci of costArr) {
-        const mpnIdStr = String(ci.mpn);
-        if (!mpnIdStr) continue;
+      if (!costingArr.length) continue;
 
-        mpnIdStrSet.add(mpnIdStr);
+      const woQty = Number(wo.quantity || 0);
 
-        const needed = Number(ci.quantity || 0) * woQty;
+      for (const ci of costingArr) {
+        if (!ci.mpn) continue;
 
-        const key = `${mpnIdStr}_${wo._id}`;
+        const mpnId = String(ci.mpn);
 
-        const prev = mpnUsageMap.get(key) || {
-          mpnId: mpnIdStr,
-          description: ci.description || "",
-          manufacturer: ci.manufacturer || "",
-          uomId: ci.uom || null,
-          workOrderNo: wo.workOrderNo,
-          totalNeeded: 0,
-        };
+        mpnIds.add(mpnId);
 
-        prev.totalNeeded += needed;
-        mpnUsageMap.set(key, prev);
+        const neededQty =
+          Number(ci.quantity || 0) * woQty;
+
+        const key = `${mpnId}_${wo._id}`;
+
+        if (!mpnUsageMap.has(key)) {
+          mpnUsageMap.set(key, {
+            mpnId,
+            drawingId,
+            workOrderNo: wo.workOrderNo,
+
+            description:
+              ci.description || "",
+
+            manufacturer:
+              ci.manufacturer || "",
+
+            uomId: ci.uom || null,
+
+            totalNeeded: 0,
+          });
+        }
+
+        mpnUsageMap.get(key).totalNeeded += neededQty;
       }
     }
 
-    // -------------------------
-    // 5️⃣ LOAD MPN, UOM, STOCK
-    // -------------------------
-    const mpnObjectIds = [...mpnIdStrSet].map(
+    // =========================================================
+    // 6️⃣ LOAD MPN MASTER
+    // =========================================================
+
+    const mpnObjectIds = [...mpnIds].map(
       (id) => new mongoose.Types.ObjectId(id)
     );
 
-    const mpnLibDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
-    const mpnMap = new Map(mpnLibDocs.map((m) => [String(m._id), m]));
+    const mpnDocs = await MPN.find({
+      _id: { $in: mpnObjectIds },
+    }).lean();
+
+    const mpnMap = new Map(
+      mpnDocs.map((m) => [String(m._id), m])
+    );
+
+    // =========================================================
+    // 7️⃣ LOAD UOMS
+    // =========================================================
 
     const uomIds = [
       ...new Set(
         [...mpnUsageMap.values()]
-          .map((row) => row.uomId)
+          .map((x) => x.uomId)
           .filter(Boolean)
       ),
     ];
 
-    const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
-    const uomMap = new Map(uomDocs.map((u) => [String(u._id), u]));
+    const uomDocs = await UOM.find({
+      _id: { $in: uomIds },
+    }).lean();
 
-    // Inventory stock
-    const invDocs = await Inventory.find({
+    const uomMap = new Map(
+      uomDocs.map((u) => [String(u._id), u])
+    );
+
+    // =========================================================
+    // 8️⃣ INVENTORY
+    // =========================================================
+
+    const inventoryDocs = await Inventory.find({
       mpnId: { $in: mpnObjectIds },
     }).lean();
 
-    const invMap = new Map();
-    invDocs.forEach((inv) => {
+    // IMPORTANT:
+    // balanceQuantity ALWAYS stored in METER
+
+    const inventoryMap = new Map();
+
+    for (const inv of inventoryDocs) {
       const key = String(inv.mpnId);
+
       const qty = Number(inv.balanceQuantity || 0);
-      invMap.set(key, (invMap.get(key) || 0) + qty);
-    });
 
-    // -------------------------
-    // 6️⃣ FINAL RESULT FORMAT
-    // -------------------------
-    const result = [...mpnUsageMap.values()]
-      .map((row) => {
-        const mpn = mpnMap.get(row.mpnId);
-        const uom = row.uomId ? uomMap.get(String(row.uomId)) : null;
-        const stock = invMap.get(row.mpnId) || 0;
+      inventoryMap.set(
+        key,
+        (inventoryMap.get(key) || 0) + qty
+      );
+    }
 
-        const shortfall = Math.max(0, row.totalNeeded - stock);
+    // =========================================================
+    // 9️⃣ FINAL RESULT
+    // =========================================================
 
-        return {
-          mpn: mpn?.mpn || mpn?.MPN || null,
-          description: row.description || mpn?.description || null,
-          manufacturer: row.manufacturer || mpn?.manufacturer || null,
-          uom: uom?.name || null,
-          totalNeeded: row.totalNeeded,
-          currentStock: stock,
-          shortfall,
-          workOrderNo: row.workOrderNo,
-        };
-      })
-      .filter((r) => r.shortfall > 0); // ✅ only shortage
+    const result = [];
 
+    for (const row of mpnUsageMap.values()) {
+      const mpn = mpnMap.get(row.mpnId);
+
+      const uom = row.uomId
+        ? uomMap.get(String(row.uomId))
+        : null;
+
+      const targetUom = uom?.code || "EA";
+
+      // inventory stored in meter
+      const stockInMeter = Number(
+        inventoryMap.get(row.mpnId) || 0
+      );
+
+      // convert stock -> costing uom
+      const convertedStock = convertUom({
+        qty: stockInMeter,
+        fromUom: "M",
+        toUom: targetUom,
+      });
+
+      const totalNeeded = Number(
+        row.totalNeeded || 0
+      );
+
+      const shortfall = Math.max(
+        0,
+        totalNeeded - convertedStock
+      );
+
+      // only shortage
+      if (shortfall <= 0) continue;
+
+      result.push({
+        drawingId: row.drawingId,
+
+        workOrderNo: row.workOrderNo,
+
+        mpnId: row.mpnId,
+
+        mpn:
+          mpn?.MPN ||
+          mpn?.mpn ||
+          null,
+
+        description:
+          row.description ||
+          mpn?.Description ||
+          mpn?.description ||
+          "",
+
+        manufacturer:
+          row.manufacturer ||
+          mpn?.Manufacturer ||
+          mpn?.manufacturer ||
+          "",
+
+        uom: targetUom,
+
+        totalNeeded: Number(
+          totalNeeded.toFixed(4)
+        ),
+
+        currentStock: Number(
+          convertedStock.toFixed(4)
+        ),
+
+        shortfall: Number(
+          shortfall.toFixed(4)
+        ),
+      });
+    }
+
+    // =========================================================
+    // 🔟 RESPONSE
+    // =========================================================
 
     return res.json({
       status: true,
-      message: "Filtered Total MPN Needed fetched successfully",
+      message:
+        "Filtered Total MPN Needed fetched successfully",
+      total: result.length,
       data: result,
     });
+
   } catch (error) {
-    console.error("getTotalMPNNeeded error:", error);
+    console.error(
+      "getTotalMPNNeeded error:",
+      error
+    );
+
     return res.status(500).json({
       status: false,
       message: error.message,
@@ -6065,7 +6332,7 @@ export const getCompleteWorkOrders = async (req, res) => {
     limit = parseInt(limit, 10) || 10;
 
     const query = {
-      status: "Completed", // ✅ always completed
+      isProductionComplete: true
     };
 
     // ✅ Filters
@@ -8208,6 +8475,8 @@ export const saveWorkOrderStage = async (req, res) => {
     const additionalQty = Number(stageQty || 0);
     const userId = req.user?._id;
 
+    console.log('-----userId', userId)
+
     const getStageQty = (key) =>
       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
 
@@ -8537,7 +8806,7 @@ export const saveWorkOrderStage = async (req, res) => {
 // UPDATE WORK ORDER STATUS
 // ============================================================
 
-const updateWorkOrderStatus = (wo) => {
+const updateWorkOrderStatus = async (wo) => {
   const totalQty = Number(wo.quantity || 0);
 
   const getStageQty = (key) =>
@@ -8623,11 +8892,56 @@ const updateWorkOrderStatus = (wo) => {
         getStageQty(key) >= totalQty && !hasStageShortage(key)
     ) && totalQty > 0;
 
+  // if (allComplete) {
+  //   wo.status = "Completed";
+  //   wo.isProductionComplete = true;
+  //   wo.isInProduction = false;
+  //   wo.completeDate = new Date();
+  //   return;
+  // }
+
+  // if (allComplete) {
+  //   const lastStage = stages[stages.length - 1];
+
+  //   wo.status = `${formatStageName(lastStage)} Done`;
+
+  //   wo.isProductionComplete = true;
+  //   wo.isInProduction = false;
+  //   wo.completeDate = new Date();
+
+  //   return;
+  // }
+
   if (allComplete) {
-    wo.status = "Completed";
+    const lastStage = stages[stages.length - 1];
+
+    wo.status = `${formatStageName(lastStage)} Done`;
+
     wo.isProductionComplete = true;
     wo.isInProduction = false;
     wo.completeDate = new Date();
+
+    // ✅ REMOVE WO FROM ALL INVENTORY DOCUMENTS
+    try {
+      await Inventory.updateMany(
+        {
+          "workOrders.workOrderId": wo._id,
+        },
+        {
+          $pull: {
+            workOrders: {
+              workOrderId: wo._id,
+            },
+          },
+        }
+      );
+    } catch (invErr) {
+      console.error(
+        "Failed to remove completed WO from inventory:",
+        invErr
+      );
+    }
+
     return;
   }
 
@@ -9762,6 +10076,7 @@ export const importTotalMpnNeeded = async (req, res) => {
         mpnIdSet.add(mpnId);
 
         const needed = Number(ci.quantity || 0) * inputQty;
+        console.log('-----needed', needed)
 
         const prev = mpnUsageMap.get(key) || {
           mpnId,
@@ -9840,23 +10155,36 @@ export const importTotalMpnNeeded = async (req, res) => {
       const uom = row.uomId ? uomMap.get(String(row.uomId)) : null;
 
       const invData = invMap.get(String(row.mpnId)) || {}; // ✅ ensure string
-      const stock = await convertToInventoryUom({
-        qty: invData.qty,
-        fromUom: row.uomId,
-        toUom: invData.stockUom?._id,
+      const stock = await convertFromMeter(
+        invData.qty,
+        invData.stockUom?.code,
+        // toUom: invData.stockUom?._id,
+      );
+
+      console.log('-----row.totalNeeded', row.totalNeeded)
+      const Needstock = await convertUom({
+        qty: row.totalNeeded,
+        fromUom: uom?.code,
+        toUom: invData.stockUom?.code,
       });
-      console.log('------stock', stock)
+      console.log('------Needstock', Needstock)
       const stockUom = invData.stockUom?.code || "";
 
+      const shortfall =
+        Needstock > stock
+          ? Needstock - stock
+          : 0;
+
       return {
+        "Drawing No": drawingNos.join(", "), // 👈 FIRST COLUMN ADDED
         "MPN": mpn?.mpn || mpn?.MPN || "",
         "Description": row.description || mpn?.description || "",
         "Manufacturer": row.manufacturer || mpn?.manufacturer || "",
         "UOM": uom?.code || "",
-        "Total Needed": row.totalNeeded,
-        "Current Stock": stock,
+        "Total Needed": Needstock.toFixed(2),
+        "Current Stock": stock.toFixed(2),
         "Stock UOM": stockUom, // ✅ NEW COLUMN
-        "Shortfall": Math.max(0, row.totalNeeded - stock),
+        "Shortfall": shortfall,
       };
     }))
 
@@ -10349,33 +10677,33 @@ export const getFilterData = async (req, res) => {
 
 
 export const deleteBulkWorkOrders = async (req, res) => {
-    try {
+  try {
 
-        const { ids } = req.body;
+    const { ids } = req.body;
 
-        if (!ids || !Array.isArray(ids) || !ids.length) {
-            return res.status(400).json({
-                success: false,
-                message: "Please provide work order ids",
-            });
-        }
-
-        await WorkOrder.deleteMany({
-            _id: { $in: ids },
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Work orders deleted successfully",
-        });
-
-    } catch (error) {
-
-        console.error("deleteBulkWorkOrders error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: error.message,
-        });
+    if (!ids || !Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide work order ids",
+      });
     }
+
+    await WorkOrder.deleteMany({
+      _id: { $in: ids },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Work orders deleted successfully",
+    });
+
+  } catch (error) {
+
+    console.error("deleteBulkWorkOrders error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };

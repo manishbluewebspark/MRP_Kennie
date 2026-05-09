@@ -31,7 +31,7 @@ router.get(
 );
 router.delete("/bulk-delete", deleteBulkWorkOrders);
 
-router.post("/workorder/production/:id/stage", saveWorkOrderStage);
+router.post("/workorder/production/:id/stage",authenticate, saveWorkOrderStage);
 router.get("/workOrder/getEachMPNUsage",authenticate,getEachMPNUsage)
 
 router.get("/workOrder/getCompleteWorkOrders",authenticate,getCompleteWorkOrders)

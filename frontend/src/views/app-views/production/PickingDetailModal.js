@@ -194,6 +194,7 @@ const PickingDetailModal = ({
     const dataSource = childParts.map((p, index) => {
         const intoQty = Number(p.quantity || 0);
         const totalRequired = intoQty * workQty;
+         const totalRequiredss = intoQty;
 
         // Get ALL previous entries for this mpnId
         const allPreviousEntries = processStageData?.details?.filter(
@@ -216,6 +217,7 @@ const PickingDetailModal = ({
             maxQty: totalRequired,
             alreadyPicked: alreadyPicked,
             remainingToPick: remainingToPick > 0 ? remainingToPick : 0,
+            totalQtyperD:totalRequiredss
         };
     });
 
@@ -225,7 +227,7 @@ const PickingDetailModal = ({
         { title: "Description", dataIndex: "description", key: "description", width: 150 },
         { title: "MPN", dataIndex: "mpn", key: "mpn", width: 100 },
         { title: "UOM", dataIndex: "uom", key: "uom", width: 80 },
-        { title: `Total Qty (×${workQty})`, key: "totalQty", width: 120, render: (_, record) => record.maxQty },
+        { title: `Qty`, key: "totalQty", width: 120, render: (_, record) => record.totalQtyperD },
         { title: "Already Picked", dataIndex: "alreadyPicked", key: "alreadyPicked", width: 100 },
         { title: "Location", dataIndex: "storageLocation", key: "storageLocation", width: 110 },
     ];

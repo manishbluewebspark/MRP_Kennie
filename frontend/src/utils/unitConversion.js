@@ -50,23 +50,43 @@ const isCountUnit = (uom) =>
    Convert → METER (DB)
 ============================ */
 
-export const toMeter = (qty, fromUom) => {
-  console.log('----fromUom',qty, fromUom)
+// export const toMeter = (qty, fromUom) => {
+//   console.log('----fromUom',qty, fromUom)
+//   const unit = normalizeUnit(fromUom);
+
+//   // ✅ PCS / EA → return same value
+//   if (isCountUnit(unit)) {
+//     return Number(qty);
+//   }
+
+//   const factor = LENGTH_TO_METER[unit];
+
+//   if (!factor) {
+//     console.warn(`Unknown unit "${fromUom}", returning raw value`);
+//     return Number(qty);
+//   }
+
+//   return Number(qty) * factor;
+// };
+
+export const toMeter = (qty, fromUom, decimal = 4) => {
+  console.log("----fromUom", qty, fromUom);
+
   const unit = normalizeUnit(fromUom);
 
   // ✅ PCS / EA → return same value
   if (isCountUnit(unit)) {
-    return Number(qty);
+    return Number(Number(qty).toFixed(decimal));
   }
 
   const factor = LENGTH_TO_METER[unit];
 
   if (!factor) {
     console.warn(`Unknown unit "${fromUom}", returning raw value`);
-    return Number(qty);
+    return Number(Number(qty).toFixed(decimal));
   }
 
-  return Number(qty) * factor;
+  return Number((Number(qty) * factor).toFixed(decimal));
 };
 
 /* ============================
@@ -115,3 +135,4 @@ export const categorizeUOMs = (allUOMs, selectedCode) => {
 
   return allUOMs.filter(uom => category.includes(uom.code));
 };
+

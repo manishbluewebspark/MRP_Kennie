@@ -7,12 +7,72 @@ const norm = (v = "") => String(v).trim().toLowerCase();
 
 /* ------------------ LENGTH FACTORS (BASE = METER) ------------------ */
 
+
+export const convertFromMeter = (qtyMeter, toUom) => {
+  const q = Number(qtyMeter);
+  if (!Number.isFinite(q)) return 0;
+
+  const code = String(toUom || "").trim().toLowerCase();
+
+  const LENGTH_TO_METER = {
+    m: 1,
+    meter: 1,
+    metre: 1,
+
+    cm: 0.01,
+    centimeter: 0.01,
+    centimeters: 0.01,
+
+    mm: 0.001,
+    millimeter: 0.001,
+    millimeters: 0.001,
+
+    ft: 0.3048,
+    foot: 0.3048,
+    feet: 0.3048,
+
+    in: 0.0254,
+    inch: 0.0254,
+    inches: 0.0254,
+  };
+
+  const factor = LENGTH_TO_METER[code];
+
+  // ❗ EA / PCS / NON-LENGTH
+  if (factor == null) return q;
+
+  // 🔥 meter → target unit
+  return q / factor;
+};
+
+
+export const convertToMeter = async ({ qty, fromUom }) => {
+  const q = Number(qty);
+
+  if (!Number.isFinite(q)) return 0;
+
+  const fromCode = await resolveUomCode(fromUom);
+
+  if (!fromCode) return q;
+
+  const code = fromCode.toUpperCase();
+
+  const factor = LENGTH_TO_METER[code];
+
+  // ✅ LENGTH TYPES → meter conversion
+  if (factor !== undefined) {
+    return q * factor;
+  }
+
+  // ✅ NON-LENGTH (EA, PCS, BOX etc) → no conversion
+  return q;
+};
 const LENGTH_TO_METER = {
-  m: 1, meter: 1, metre: 1,
-  cm: 0.01, centimeter: 0.01,
-  mm: 0.001, millimeter: 0.001,
-  ft: 0.3048, foot: 0.3048, feet: 0.3048,
-  in: 0.0254, inch: 0.0254, inches: 0.0254,
+  M: 1,
+  MM: 0.001,
+  CM: 0.01,
+  FT: 0.3048,
+  IN: 0.0254,
 };
 
 const isLength = (code) => !!LENGTH_TO_METER[norm(code)];
@@ -20,19 +80,15 @@ const isLength = (code) => !!LENGTH_TO_METER[norm(code)];
 /* ------------------ RESOLVE UOM CODE ------------------ */
 
 const resolveUomCode = async (uomInput) => {
-  // console.log('-----uomInput',uomInput)
-  if (typeof uomInput === "string" && !mongoose.Types.ObjectId.isValid(uomInput)) {
-    return norm(uomInput);
-  }
+  if (!uomInput) return null;
 
-  if (!mongoose.Types.ObjectId.isValid(uomInput)) {
-    throw new Error("Invalid UOM reference");
+  // already code
+  if (typeof uomInput === "string" && !mongoose.Types.ObjectId.isValid(uomInput)) {
+    return uomInput.trim().toUpperCase();
   }
 
   const uom = await UOM.findById(uomInput).lean();
-  if (!uom) throw new Error("UOM not found");
-
-  return norm(uom.code);
+  return uom?.code?.trim().toUpperCase() || null;
 };
 
 /* ------------------ CORE CONVERTER ------------------ */
@@ -85,6 +141,14 @@ export const convertToInventoryUom = async ({
     throw new Error("Invalid UOM");
   }
 
+  const LENGTH_TO_METER = {
+  M: 1,
+  MM: 0.001,
+  CM: 0.01,
+  FT: 0.3048,
+  IN: 0.0254,
+};
+
   // ✅ Same UOM → no conversion
   if (fromCode === toCode) {
     return Number(quantity.toFixed(6));
@@ -119,6 +183,89 @@ export const convertToInventoryUom = async ({
   throw new Error(
     `Cannot convert between different UOM types: ${fromCode} → ${toCode}`
   );
+};
+
+
+
+const isLengthUnit = (uom) =>
+  ["M", "MM", "CM", "FT", "IN"].includes(uom);
+
+export const convertUom = ({
+  qty,
+  fromUom,
+  toUom,
+}) => {
+  const value = Number(qty);
+
+  if (!Number.isFinite(value)) return 0;
+
+  // resolve code
+  const from =
+    typeof fromUom === "string"
+      ? fromUom.toUpperCase()
+      : fromUom?.code?.toUpperCase();
+
+  const to =
+    typeof toUom === "string"
+      ? toUom.toUpperCase()
+      : toUom?.code?.toUpperCase();
+
+  if (!from || !to) {
+    return value;
+  }
+
+  // =========================
+  // SAME UNIT
+  // =========================
+  if (from === to) {
+    return Number(value.toFixed(6));
+  }
+
+  // =========================
+  // LENGTH UOM MAP
+  // =========================
+  const LENGTH_TO_METER = {
+    M: 1,
+    MM: 0.001,
+    CM: 0.01,
+    FT: 0.3048,
+    IN: 0.0254,
+  };
+
+  const isLengthUnit = (uom) =>
+    ["M", "MM", "CM", "FT", "IN"].includes(uom);
+
+  // =========================
+  // LENGTH CONVERSION
+  // =========================
+  if (isLengthUnit(from) && isLengthUnit(to)) {
+    const fromFactor = LENGTH_TO_METER[from];
+    const toFactor = LENGTH_TO_METER[to];
+
+    // STEP 1 → source to meter
+    const inMeter = value * fromFactor;
+
+    // STEP 2 → meter to target
+    const result = inMeter / toFactor;
+
+    return Number(result.toFixed(6));
+  }
+
+  // =========================
+  // COUNT TYPE
+  // =========================
+  const countUoms = ["EA", "PCS", "NOS"];
+
+  if (countUoms.includes(from) && countUoms.includes(to)) {
+    return value;
+  }
+
+  // =========================
+  // 🔥 IMPORTANT FIX
+  // if non-length / unsupported
+  // return SAME VALUE
+  // =========================
+  return Number(value.toFixed(6));
 };
 
 

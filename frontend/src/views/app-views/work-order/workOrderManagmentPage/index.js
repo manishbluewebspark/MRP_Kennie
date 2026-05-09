@@ -558,7 +558,7 @@ const DeliveryOrderPage = () => {
                 limit = 10,
                 search = "",
                 filters: f = filters,
-                sortBy = "createdAt",
+                sortBy = "workOrderNo",
                 sortOrder = "desc",
                 activeTab: tab = activeTab, // ✅ fallback fix
             } = params;

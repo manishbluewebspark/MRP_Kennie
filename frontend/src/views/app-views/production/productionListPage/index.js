@@ -642,13 +642,14 @@ const SkillLevelCostingList = () => {
   // }, [page, limit, search]);
 
   useEffect(() => {
-    if (workOrderId) {
-      fetchWorkOrdersData({ workOrderId });
-    } else {
-      fetchWorkOrdersData({ page, limit, search, filters });
+    if (activeTab === "active_production") {
+      if (workOrderId) {
+        fetchWorkOrdersData({ workOrderId });
+      } else {
+        fetchWorkOrdersData({ page, limit, search, filters });
+      }
     }
-
-  }, [page, limit, search, filters, workOrderId]);
+  }, [activeTab, page, limit, search, filters, workOrderId]);
 
   useEffect(() => {
     fetchData({
@@ -660,22 +661,16 @@ const SkillLevelCostingList = () => {
   }, [page, limit, search, filters]);
 
   useEffect(() => {
-    fetchCompleteWorkOrdersData({
-      page,
-      limit,
-      search,
-      filters,
-    });
-  }, [page, limit, search, filters]);
+    if (activeTab === "recent_completions") {
+      fetchCompleteWorkOrdersData();
+    }
+  }, [activeTab, page, limit, search]);
 
   useEffect(() => {
-    fetchMaterialShortagesData({
-      page,
-      limit,
-      search,
-      filters,
-    });
-  }, [page, limit, search, filters]);
+    if (activeTab === "material_shortages") {
+      fetchMaterialShortagesData();
+    }
+  }, [activeTab, page, limit, search]);
 
 
   const fetchFilterData = async () => {
@@ -882,14 +877,25 @@ const SkillLevelCostingList = () => {
   const fetchMaterialShortagesData = async () => {
     try {
       setLoading(true);
+
+      // ✅ clear old data first
+      setMaterialShortages([]);
+
       const res = await InventoryService.getMaterialShortages({
         page,
         limit,
-        search
+        search,
       });
-      // console.log("-------active res", res);
-      setMaterialShortages(res.data || []);
+
+      console.log("Material shortage response:", res);
+
+      if (res?.success && Array.isArray(res?.data)) {
+        setMaterialShortages(res.data);
+      } else {
+        setMaterialShortages([]);
+      }
     } catch (err) {
+      setMaterialShortages([]);
       message.error("Failed to fetch work orders");
       console.error(err);
     } finally {
@@ -1097,12 +1103,14 @@ const SkillLevelCostingList = () => {
   const getDataSource = () => {
     switch (activeTab) {
       case "recent_completions":
-        return completeWorkOrders;
+        return completeWorkOrders || [];
+
       case "material_shortages":
-        return materialShortages;
+        return materialShortages || [];
+
       case "active_production":
       default:
-        return workOrders;
+        return workOrders || [];
     }
   };
 
@@ -1202,10 +1210,18 @@ const SkillLevelCostingList = () => {
 
       {/* Table */}
       <Table
+        key={activeTab}
         columns={getColumns()}
-        dataSource={getDataSource()}
+        dataSource={Array.isArray(getDataSource()) ? getDataSource() : []}
         loading={loading}
-        rowKey={(record) => record.workOrderId || record._id}
+        rowKey={(record, index) =>
+          record.workOrderId ||
+          record._id ||
+          `${activeTab}-${index}`
+        }
+        locale={{
+          emptyText: "No Data Found",
+        }}
         pagination={false}
       />
 

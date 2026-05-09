@@ -20,7 +20,7 @@ import ReceiveMaterialsModal from "./ReceiveMaterialsModal";
 import UpdateOutgoingQuantityModal from "../mtoInventoryList/UpdateOutgoingQuantityModal";
 import IncomingStockModal from "./IncomingStockModal";
 import { render } from "@testing-library/react";
-import { fromMeter } from "utils/unitConversion";
+import { fromMeter, toMeter } from "utils/unitConversion";
 
 const { Title, Text } = Typography;
 
@@ -439,12 +439,25 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
       render: (_, record) => (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <FileSearchOutlined onClick={() => handleOpenIncomingStock(record)} style={{ fontSize: 15, color: "#1890ff" }} />
-          <span>{record?.IncomingQty || 0}</span>
+          <span>{fromMeter(
+      record?.IncomingQty,
+      record?.UOM   // yaha apna correct field name do
+    )}</span>
         </div>
       ),
     },
-    { title: "Demand Qty", dataIndex: "DemandQty", key: "DemandQty", width: 120, align: "center" },
-    { title: "Shortage Qty", dataIndex: "ShortageQty", key: "ShortageQty", width: 120, align: "center" },
+    { title: "Demand Qty", dataIndex: "DemandQty", key: "DemandQty", width: 120, align: "center",render: (_, record) => {
+    return fromMeter(
+      record?.DemandQty,
+      record?.UOM   // yaha apna correct field name do
+    );
+  } },
+    { title: "Shortage Qty", dataIndex: "ShortageQty", key: "ShortageQty", width: 120, align: "center",render: (_, record) => {
+    return fromMeter(
+      record?.ShortageQty,
+      record?.UOM   // yaha apna correct field name do
+    );
+  } },
     {
       title: "Status",
       dataIndex: "Status",

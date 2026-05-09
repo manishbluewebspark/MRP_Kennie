@@ -81,9 +81,17 @@ const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
 // }
 
 async function buildDemandMap() {
-  const workOrders = await WorkOrder.find({})
-    .select("_id drawingId quantity")
-    .lean();
+  // const workOrders = await WorkOrder.find({})
+  //   .select("_id drawingId quantity")
+  //   .lean();
+
+  const workOrders = await WorkOrder.find({
+  isProductionComplete: false,
+})
+  .select(
+    "_id drawingId quantity processHistory"
+  )
+  .lean();
 
   if (!workOrders.length) return new Map();
 
@@ -128,13 +136,39 @@ async function buildDemandMap() {
     const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code;
     const toUOM = ci?.mpn?.UOM?.code;
 
-    needed = convertToBaseUOM(needed, fromUOM, toUOM);
+    needed = convertToBaseUOM(needed, fromUOM, "M");
 
     demandMap.set(mpnId, (demandMap.get(mpnId) || 0) + needed);
   }
 
   return demandMap;
 }
+
+const buildPickedMap = async () => {
+  const workOrders = await WorkOrder.find({
+    isProductionComplete: false,
+  }).lean();
+
+  const pickedMap = new Map();
+
+  workOrders.forEach((wo) => {
+    (wo.processHistory || []).forEach((ph) => {
+      (ph.details || []).forEach((d) => {
+        const mpnId = String(d.mpnId || "");
+        if (!mpnId) return;
+
+        const pickedQty = Number(d.pickedQty || 0);
+
+        pickedMap.set(
+          mpnId,
+          (pickedMap.get(mpnId) || 0) + pickedQty
+        );
+      });
+    });
+  });
+
+  return pickedMap;
+};
 
 export const getInventoryList = async (req, res) => {
   try {
@@ -185,6 +219,8 @@ export const getInventoryList = async (req, res) => {
 
     // ✅ demand map (ONE TIME)
     const demandMap = await buildDemandMap();
+
+    const pickedMap = await buildPickedMap();
 
     // ✅ total (base)
     let total = 0;
@@ -313,23 +349,43 @@ export const getInventoryList = async (req, res) => {
 
       const balanceQty = toNum(item.balanceQuantity);
       const incomingQty = toNum(item.calculatedIncomingQty);
-      const demandQty = Number(demandMap.get(mpnIdStr) || 0);
+      // const demandQty = Number(demandMap.get(mpnIdStr) || 0);
 
-      // ✅ raw net (for internal / analytics)
-      const netQty = calcNetQty(balanceQty, incomingQty, demandQty);
+      // // ✅ raw net (for internal / analytics)
+      // const netQty = calcNetQty(balanceQty, demandQty);
 
-    const shortageQty = netQty < 0 ? Math.abs(netQty) : 0;
+      const demandQty = Number(
+  demandMap.get(mpnIdStr) || 0
+);
 
-const surplusQty = netQty > 0 ? netQty : 0;
+const pickedQty = Number(
+  pickedMap.get(mpnIdStr) || 0
+);
+
+// ✅ IMPORTANT
+// demand should reduce by picked qty
+const effectiveDemand = Math.max(
+  0,
+  demandQty - pickedQty
+);
+
+const netQty = calcNetQty(
+  balanceQty,
+  demandQty
+);
+
+      const shortageQty = netQty < 0 ? Math.abs(netQty) : 0;
+
+      const surplusQty = netQty > 0 ? netQty : 0;
 
 
-let status = "In Stock";
+      let status = "In Stock";
 
-if (netQty < 0) {
-  status = "Out of Stock";
-} else if (netQty <= 10) {
-  status = "Low Stock";
-}
+      if (netQty < 0) {
+        status = "Out of Stock";
+      } else if (netQty <= 10) {
+        status = "Low Stock";
+      }
 
       return {
         _id: item._id,
@@ -344,10 +400,11 @@ if (netQty < 0) {
         balanceQuantity: balanceQty.toFixed(4),
         IncomingQty: incomingQty,
         DemandQty: demandQty,
-
+PickedQty: pickedQty,
+EffectiveDemandQty: effectiveDemand,
         // ✅ IMPORTANT:
         NetQty: netQty,              // raw balance+incoming-demand
-        ShortageQty: shortageQty,    // display/alert qty (negative or 0)
+        ShortageQty: shortageQty.toFixed(4),    // display/alert qty (negative or 0)
         SurplusQty: surplusQty,      // optional
 
         IncomingPoNumber: item.incomingPONumbers?.length ? item.incomingPONumbers.join(", ") : "",
@@ -463,11 +520,11 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const calcNetQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) =>
-  toNum(balanceQty) + toNum(incomingQty) - toNum(demandQty);
+const calcNetQty = (balanceQty = 0, demandQty = 0) =>
+  toNum(balanceQty) - toNum(demandQty);
 
 const calcShortageAlertQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
-  const net = calcNetQty(balanceQty, incomingQty, demandQty);
+  const net = calcNetQty(balanceQty, demandQty);
   return net < 0 ? net : 0; // ✅ key fix
 };
 
@@ -1549,79 +1606,266 @@ export const addShortage = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
 export const getMaterialShortages = async (req, res) => {
   try {
     const { mpnId, workOrderId, search } = req.query;
 
-    const query = {
-      "workOrders.0": { $exists: true },
-    };
+    // ✅ only in production + not completed
+    const workOrders = await WorkOrder.find({
+      isInProduction: true,
+      isProductionComplete: false,
+      ...(workOrderId ? { _id: workOrderId } : {}),
+    }).lean();
 
-    if (mpnId) query.mpnId = mpnId;
-    if (workOrderId) query["workOrders.workOrderId"] = workOrderId;
+    if (!workOrders.length) {
+      return res.json({
+        success: true,
+        message: "No shortages found",
+        data: [],
+      });
+    }
 
-    const inventories = await Inventory.find(query)
-      .populate("mpnId", "MPN description uom")
+    // ✅ collect all shortage mpnIds
+    const mpnIds = new Set();
+
+    workOrders.forEach((wo) => {
+      (wo.processHistory || []).forEach((ph) => {
+        (ph.details || []).forEach((d) => {
+          const shortageQty = Number(d.shortageQty || 0);
+
+          if (
+            (d.shortage === true || shortageQty > 0) &&
+            d.mpnId
+          ) {
+            mpnIds.add(String(d.mpnId));
+          }
+        });
+      });
+    });
+
+    // ✅ fetch mpn details
+    const mpnDocs = await MPN.find({
+      _id: { $in: [...mpnIds] },
+    })
+      .populate("UOM", "code")
       .lean();
+
+    const mpnMap = new Map(
+      mpnDocs.map((m) => [String(m._id), m])
+    );
+
+    const searchText = String(search || "")
+      .trim()
+      .toLowerCase();
 
     const shortages = [];
 
-    const regex = search ? new RegExp(search, "i") : null;
+    // ✅ build shortages directly from processHistory.details
+    workOrders.forEach((wo) => {
+      (wo.processHistory || []).forEach((ph) => {
+        (ph.details || []).forEach((d) => {
+          const shortageQty = Number(d.shortageQty || 0);
 
-    inventories.forEach((inv) => {
+          // ✅ only shortages
+          if (
+            d.shortage !== true &&
+            shortageQty <= 0
+          ) {
+            return;
+          }
 
-      (inv.workOrders || []).forEach((wo) => {
-        console.log('-----search', inv)
-        // ✅ WorkOrder filter
-        if (workOrderId && String(wo.workOrderId) !== String(workOrderId)) {
-          return;
-        }
+          // ✅ optional mpn filter
+          if (
+            mpnId &&
+            String(d.mpnId) !== String(mpnId)
+          ) {
+            return;
+          }
 
-        // ✅ SEARCH FILTER (MPN / description / workOrderNo)
-        if (regex) {
-          const mpn = inv?.mpnId?.MPN?.toString() || "";
-          const description = inv?.mpnId?.description?.toString() || "";
-          const workOrderNo = wo?.workOrderNo?.toString() || "";
+          const mpnData = mpnMap.get(String(d.mpnId));
 
-          const match =
-            regex.test(mpn) ||
-            regex.test(description) ||
-            regex.test(workOrderNo);
+          const mpnCode = String(
+            mpnData?.MPN || d.mpn || ""
+          ).toLowerCase();
 
-          if (!match) return;
-        }
+          const description = String(
+            mpnData?.Description || ""
+          ).toLowerCase();
 
-        shortages.push({
-          mpnId: inv.mpnId?._id || inv.mpnId,
-          mpn: inv.mpnId?.MPN || "",
-          description: inv.mpnId?.description || "",
-          uom: inv.mpnId?.uom || "",
-          balanceQuantity: inv.balanceQuantity,
-          stockStatus: inv.stockStatus,
+          const woNo = String(
+            wo.workOrderNo || ""
+          ).toLowerCase();
 
-          workOrderId: wo.workOrderId,
-          workOrderNo: wo.workOrderNo,
-          drawingId: wo.drawingId,
-          requiredQty: wo.requiredQty,
-          pickedQty: wo?.pickedQty,
-          needDate: wo.needDate,
-          createdAt: wo.createdAt,
+          // ✅ search filter
+          if (searchText) {
+            const match =
+              mpnCode.includes(searchText) ||
+              description.includes(searchText) ||
+              woNo.includes(searchText);
+
+            if (!match) return;
+          }
+
+          shortages.push({
+            workOrderId: wo._id,
+            workOrderNo: wo.workOrderNo,
+
+            drawingId: wo.drawingId,
+            projectId: wo.projectId,
+            projectType: wo.projectType,
+
+            process: ph.process,
+
+            mpnId: d.mpnId,
+
+            mpn:
+              mpnData?.MPN ||
+              d.mpn ||
+              "",
+
+            description:
+              mpnData?.Description || "",
+
+            manufacturer:
+              mpnData?.Manufacturer || "",
+
+            uom:
+              d.uom ||
+              mpnData?.UOM?.code ||
+              "",
+
+            requiredQty: Number(d.quantity || 0),
+
+            pickedQty: Number(d.pickedQty || 0),
+
+            shortageQty: shortageQty,
+
+            shortage: true,
+
+            needDate: wo.needDate,
+
+            status: wo.status,
+
+            createdAt: wo.createdAt,
+
+            pickedAt: d.pickedAt || null,
+          });
         });
       });
     });
 
     return res.json({
       success: true,
-      message: "Material shortages fetched",
+      message: "Material shortages fetched successfully",
+      count: shortages.length,
       data: shortages,
     });
-
   } catch (err) {
-    console.error("Error getMaterialShortages:", err);
-    return res.status(500).json({ success: false, message: err.message });
+    console.error(
+      "Error getMaterialShortages:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
+
+// export const getMaterialShortages = async (req, res) => {
+//   try {
+//     const { mpnId, workOrderId, search } = req.query;
+
+//     const query = {
+//       "workOrders.0": { $exists: true },
+//     };
+
+//     if (mpnId) query.mpnId = mpnId;
+//     if (workOrderId) query["workOrders.workOrderId"] = workOrderId;
+
+//     const inventories = await Inventory.find(query)
+//       .populate("mpnId", "MPN description uom")
+//       .lean();
+
+//     const shortages = [];
+//     // ✅ SEARCH FILTER
+//     const searchText = String(search || "")
+//       .trim()
+//       .toLowerCase();
+
+
+//     inventories.forEach((inv) => {
+
+//       (inv.workOrders || []).forEach((wo) => {
+//         console.log('-----search', inv)
+//         // ✅ WorkOrder filter
+//         if (workOrderId && String(wo.workOrderId) !== String(workOrderId)) {
+//           return;
+//         }
+
+
+
+//         if (searchText) {
+
+//           const mpn = String(
+//             inv?.mpnId?.MPN || ""
+//           )
+//             .trim()
+//             .toLowerCase();
+
+//           const description = String(
+//             inv?.mpnId?.description || ""
+//           )
+//             .trim()
+//             .toLowerCase();
+
+//           const workOrderNo = String(
+//             wo?.workOrderNo || ""
+//           )
+//             .trim()
+//             .toLowerCase();
+
+//           const match =
+//             mpn.includes(searchText) ||
+//             description.includes(searchText) ||
+//             workOrderNo.includes(searchText);
+
+//           if (!match) {
+//             return;
+//           }
+//         }
+
+//         shortages.push({
+//           mpnId: inv.mpnId?._id || inv.mpnId,
+//           mpn: inv.mpnId?.MPN || "",
+//           description: inv.mpnId?.description || "",
+//           uom: inv.mpnId?.uom || "",
+//           balanceQuantity: inv.balanceQuantity,
+//           stockStatus: inv.stockStatus,
+
+//           workOrderId: wo.workOrderId,
+//           workOrderNo: wo.workOrderNo,
+//           drawingId: wo.drawingId,
+//           requiredQty: wo.requiredQty,
+//           pickedQty: wo?.pickedQty,
+//           needDate: wo.needDate,
+//           createdAt: wo.createdAt,
+//         });
+//       });
+//     });
+
+//     return res.json({
+//       success: true,
+//       message: "Material shortages fetched",
+//       data: shortages,
+//     });
+
+//   } catch (err) {
+//     console.error("Error getMaterialShortages:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 
 // export const getMaterialShortages = async (req, res) => {
 //   try {
@@ -1832,8 +2076,8 @@ export const getCompleteDrawingsMTO = async (req, res) => {
       }
 
       if (wo?.poNumber) {
-  agg.poNumbers.add(wo.poNumber);
-}
+        agg.poNumbers.add(wo.poNumber);
+      }
 
       if (customerName) {
         agg.customers.add(customerName);

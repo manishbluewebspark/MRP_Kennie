@@ -635,7 +635,7 @@ const PurchaseShortageCard = ({ record }) => {
             whiteSpace: "nowrap",
           }}
         >
-          Short {record.shortage.toFixed(2)}
+          Short {record.shortage}
         </span>
 
         {/* Expand toggle */}
@@ -665,8 +665,8 @@ const PurchaseShortageCard = ({ record }) => {
         <span><b>Mfg:</b> {record.manufacturer || "-"}</span>
         <span><b>Supplier:</b> {record.supplier || "-"}</span>
         <span><b>Stock:</b> {record.currentStock ?? 0}</span>
-        <span style={{ color: "#DC2626", fontWeight: 700 }}>
-          Req: {record.required.toFixed(2) ?? 0}
+        <span style={{ color: "green", fontWeight: 700 }}>
+          Demand Qty: {record.required.toFixed(4) ?? 0}
         </span>
       </div>
 
@@ -709,7 +709,7 @@ const PurchaseShortageCard = ({ record }) => {
                   color: "#DC2626",
                 }}
               >
-                {s.shortageQty} pcs
+                {s.shortageQty}
               </div>
 
               <div

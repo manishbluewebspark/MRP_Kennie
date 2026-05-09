@@ -12,6 +12,7 @@ import fs from 'fs'
 import { generatePurchaseOrderPDF } from "../middlewares/purchaseEmail.middleware.js";
 import { generatePurchaseOrderPDFBuffer } from "../utils/pdf/generatePurchaseOrderPDF.js";
 import { sendMailWithAttachment } from "../utils/mailer.js";
+import { convertToMeter } from "../utils/uomController.js";
 const toObjectId = (id) => {
   try {
     return new mongoose.Types.ObjectId(String(id));
@@ -1377,8 +1378,21 @@ export const getPurchaseShortageList = async (req, res) => {
         const mpnIdStr = String(mpnObjId);
         mpnIdStrSet.add(mpnIdStr);
 
-        const qtyPer = Number(ci.quantity || 0);
-        const totalNeededForThisWO = qtyPer * woQty;
+        // const qtyPer = Number(ci.quantity || 0);
+        // const totalNeededForThisWO = qtyPer * woQty;
+
+        const fromUOM = ci?.uom?._id || ci?.mpn?.UOM?.code;
+        console.log('------fromUOM',fromUOM)
+
+// convert everything to METER FIRST
+const qtyPerInMeter = await convertToMeter({
+  qty: Number(ci.quantity || 0),
+  fromUom: fromUOM,
+});
+
+console.log('-------qtyPerInMeter',ci.quantity,qtyPerInMeter)
+
+const totalNeededForThisWO = qtyPerInMeter * woQty;
 
         const existing = mpnUsagePerMpn.get(mpnIdStr) || {
           mpnId: mpnIdStr,
@@ -1508,7 +1522,7 @@ export const getPurchaseShortageList = async (req, res) => {
 
       const currentStock = invMap.get(row.mpnId) || 0;
       const required = Number(row.totalNeeded || 0);
-      const overallShortage = Math.max(0, required - currentStock);
+      const overallShortage = (required - currentStock);
 
       const mpnName = lib?.mpn || lib?.mpnNumber || lib?.MPN || null;
       const manufacturerFinal = row.manufacturer || lib?.manufacturer || null;
@@ -1548,8 +1562,8 @@ export const getPurchaseShortageList = async (req, res) => {
             workOrderId: w.workOrderId,
             workOrderNo: w.workOrderNo,
             needDate: w.needDate,
-            requiredQty: w.requiredQty,
-            shortageQty,
+            requiredQty: w.requiredQty.toFixed(4),
+            shortageQty:shortageQty.toFixed(4),
           });
         }
       }
@@ -1563,8 +1577,8 @@ export const getPurchaseShortageList = async (req, res) => {
         supplierId: supplierIdsArray, // IDs
         uom: uomDoc?.name || null,
         required,
-        currentStock,
-        shortage: overallShortage, // overall shortage
+        currentStock:currentStock.toFixed(4),
+        shortage: overallShortage.toFixed(4), // overall shortage
         shortageByWorkOrders, // ✅ NEW: Short#1/Short#2 + needDate + qty per WO
         requireByWorkOrders: Array.from(row.workOrders || []),
       };
