@@ -635,7 +635,7 @@ const PurchaseShortageCard = ({ record }) => {
             whiteSpace: "nowrap",
           }}
         >
-          Short {record.shortage}
+          Short {record.shortage} M
         </span>
 
         {/* Expand toggle */}
