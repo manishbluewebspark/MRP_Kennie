@@ -1939,9 +1939,14 @@ export const getCompleteDrawingsMTO = async (req, res) => {
     // 1️⃣ Base query: sirf woh WorkOrders jo drawing ke saath linked hain
     const woQuery = {
       drawingId: { $exists: true, $ne: null },
+       // QC Done
+  isProductionComplete: true,
+
+  // Delivered nahi hona chahiye
+  delivered: { $ne: true }
     };
 
-    woQuery.status = 'Completed'
+    // woQuery.isProductionComplete = true
 
     // Optional search on drawing no / project / customer later handle karenge UI level par
     // Ya tum yaha bhi search attach kar sakte ho (agar drawingNo, projectName ke basis par chahiye to aggregation se karein)

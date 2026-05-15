@@ -22,7 +22,7 @@ const DeliveryOrderPage = () => {
   const [data, setData] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
- const [projectData, setProjectData] = useState([])
+  const [projectData, setProjectData] = useState([])
   const [customerData, setCustomerData] = useState([])
   // table state
   const [page, setPage] = useState(1);
@@ -47,7 +47,7 @@ const DeliveryOrderPage = () => {
     return {
       key: wo._id,
       _id: wo._id,
-      posNo:wo?.posNo,
+      posNo: wo?.posNo,
       workOrderNo: wo.workOrderNo,
       drawingNo: wo?.drawingName || wo?.drawingNo || "-",
       project: wo.projectName || "-",
@@ -112,7 +112,7 @@ const DeliveryOrderPage = () => {
     }
   };
 
-    const normalizeProjectsResponse = (res) => {
+  const normalizeProjectsResponse = (res) => {
     if (!res) return [];
     // axios response usually in res.data
     const body = res.data ?? res;
@@ -126,29 +126,29 @@ const DeliveryOrderPage = () => {
     return [];
   };
 
-   const fetchProjects = async (params = {}) => {
-      try {
-        const res = await ProjectService.getAllProjects(params);
-        const projects = normalizeProjectsResponse(res);
-        setProjectData(projects);
-      } catch (err) {
-        console.error("Error fetching projects:", err);
-        message.error("Failed to fetch projects");
-      } finally {
-      }
-    };
-  
-    const fetchCustomers = async () => {
-      try {
-        const res = await CustomerService.getAllCustomers();
-        if (res.success) setCustomerData(res.data);
-      } catch (err) {
-        console.error("Error fetching customers:", err);
-        message.error("Failed to fetch customers");
-      } finally {
-      }
-    };
-  
+  const fetchProjects = async (params = {}) => {
+    try {
+      const res = await ProjectService.getAllProjects(params);
+      const projects = normalizeProjectsResponse(res);
+      setProjectData(projects);
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      message.error("Failed to fetch projects");
+    } finally {
+    }
+  };
+
+  const fetchCustomers = async () => {
+    try {
+      const res = await CustomerService.getAllCustomers();
+      if (res.success) setCustomerData(res.data);
+    } catch (err) {
+      console.error("Error fetching customers:", err);
+      message.error("Failed to fetch customers");
+    } finally {
+    }
+  };
+
 
   useEffect(() => {
     fetchWorkOrders({ page: 1, limit, search });
@@ -321,44 +321,44 @@ const DeliveryOrderPage = () => {
     }
   };
 
-const handleExportWork = async () => {
-  try {
-    if (!validateBeforeExport({ requireDelivered: false })) return;
+  const handleExportWork = async () => {
+    try {
+      if (!validateBeforeExport({ requireDelivered: false })) return;
 
-    const payload = {
-      ids: selectedRowKeys,
-      deliveryInfo: selectedRowKeys.map((id) => ({
-        id,
-        doNumber: (doMap[id] || "").trim(),
-        delivered: !!deliveredMap[id],
-      })),
-    };
+      const payload = {
+        ids: selectedRowKeys,
+        deliveryInfo: selectedRowKeys.map((id) => ({
+          id,
+          doNumber: (doMap[id] || "").trim(),
+          delivered: !!deliveredMap[id],
+        })),
+      };
 
-    const res = await WorkOrderService.exportWorkOrdersWord(payload);
+      const res = await WorkOrderService.exportWorkOrdersWord(payload);
 
-    // ✅ axios-style => res.data, wrapper-style => res
-    const fileData = res?.data ? res.data : res;
+      // ✅ axios-style => res.data, wrapper-style => res
+      const fileData = res?.data ? res.data : res;
 
-    const blob = new Blob([fileData], {
-      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    });
+      const blob = new Blob([fileData], {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `delivery_orders_${new Date().toISOString().slice(0, 10)}.docx`;
-    document.body.appendChild(a);
-    a.click();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `delivery_orders_${new Date().toISOString().slice(0, 10)}.docx`;
+      document.body.appendChild(a);
+      a.click();
 
-    a.remove();
-    window.URL.revokeObjectURL(url);
+      a.remove();
+      window.URL.revokeObjectURL(url);
 
-    message.success("Word exported successfully");
-  } catch (err) {
-    console.error("Word export error:", err);
-    message.error(err?.response?.data?.message || "Failed to export Word");
-  }
-};
+      message.success("Word exported successfully");
+    } catch (err) {
+      console.error("Word export error:", err);
+      message.error(err?.response?.data?.message || "Failed to export Word");
+    }
+  };
 
 
   const columns = [
@@ -398,7 +398,7 @@ const handleExportWork = async () => {
       key: "poNumber",
       render: (text) => <span style={{ fontSize: 13, color: "#666" }}>{text}</span>,
     },
-     {
+    {
       title: "POS Number",
       dataIndex: "posNo",
       key: "posNo",
@@ -424,11 +424,12 @@ const handleExportWork = async () => {
 
         return (
           <DatePicker
+
             value={dateValue}
             onChange={(date) => handleTargetDeliveryChange(record, date)}
             format="DD/MM/YYYY"
             style={{ width: 130 }}
-            disabled={loading}
+            disabled={loading || record?.delivered}
           />
         );
       },
@@ -448,6 +449,7 @@ const handleExportWork = async () => {
         <Input
           placeholder="Enter DO No."
           size="small"
+          disabled={record?.delivered}
           style={{ width: 150 }}
           value={doMap[record._id] ?? ""}
           onChange={(e) => handleDoChange(record._id, e.target.value)}
@@ -471,7 +473,7 @@ const handleExportWork = async () => {
       width: 110,
       render: (_, record) => (
         <Checkbox
-        disabled={record?.status !== "Completed"}
+          disabled={record?.status !== "Completed"}
           checked={!!deliveredMap[record._id]}
           onChange={(e) => handleDeliveredToggle(record, e.target.checked)}
         />
@@ -483,35 +485,35 @@ const handleExportWork = async () => {
   const filterConfig = [
     { type: "date", name: "drawingDate", label: "Drawing Date", placeholder: "Select Drawing Date" },
     {
-            type: 'select',
-            name: 'customer',
-            label: 'Customer',
-            placeholder: 'Select Customer',
-            options: customerData.map(customer => ({
-                label: customer.companyName,
-                value: customer._id
-            }))
-        },
-     {
-            type: 'select',
-            name: 'project',
-            label: 'Project',
-            placeholder: 'Select Project',
-            options: projectData.map(project => ({
-                label: project.projectName,
-                value: project._id
-            }))
-        },
+      type: 'select',
+      name: 'customer',
+      label: 'Customer',
+      placeholder: 'Select Customer',
+      options: customerData.map(customer => ({
+        label: customer.companyName,
+        value: customer._id
+      }))
+    },
+    {
+      type: 'select',
+      name: 'project',
+      label: 'Project',
+      placeholder: 'Select Project',
+      options: projectData.map(project => ({
+        label: project.projectName,
+        value: project._id
+      }))
+    },
   ];
 
   const handleFilterSubmit = async (data) => {
-     const nextFilters = {
-    drawingDate: data?.drawingDate ? dayjs(data.drawingDate).toISOString() : null,
-    customer: data?.customer || null,
-    project: data?.project || null,
-  };
+    const nextFilters = {
+      drawingDate: data?.drawingDate ? dayjs(data.drawingDate).toISOString() : null,
+      customer: data?.customer || null,
+      project: data?.project || null,
+    };
     setIsFilterModalOpen(false);
-    fetchWorkOrders({ page: 1, limit, search,filters: nextFilters });
+    fetchWorkOrders({ page: 1, limit, search, filters: nextFilters });
   };
 
   return (
@@ -562,9 +564,9 @@ const handleExportWork = async () => {
               setLimit(ps);
               fetchWorkOrders({ page: p, limit: ps, search });
             },
-           
+
           }}
-          // scroll={{ x: 1100 }}
+        // scroll={{ x: 1100 }}
         />
       </Card>
 
