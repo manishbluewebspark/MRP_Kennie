@@ -11,16 +11,21 @@ export const generatePurchaseOrderPDFBuffer = async (purchaseOrder) => {
     { async: true }
   );
 
-   const browser = await puppeteer.launch({
-    headless: true,                          // headless mode
-    executablePath: '/usr/bin/google-chrome', // path to system Chrome
-    args: [
-      '--no-sandbox', 
-      '--disable-setuid-sandbox', 
-      '--disable-dev-shm-usage',            // EC2 low RAM issues
-      '--disable-gpu'
-    ],
-  });
+  //  const browser = await puppeteer.launch({
+  //   headless: true,                          // headless mode
+  //   executablePath: '/usr/bin/google-chrome', // path to system Chrome
+  //   args: [
+  //     '--no-sandbox', 
+  //     '--disable-setuid-sandbox', 
+  //     '--disable-dev-shm-usage',            // EC2 low RAM issues
+  //     '--disable-gpu'
+  //   ],
+  // });
+
+  const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
 
 
   try {

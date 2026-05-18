@@ -358,6 +358,14 @@ const totalCost = basePrice + sgaAmount + freightAmount;
       render: (v,record) => `${record?.currencySymbol} ${(Number(v || 0)).toFixed(2)}`,
     },
     {
+      title: 'Sales Price',
+      dataIndex: 'salesPrice',
+      key: 'salesPrice',
+      width: 120,
+      align: 'right',
+      render: (v,record) => `${record?.currencySymbol} ${(Number(v || 0)).toFixed(2)}`,
+    },
+    {
       title: 'SGA%',
       dataIndex: 'sgaPercent',
       key: 'sgaPercent',
