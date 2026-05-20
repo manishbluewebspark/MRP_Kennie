@@ -28,19 +28,117 @@ const chip = (label) => (
     }}>{label}</span>
 );
 
+// const statusPill = (s) => {
+//     const label = (s || "open").toLowerCase();
+//     const style =
+//         label === "pending" || label === "open" ? { bg: "#E5F3FF", color: "#1D4ED8" }
+//             : label === "closed" || label === "approved" ? { bg: "#DCFCE7", color: "#166534" }
+//                 : { bg: "#F3F4F6", color: "#111827" };
+//     return (
+//         <span style={{
+//             display: "inline-flex", alignItems: "center", justifyContent: "center",
+//             padding: "2px 10px", borderRadius: 16, fontSize: 12, fontWeight: 700,
+//             background: style.bg, color: style.color,
+//         }}>
+//             {label.toUpperCase()}
+//         </span>
+//     );
+// };
+
 const statusPill = (s) => {
-    const label = (s || "open").toLowerCase();
-    const style =
-        label === "pending" || label === "open" ? { bg: "#E5F3FF", color: "#1D4ED8" }
-            : label === "closed" || label === "approved" ? { bg: "#DCFCE7", color: "#166534" }
-                : { bg: "#F3F4F6", color: "#111827" };
+
+    const label = (s || "Pending").toLowerCase();
+
+    let style = {
+        bg: "#F3F4F6",
+        color: "#111827"
+    };
+
+    switch (label) {
+
+        case "pending":
+        case "draft":
+            style = {
+                bg: "#E5F3FF",
+                color: "#1D4ED8"
+            };
+            break;
+
+        case "pending approval":
+            style = {
+                bg: "#FEF3C7",
+                color: "#92400E"
+            };
+            break;
+
+        case "approved":
+        case "confirmed":
+            style = {
+                bg: "#DCFCE7",
+                color: "#166534"
+            };
+            break;
+
+        case "emailed":
+            style = {
+                bg: "#E0E7FF",
+                color: "#3730A3"
+            };
+            break;
+
+        case "acknowledged":
+            style = {
+                bg: "#F0FDF4",
+                color: "#15803D"
+            };
+            break;
+
+        case "partially received":
+            style = {
+                bg: "#FCE7F3",
+                color: "#9D174D"
+            };
+            break;
+
+        case "completed":
+        case "closed":
+            style = {
+                bg: "#DCFCE7",
+                color: "#166534"
+            };
+            break;
+
+        case "cancelled":
+        case "rejected":
+            style = {
+                bg: "#FEE2E2",
+                color: "#B91C1C"
+            };
+            break;
+
+        default:
+            style = {
+                bg: "#F3F4F6",
+                color: "#111827"
+            };
+    }
+
     return (
-        <span style={{
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            padding: "2px 10px", borderRadius: 16, fontSize: 12, fontWeight: 700,
-            background: style.bg, color: style.color,
-        }}>
-            {label.toUpperCase()}
+        <span
+            style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "2px 10px",
+                borderRadius: 16,
+                fontSize: 12,
+                fontWeight: 700,
+                background: style.bg,
+                color: style.color,
+                textTransform: "capitalize"
+            }}
+        >
+            {s || "Pending"}
         </span>
     );
 };

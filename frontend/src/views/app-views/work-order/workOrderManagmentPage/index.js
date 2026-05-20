@@ -839,6 +839,7 @@ const DeliveryOrderPage = () => {
             } else {
                 message.error(response.message || "Import failed");
             }
+             fetchWorkOrders()
         } catch (err) {
             console.error("Import error:", err);
             message.error("Error while importing work orders");

@@ -12,14 +12,13 @@ import fs from 'fs'
 import { generatePurchaseOrderPDF } from "../middlewares/purchaseEmail.middleware.js";
 import { generatePurchaseOrderPDFBuffer } from "../utils/pdf/generatePurchaseOrderPDF.js";
 import { sendMailWithAttachment } from "../utils/mailer.js";
-import { convertToMeter } from "../utils/uomController.js";
-const toObjectId = (id) => {
-  try {
-    return new mongoose.Types.ObjectId(String(id));
-  } catch {
-    return null;
-  }
-};
+import { convertToBaseUOM, convertToMeter } from "../utils/uomController.js";
+
+
+const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+
+const toObjectId = (id) =>
+  isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null;
 
 function buildFilter({ year, month, supplier, status }) {
   const filter = { isDeleted: false };
@@ -129,18 +128,18 @@ export const addPurchaseOrder = async (req, res) => {
       }
 
       // -------------------- inventory check --------------------
-      const inventory = inventoryMap.get(mpn);
+      // const inventory = inventoryMap.get(mpn);
 
-      if (inventory) {
-        const balanceQuantity = num(inventory.balanceQuantity);
-        const incomingQuantity = num(inventory.incomingQuantity);
+      // if (inventory) {
+      //   const balanceQuantity = num(inventory.balanceQuantity);
+      //   const incomingQuantity = num(inventory.incomingQuantity);
 
-        const allowedQty = balanceQuantity + incomingQuantity;
+      //   const allowedQty = balanceQuantity + incomingQuantity;
 
-        if (qty > allowedQty) {
-          requiresSecondLevelApproval = true;
-        }
-      }
+      //   if (qty > allowedQty) {
+      //     requiresSecondLevelApproval = true;
+      //   }
+      // }
 
       subTotal += extPrice;
 
@@ -160,6 +159,12 @@ export const addPurchaseOrder = async (req, res) => {
     // -------------------- totals --------------------
     const ostTax = +(subTotal * 0.09);
     const finalAmount = +(subTotal + freightAmount + ostTax);
+
+    const APPROVAL_LIMIT = 5000;
+
+    if (finalAmount > APPROVAL_LIMIT) {
+      requiresSecondLevelApproval = true;
+    }
 
     const totals = {
       subTotalAmount: subTotal,
@@ -181,7 +186,9 @@ export const addPurchaseOrder = async (req, res) => {
       freightAmount,
 
       requiresSecondLevelApproval,
-      status:requiresSecondLevelApproval ? "Pending Approval" : "",
+      status: requiresSecondLevelApproval
+        ? "Pending Approval"
+        : "Pending",
       items,
       totals,
     });
@@ -420,18 +427,18 @@ export const updatePurchaseOrder = async (req, res) => {
 
       const extPrice = +(qty * unitPrice * (1 - discount / 100));
 
-      const inventory = inventoryMap.get(String(item.mpn));
+      // const inventory = inventoryMap.get(String(item.mpn));
 
-      if (inventory) {
-        const balanceQuantity = num(inventory.balanceQuantity);
-        const incomingQuantity = num(inventory.incomingQuantity);
+      // if (inventory) {
+      //   const balanceQuantity = num(inventory.balanceQuantity);
+      //   const incomingQuantity = num(inventory.incomingQuantity);
 
-        const allowedQty = balanceQuantity + incomingQuantity;
+      //   const allowedQty = balanceQuantity + incomingQuantity;
 
-        if (qty > allowedQty) {
-          requiresSecondLevelApproval = true;
-        }
-      }
+      //   if (qty > allowedQty) {
+      //     requiresSecondLevelApproval = true;
+      //   }
+      // }
 
       subTotal += extPrice;
 
@@ -456,6 +463,12 @@ export const updatePurchaseOrder = async (req, res) => {
 
     const finalAmount = +(subTotal + freightAmount + ostTax);
 
+
+    const APPROVAL_LIMIT = 5000;
+
+    if (finalAmount > APPROVAL_LIMIT) {
+      requiresSecondLevelApproval = true;
+    }
     // --------------------------------------------------
     // Update purchase order
     // --------------------------------------------------
@@ -465,7 +478,9 @@ export const updatePurchaseOrder = async (req, res) => {
       {
         ...data,
         requiresSecondLevelApproval,
-        status:requiresSecondLevelApproval ? "Pending Approval" : undefined,
+        status: requiresSecondLevelApproval
+          ? "Pending Approval"
+          : "Pending",
         items,
         totals: {
           freightAmount,
@@ -888,14 +903,14 @@ export const getPurchaseOrderById = async (req, res) => {
   try {
     const { id } = req.params;
     const purchaseOrder = await PurchaseOrders.findById(id)
-       .populate({
-    path: "supplier",
-    populate: {
-      path: "currency",
-      select: "code"   // 👈 sirf currency code
-    }
-  })
-      .populate("workOrderNo","workOrderNo, poNumber,projectNo ")
+      .populate({
+        path: "supplier",
+        populate: {
+          path: "currency",
+          select: "code"   // 👈 sirf currency code
+        }
+      })
+      .populate("workOrderNo", "workOrderNo, poNumber,projectNo ")
       .populate({
         path: "items.mpn",   // populate each item’s MPN reference
         model: "MPNLibrary",        // make sure this matches your model name
@@ -1136,6 +1151,7 @@ export const getPurchaseOrdersHistory = async (req, res) => {
           "totals.ostTax": 1,
           supplierId: "$supplier._id",
           supplierName: "$supplier.companyName",
+          updatedAt: 1
         },
       },
 
@@ -1155,6 +1171,7 @@ export const getPurchaseOrdersHistory = async (req, res) => {
               poDate: "$poDate",
               status: "$status",
               finalAmount: "$totals.finalAmount",
+              updatedAt: "$updatedAt"
             },
           },
         },
@@ -1191,7 +1208,8 @@ export const getPurchaseOrdersHistory = async (req, res) => {
       },
       // newest first
       orders: (g.orders || [])
-        .sort((a, b) => new Date(b.poDate) - new Date(a.poDate))
+        // .sort((a, b) => new Date(b.poDate) - new Date(a.poDate))
+        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
         .map((o) => ({
           _id: o._id,
           poNumber: o.poNumber,
@@ -1327,7 +1345,17 @@ export const getPurchaseShortageList = async (req, res) => {
     const costingItems = await CostingItems.find({
       drawingId: { $in: drawingObjectIds },
       quoteType: "material",
-    }).lean();
+    })
+      .populate("uom", "code")
+      .populate({
+        path: "mpn",
+        select: "UOM",
+        populate: {
+          path: "UOM",
+          select: "code",
+        },
+      })
+      .lean();
 
     if (!costingItems.length) {
       return res.json({
@@ -1375,24 +1403,28 @@ export const getPurchaseShortageList = async (req, res) => {
         const mpnObjId = ci.mpn;
         if (!mpnObjId) continue;
 
-        const mpnIdStr = String(mpnObjId);
+        const mpnIdStr = String(ci.mpn?._id || ci.mpn);
         mpnIdStrSet.add(mpnIdStr);
 
         // const qtyPer = Number(ci.quantity || 0);
         // const totalNeededForThisWO = qtyPer * woQty;
 
-        const fromUOM = ci?.uom?._id || ci?.mpn?.UOM?.code;
-        console.log('------fromUOM',fromUOM)
+        const fromUOM =
+          ci?.uom?.code ||
+          ci?.mpn?.UOM?.code ||
+          "M";
+        console.log('------fromUOM', fromUOM)
 
-// convert everything to METER FIRST
-const qtyPerInMeter = await convertToMeter({
-  qty: Number(ci.quantity || 0),
-  fromUom: fromUOM,
-});
+        // convert everything to METER FIRST
+        const qtyPerInBase = convertToBaseUOM(
+          Number(ci.quantity || 0),
+          fromUOM,
+          "M"
+        );
 
-console.log('-------qtyPerInMeter',ci.quantity,qtyPerInMeter)
+        console.log('-------qtyPerInMeter', ci.quantity, qtyPerInBase)
 
-const totalNeededForThisWO = qtyPerInMeter * woQty;
+        const totalNeededForThisWO = qtyPerInBase * woQty;
 
         const existing = mpnUsagePerMpn.get(mpnIdStr) || {
           mpnId: mpnIdStr,
@@ -1457,18 +1489,24 @@ const totalNeededForThisWO = qtyPerInMeter * woQty;
     const mpnLibDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
     const mpnLibMap = new Map(mpnLibDocs.map((lib) => [String(lib._id), lib]));
 
-    // 7) Fetch UOM for all unique uomIds
-    const uomIds = [
-      ...new Set(
-        Array.from(mpnUsagePerMpn.values())
-          .map((row) => row.uomId)
-          .filter(Boolean)
-          .map((id) => String(id))
-      ),
-    ];
+  // 7) Fetch UOM for all unique uomIds (SAFE FIX)
+const uomIds = [
+  ...new Set(
+    Array.from(mpnUsagePerMpn.values())
+      .map((row) => {
+        const uom = row.uomId;
+        return uom?._id || uom || null;
+      })
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => String(id))
+  ),
+];
 
-    const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
-    const uomMap = new Map(uomDocs.map((u) => [String(u._id), u]));
+const uomDocs = await UOM.find({
+  _id: { $in: uomIds },
+}).lean();
+
+const uomMap = new Map(uomDocs.map((u) => [String(u._id), u]));
 
     // 8) Fetch Supplier names
     const supplierIdStrs = [
@@ -1502,10 +1540,28 @@ const totalNeededForThisWO = qtyPerInMeter * woQty;
     }).lean();
 
     const invMap = new Map();
+
     for (const inv of inventoryDocs) {
       const key = String(inv.mpnId);
+
+      const lib = mpnLibMap.get(key);
+
+      // inventory stored UOM
+      const inventoryUOM =
+        lib?.UOM?.code ||
+        lib?.uom?.code ||
+        "M";
+
+      // convert inventory -> M
+      const qtyInBase = convertToBaseUOM(
+        Number(inv.balanceQuantity || 0),
+        inventoryUOM,
+        "M"
+      );
+
       const curr = invMap.get(key) || 0;
-      invMap.set(key, curr + Number(inv.balanceQuantity || 0));
+
+      invMap.set(key, curr + qtyInBase);
     }
 
     // Helper: safe date sort (null goes last)
@@ -1520,9 +1576,33 @@ const totalNeededForThisWO = qtyPerInMeter * woQty;
       const lib = mpnLibMap.get(row.mpnId);
       const uomDoc = row.uomId ? uomMap.get(String(row.uomId)) : null;
 
-      const currentStock = invMap.get(row.mpnId) || 0;
-      const required = Number(row.totalNeeded || 0);
-      const overallShortage = (required - currentStock);
+      const libUOM = lib?.UOM?.code || "M";
+
+      // values are currently in M
+      const currentStockBase = invMap.get(row.mpnId) || 0;
+      const requiredBase = Number(row.totalNeeded || 0);
+
+      const overallShortageBase =
+        requiredBase - currentStockBase;
+
+      // convert for display
+      const currentStock = convertToBaseUOM(
+        currentStockBase,
+        "M",
+        libUOM
+      );
+
+      const required = convertToBaseUOM(
+        requiredBase,
+        "M",
+        libUOM
+      );
+
+      const overallShortage = convertToBaseUOM(
+        overallShortageBase,
+        "M",
+        libUOM
+      );
 
       const mpnName = lib?.mpn || lib?.mpnNumber || lib?.MPN || null;
       const manufacturerFinal = row.manufacturer || lib?.manufacturer || null;
@@ -1544,29 +1624,39 @@ const totalNeededForThisWO = qtyPerInMeter * woQty;
       }));
 
       // sort by needDate ascending (earliest first)
-      woReqArr.sort((a, b) => toTime(a.needDate) - toTime(b.needDate));
+      woReqArr.sort((a, b) => {
+  const dateDiff = toTime(a.needDate) - toTime(b.needDate);
+  if (dateDiff !== 0) return dateDiff;
 
-      // ✅ allocate stock FIFO by needDate, compute shortages per WO
-      let remainingStock = Number(currentStock || 0);
+  // tie breaker (VERY IMPORTANT)
+  return String(a.workOrderNo).localeCompare(String(b.workOrderNo));
+});
 
-      const shortageByWorkOrders = [];
-      for (let i = 0; i < woReqArr.length; i++) {
-        const w = woReqArr[i];
-        const canFulfill = Math.min(remainingStock, w.requiredQty);
-        remainingStock -= canFulfill;
+let remainingStock = Number(invMap.get(row.mpnId) || 0); // ALWAYS base
 
-        const shortageQty = Math.max(0, w.requiredQty - canFulfill);
-        if (shortageQty > 0) {
-          shortageByWorkOrders.push({
-            label: `Short#${shortageByWorkOrders.length + 1}`,
-            workOrderId: w.workOrderId,
-            workOrderNo: w.workOrderNo,
-            needDate: w.needDate,
-            requiredQty: w.requiredQty.toFixed(4),
-            shortageQty:shortageQty.toFixed(4),
-          });
-        }
-      }
+const shortageByWorkOrders = [];
+
+for (let i = 0; i < woReqArr.length; i++) {
+  const w = woReqArr[i];
+
+  const req = Number(w.requiredQty || 0);
+
+  const canFulfill = Math.min(remainingStock, req);
+  remainingStock = Number((remainingStock - canFulfill).toFixed(6));
+
+  const shortageQty = Number((req - canFulfill).toFixed(6));
+
+  if (shortageQty > 0) {
+    shortageByWorkOrders.push({
+      label: `Short#${shortageByWorkOrders.length + 1}`,
+      workOrderId: w.workOrderId,
+      workOrderNo: w.workOrderNo,
+      needDate: w.needDate,
+      requiredQty: req,
+      shortageQty,
+    });
+  }
+}
 
       return {
         mpnId: row.mpnId,
@@ -1577,7 +1667,7 @@ const totalNeededForThisWO = qtyPerInMeter * woQty;
         supplierId: supplierIdsArray, // IDs
         uom: uomDoc?.name || null,
         required,
-        currentStock:currentStock.toFixed(4),
+        currentStock: currentStock.toFixed(4),
         shortage: overallShortage.toFixed(4), // overall shortage
         shortageByWorkOrders, // ✅ NEW: Short#1/Short#2 + needDate + qty per WO
         requireByWorkOrders: Array.from(row.workOrders || []),
@@ -2606,9 +2696,13 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
   ];
   if (!drawingIdStrs.length) return [];
 
-  const drawingObjectIds = drawingIdStrs.map(
-    (id) => new mongoose.Types.ObjectId(id)
-  );
+  // const drawingObjectIds = drawingIdStrs.map(
+  //   (id) => new mongoose.Types.ObjectId(id)
+  // );
+
+  const drawingObjectIds = drawingIdStrs
+  .map((id) => toObjectId(id))
+  .filter(Boolean);
 
   // 3) CostingItems only material
   const costingItems = await CostingItems.find({
@@ -2620,7 +2714,7 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
   // drawingId -> costingItems[]
   const costingByDrawing = new Map();
   for (const ci of costingItems) {
-    const key = String(ci.drawingId);
+  const key = String(ci.drawingId?._id || ci.drawingId);
     const arr = costingByDrawing.get(key) || [];
     arr.push(ci);
     costingByDrawing.set(key, arr);
@@ -2642,10 +2736,17 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
       const woQty = Number(woItem.quantity || 1);
 
       for (const ci of costingArr) {
-        const mpnObjId = ci.mpn;
+        const mpnObjId = ci?.mpn?._id || ci?.mpn;
+
         if (!mpnObjId) continue;
 
         const mpnIdStr = String(mpnObjId);
+
+        // invalid ids skip
+        if (!mongoose.Types.ObjectId.isValid(mpnIdStr)) {
+          console.log("Invalid MPN ID:", mpnIdStr);
+          continue;
+        }
         mpnIdStrSet.add(mpnIdStr);
 
         const qtyPer = Number(ci.quantity || 0);
@@ -2676,26 +2777,31 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
 
   if (!mpnUsagePerMpn.size) return [];
 
-  const mpnObjectIds = [...mpnIdStrSet].map(
-    (id) => new mongoose.Types.ObjectId(id)
-  );
+ const mpnObjectIds = [...mpnIdStrSet]
+  .map((id) => toObjectId(id))
+  .filter(Boolean);
 
   // 5) MPN library
-  const mpnLibDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
+  // const mpnLibDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
+  const mpnLibDocs = await MPN.find({
+    _id: { $in: mpnObjectIds }
+  })
+    .populate("UOM", "code")
+    .lean();
   const mpnLibMap = new Map();
   for (const lib of mpnLibDocs) {
     mpnLibMap.set(String(lib._id), lib);
   }
 
   // 6) UOM
-  const uomIds = [
-    ...new Set(
-      Array.from(mpnUsagePerMpn.values())
-        .map((row) => row.uomId)
-        .filter((id) => id)
-        .map((id) => String(id))
-    ),
-  ];
+ const uomIds = [
+  ...new Set(
+    Array.from(mpnUsagePerMpn.values())
+      .map((row) => row.uomId?._id || row.uomId)
+      .filter(Boolean)
+      .map((id) => String(id))
+  ),
+].filter((id) => mongoose.Types.ObjectId.isValid(id));
   const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
   const uomMap = new Map();
   for (const u of uomDocs) uomMap.set(String(u._id), u);
@@ -2710,9 +2816,9 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
   ];
   let supplierMap = new Map();
   if (supplierIdStrs.length) {
-    const supplierObjectIds = supplierIdStrs.map(
-      (id) => new mongoose.Types.ObjectId(id)
-    );
+   const supplierObjectIds = supplierIdStrs
+  .map((id) => toObjectId(id))
+  .filter(Boolean);
     const supplierDocs = await Suppliers.find({
       _id: { $in: supplierObjectIds },
     })

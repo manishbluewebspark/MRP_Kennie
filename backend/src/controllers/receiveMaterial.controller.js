@@ -52,7 +52,7 @@ export const createReceiveMaterial = async (req, res) => {
 
     const mpnDocs = mpnIds.length
       ? await MPN.find({ _id: { $in: mpnIds.map((id) => new mongoose.Types.ObjectId(id)) } })
-        .select("uom uomId") // master uom stored here
+        .select("UOM") // master uom stored here
         .lean()
       : [];
 
@@ -109,8 +109,9 @@ export const createReceiveMaterial = async (req, res) => {
 
       const mpnDoc = mpnMap.get(String(mpnId));
 
+      console.log('-------mpnDoc',mpnDoc)
       // ✅ Master UOM from MPN (Reference)
-      const masterUomId = getId(mpnDoc?.uomId || mpnDoc?.uom) || null;
+      const masterUomId = getId(mpnDoc?.UOM || mpnDoc?.uom) || null;
       const masterUomName = getUomName(masterUomId);
 
       const itemId = getId(line.itemId); // PO item _id
@@ -125,6 +126,8 @@ export const createReceiveMaterial = async (req, res) => {
       const fromUomName = getUomName(fromUomId) || masterUomName;
       const fromUOMId = await MPN.findById(line.mpnId._id)
 
+
+      console.log('-------acceptedQty',acceptedQty,fromUomId,masterUomId)
       const acceptedQtyInMaster = await convertToInventoryUom({
         qty: acceptedQty,
         fromUom: fromUomId,
@@ -266,7 +269,8 @@ export const createReceiveMaterial = async (req, res) => {
       return acceptedTotal > 0;
     });
 
-    if (allFullyReceived) po.status = "Completed";
+    // if (allFullyReceived) po.status = "Completed";
+        if (allFullyReceived) po.status = "Closed";
     else if (someAccepted) po.status = "Partially Received";
     else if (!["Cancelled", "Closed"].includes(po.status)) po.status = "Pending";
 

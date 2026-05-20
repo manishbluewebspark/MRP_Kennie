@@ -5,7 +5,7 @@ const workOrderSchema = new mongoose.Schema(
     workOrderNo: {
       type: String,
       required: true,
-      unique: true,
+      // unique: true,
       trim: true,
     },
 
@@ -170,6 +170,18 @@ const workOrderSchema = new mongoose.Schema(
   },
   {
     timestamps: true, // createdAt, updatedAt
+  }
+);
+
+workOrderSchema.index(
+  {
+    workOrderNo: 1,
+    poNumber: 1,
+    posNo: 1,
+    drawingId: 1,
+  },
+  {
+    unique: true,
   }
 );
 

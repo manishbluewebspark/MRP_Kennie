@@ -357,14 +357,7 @@ const totalCost = basePrice + sgaAmount + freightAmount;
       align: 'right',
       render: (v,record) => `${record?.currencySymbol} ${(Number(v || 0)).toFixed(2)}`,
     },
-    {
-      title: 'Sales Price',
-      dataIndex: 'salesPrice',
-      key: 'salesPrice',
-      width: 120,
-      align: 'right',
-      render: (v,record) => `${record?.currencySymbol} ${(Number(v || 0)).toFixed(2)}`,
-    },
+   
     {
       title: 'SGA%',
       dataIndex: 'sgaPercent',
@@ -374,7 +367,7 @@ const totalCost = basePrice + sgaAmount + freightAmount;
       render: (v) => `${Number(v || 0)}%`,
     },
     {
-      title: 'Max Burden %',
+      title: 'Mat Burden %',
       dataIndex: 'maxBurden',
       key: 'maxBurden',
       width: 120,
@@ -388,6 +381,14 @@ const totalCost = basePrice + sgaAmount + freightAmount;
       width: 110,
       align: 'right',
       render: (v) => `${Number(v || 0)}%`,
+    },
+     {
+      title: 'Sales Price',
+      dataIndex: 'salesPrice',
+      key: 'salesPrice',
+      width: 120,
+      align: 'right',
+      render: (v,record) => `${record?.currencySymbol} ${(Number(v || 0)).toFixed(2)}`,
     },
   ];
 

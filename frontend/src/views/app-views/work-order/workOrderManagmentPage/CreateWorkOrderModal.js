@@ -310,11 +310,11 @@ const CreateWorkOrderModal = ({
     fetchDrawings();
 
     // set form defaults
-    if (!isEditMode) {
-      form.setFieldsValue({
-        workOrderNo: generateWorkOrderNumber(lastWorkOrderNo),
-      });
-    }
+    // if (!isEditMode) {
+    //   form.setFieldsValue({
+    //     workOrderNo: generateWorkOrderNumber(lastWorkOrderNo),
+    //   });
+    // }
   }, [visible]); // ✅ only depends on visible
 
   // ✅ when edit data + rows loaded => patch once
