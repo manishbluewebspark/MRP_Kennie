@@ -50,7 +50,7 @@ const CostingItemSchema = new mongoose.Schema({
     remarks: { type: String },
 
     // Packing specific fields
-    maxBurden: { type: Number, default: 0 },
+    matBurden: { type: Number, default: 0 },
     freightPercent: { type: Number, default: 0 },
 
     // Common fields

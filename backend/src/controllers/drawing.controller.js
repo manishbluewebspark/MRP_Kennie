@@ -2596,7 +2596,7 @@ export const importCostingItems = async (req, res) => {
           const quantity = toNum(row["Quantity"]);
           const unitPriceRaw = toNum(row["Unit Price"]);
           const sgaPercent = toNum(row["SGA %"]);
-          const maxBurden = toNum(row["Max Burden %"]);
+          const matBurden = toNum(row["Max Burden %"]);
           const freightPercent = toNum(row["Freight %"]);
 
           if (!mpnName) {
@@ -2677,7 +2677,7 @@ export const importCostingItems = async (req, res) => {
               });
 
           const extPrice = round2(quantity * unitPrice);
-          const upliftPct = (sgaPercent + maxBurden + freightPercent) / 100;
+          const upliftPct = (sgaPercent + matBurden + freightPercent) / 100;
           const salesPrice = round2(extPrice * (1 + upliftPct));
 
           newItem = {
@@ -2694,7 +2694,7 @@ export const importCostingItems = async (req, res) => {
             sourceCurrency: rowCurrency,
             currency: drawingCurrency,
             sgaPercent,
-            maxBurden,
+            matBurden,
             freightPercent,
             extPrice,
             salesPrice,
@@ -3156,7 +3156,7 @@ export const importCostingItems = async (req, res) => {
 //           const quantity = toNum(row["Quantity"]);
 //           const unitPrice = toNum(row["Unit Price"]);
 //           const sgaPercent = toNum(row["SGA %"]);
-//           const maxBurden = toNum(row["Max Burden %"]);
+//           const matBurden = toNum(row["Max Burden %"]);
 //           const freightPercent = toNum(row["Freight %"]);
 
 //           if (!mpnName) {
@@ -3185,7 +3185,7 @@ export const importCostingItems = async (req, res) => {
 //           }
 
 //           const extPrice = round2(quantity * unitPrice);
-//           const upliftPct = (sgaPercent + maxBurden + freightPercent) / 100;
+//           const upliftPct = (sgaPercent + matBurden + freightPercent) / 100;
 //           const salesPrice = round2(extPrice * (1 + upliftPct));
 
 //           newItem = {
@@ -3199,7 +3199,7 @@ export const importCostingItems = async (req, res) => {
 //             quantity,
 //             unitPrice,
 //             sgaPercent,
-//             maxBurden,
+//             matBurden,
 //             freightPercent,
 //             extPrice,
 //             salesPrice,
@@ -3505,7 +3505,7 @@ export const importCostingItems = async (req, res) => {
 //           const quantity = toNum(row["Quantity"]);
 //           const unitPrice = toNum(row["Unit Price"]);
 //           const sgaPercent = toNum(row["SGA %"]);
-//           const maxBurden = toNum(row["Max Burden %"]);
+//           const matBurden = toNum(row["Max Burden %"]);
 //           const freightPercent = toNum(row["Freight %"]);
 
 //           if (!mpnName) {
@@ -3564,7 +3564,7 @@ export const importCostingItems = async (req, res) => {
 //           }
 
 //           const extPrice = round2(quantity * unitPrice);
-//           const upliftPct = (sgaPercent + maxBurden + freightPercent) / 100;
+//           const upliftPct = (sgaPercent + matBurden + freightPercent) / 100;
 //           const salesPrice = round2(extPrice * (1 + upliftPct));
 
 //           newItem = {
@@ -3580,7 +3580,7 @@ export const importCostingItems = async (req, res) => {
 //             quantity,
 //             unitPrice,
 //             sgaPercent,
-//             maxBurden,
+//             matBurden,
 //             freightPercent,
 
 //             extPrice,
@@ -3919,7 +3919,7 @@ export const importCostingItems = async (req, res) => {
 //         const quantity = toNum(row["Quantity"]);
 //         const unitPrice = toNum(row["Unit Price"]);
 //         const sgaPercent = toNum(row["SGA %"]);
-//         const maxBurden = toNum(row["Max Burden %"]);
+//         const matBurden = toNum(row["Max Burden %"]);
 //         const freightPercent = toNum(row["Freight %"]);
 
 //         if (!mpnName) throw new Error("MPN Name is required");
@@ -3933,7 +3933,7 @@ export const importCostingItems = async (req, res) => {
 //         if (!uomDoc) throw new Error(`UOM not found: ${uomCode}`);
 
 //         const extPrice = round2(quantity * unitPrice);
-//         const upliftPct = (sgaPercent + maxBurden + freightPercent) / 100;
+//         const upliftPct = (sgaPercent + matBurden + freightPercent) / 100;
 //         const salesPrice = round2(extPrice * (1 + upliftPct));
 
 //         newItem = {
@@ -3949,7 +3949,7 @@ export const importCostingItems = async (req, res) => {
 //           quantity,
 //           unitPrice,
 //           sgaPercent,
-//           maxBurden,
+//           matBurden,
 //           freightPercent,
 
 //           extPrice,

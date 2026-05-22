@@ -368,8 +368,8 @@ const totalCost = basePrice + sgaAmount + freightAmount;
     },
     {
       title: 'Mat Burden %',
-      dataIndex: 'maxBurden',
-      key: 'maxBurden',
+      dataIndex: 'matBurden',
+      key: 'matBurden',
       width: 120,
       align: 'right',
       render: (v) => `${Number(v || 0)}%`,

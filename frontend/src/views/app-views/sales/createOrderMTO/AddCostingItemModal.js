@@ -235,9 +235,9 @@ const AddCostingItemModal = ({
     const extPrice = unitPrice * quantity;
 
     const sgaPercent = N(form.getFieldValue('sgaPercent'));
-    const maxBurden = N(form.getFieldValue('maxBurden'));
+    const matBurden = N(form.getFieldValue('matBurden'));
     const freightPercent = N(form.getFieldValue('freightPercent'));
-    const pct = (sgaPercent + maxBurden + freightPercent) / 100;
+    const pct = (sgaPercent + matBurden + freightPercent) / 100;
 
     const salesPrice = extPrice + (extPrice * pct);
 
@@ -428,7 +428,7 @@ console.log('-------from',from,to)
         ...(selectedQuoteType === 'material'
           ? { sgaPercent: 0, freightCost: 0, leadTime: 0, matBurden: 0, actualQty: 1.0, freightPercent: 0 }
           : selectedQuoteType === 'packing'
-            ? { sgaPercent: 0, maxBurden: 0, freightPercent: 0, extPrice: 0 }
+            ? { sgaPercent: 0, matBurden: 0, freightPercent: 0, extPrice: 0 }
             : {})
       });
       setChildPartData(null);
@@ -965,7 +965,7 @@ console.log('-------from',from,to)
           </Form.Item>
         </Col>
         <Col span={8}>
-          <Form.Item label={<Text strong>Max Burden %</Text>} name="maxBurden">
+          <Form.Item label={<Text strong>Mat Burden %</Text>} name="matBurden">
             <InputNumber min={0} max={100} style={{ width: '100%' }} onChange={onPctChange_Packing} />
           </Form.Item>
         </Col>
@@ -1006,7 +1006,7 @@ console.log('-------from',from,to)
         ...(selectedQuoteType === 'material'
           ? { sgaPercent: 0, freightCost: 0, leadTime: 0, matBurden: 0, actualQty: 1.0, freightPercent: 0 }
           : selectedQuoteType === 'packing'
-            ? { sgaPercent: 0, maxBurden: 0, freightPercent: 0, extPrice: 0 }
+            ? { sgaPercent: 0, matBurden: 0, freightPercent: 0, extPrice: 0 }
             : {})
       }}>
         {renderFormContent()}
