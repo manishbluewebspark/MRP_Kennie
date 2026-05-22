@@ -10631,7 +10631,7 @@ export const importTotalMpnNeeded = async (req, res) => {
         totalNeeded = await convertUom({
           qty: row.totalNeeded,
           fromUom: uom?.code,
-          toUom: invData.stockUom?.code,
+          toUom: uom?.code,
         });
       } catch (err) {
         console.log("convertUom error", err.message);

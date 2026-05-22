@@ -635,7 +635,7 @@ const PurchaseShortageCard = ({ record }) => {
             whiteSpace: "nowrap",
           }}
         >
-          Short {record.shortage} M
+          Short {record.shortage} {record?.uom ? record?.uom : ""}
         </span>
 
         {/* Expand toggle */}
@@ -666,7 +666,7 @@ const PurchaseShortageCard = ({ record }) => {
         <span><b>Supplier:</b> {record.supplier || "-"}</span>
         <span><b>Stock:</b> {record.currentStock ?? 0}</span>
         <span style={{ color: "green", fontWeight: 700 }}>
-          Demand Qty: {record.required.toFixed(4) ?? 0}
+          Demand Qty: {record.required ?? 0} {record?.uom ? record?.uom : ""}
         </span>
       </div>
 
