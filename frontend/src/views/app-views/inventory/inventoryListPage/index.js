@@ -439,10 +439,11 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
       render: (_, record) => (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <FileSearchOutlined onClick={() => handleOpenIncomingStock(record)} style={{ fontSize: 15, color: "#1890ff" }} />
-          <span>{fromMeter(
+          {/* <span>{fromMeter(
       record?.IncomingQty,
       record?.UOM   // yaha apna correct field name do
-    )}</span>
+    )}</span> */}
+    {record?.IncomingQty}
         </div>
       ),
     },

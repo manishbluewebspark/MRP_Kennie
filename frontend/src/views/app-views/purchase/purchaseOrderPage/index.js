@@ -956,7 +956,9 @@ const PurchaseShortageCard = ({ record }) => {
         }
 
         // ---- SUPPLIER VALIDATION ----
-        const supplierList = selectedItems.map((item) => item.supplierId[0]).filter(Boolean);
+      const supplierList = selectedItems
+    .flatMap((item) => item?.supplierId || [])
+    .filter(Boolean);
 
         const uniqueSuppliers = [...new Set(supplierList)];
 

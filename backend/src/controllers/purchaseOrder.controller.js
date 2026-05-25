@@ -1437,9 +1437,9 @@ export const getPurchaseShortageList = async (req, res) => {
       inventoryMap.set(
         key,
         current +
-          Number(
-            inv.balanceQuantity || 0
-          )
+        Number(
+          inv.balanceQuantity || 0
+        )
       );
     }
 
@@ -1630,7 +1630,7 @@ export const getPurchaseShortageList = async (req, res) => {
       const finalShortage =
         Math.max(
           totalRequired -
-            globalStock,
+          globalStock,
           0
         );
 
@@ -1704,6 +1704,11 @@ export const getPurchaseShortageList = async (req, res) => {
         }
       }
 
+      const supplierIdsArray =
+        Array.from(
+          row.suppliers || []
+        ).filter(Boolean);
+
       const supplierNames =
         Array.from(
           row.suppliers || []
@@ -1713,87 +1718,89 @@ export const getPurchaseShortageList = async (req, res) => {
           )
           .filter(Boolean);
 
-   const lib = mpnLibMap.get(row.mpnId);
+      const lib = mpnLibMap.get(row.mpnId);
 
-// ✅ MASTER UOM OF MPN
-const displayUOM =
-  lib?.UOM?.code ||
-  "M";
+      // ✅ MASTER UOM OF MPN
+      const displayUOM =
+        lib?.UOM?.code ||
+        "M";
 
-// =====================================================
-// CONVERT VALUES FROM METER -> DISPLAY UOM
-// =====================================================
+      // =====================================================
+      // CONVERT VALUES FROM METER -> DISPLAY UOM
+      // =====================================================
 
-const displayRequired =
-  convertToBaseUOM(
-    totalRequired,
-    "M",
-    displayUOM
-  );
+      const displayRequired =
+        convertToBaseUOM(
+          totalRequired,
+          "M",
+          displayUOM
+        );
 
-const displayStock =
-  convertToBaseUOM(
-    globalStock,
-    "M",
-    displayUOM
-  );
+      const displayStock =
+        convertToBaseUOM(
+          globalStock,
+          "M",
+          displayUOM
+        );
 
-const displayShortage =
-  convertToBaseUOM(
-    finalShortage,
-    "M",
-    displayUOM
-  );
+      const displayShortage =
+        convertToBaseUOM(
+          finalShortage,
+          "M",
+          displayUOM
+        );
 
-// =====================================================
-// SHORTAGE BY WO
-// =====================================================
+      // =====================================================
+      // SHORTAGE BY WO
+      // =====================================================
 
-const formattedShortageWO =
-  shortageByWorkOrders.map((wo) => ({
-    ...wo,
+      const formattedShortageWO =
+        shortageByWorkOrders.map((wo) => ({
+          ...wo,
 
-    requiredQty:
-      convertToBaseUOM(
-        Number(wo.requiredQty || 0),
-        "M",
-        displayUOM
-      ).toFixed(4),
+          requiredQty:
+            convertToBaseUOM(
+              Number(wo.requiredQty || 0),
+              "M",
+              displayUOM
+            ).toFixed(4),
 
-    shortageQty:
-      convertToBaseUOM(
-        Number(wo.shortageQty || 0),
-        "M",
-        displayUOM
-      ).toFixed(4),
-  }));
+          shortageQty:
+            convertToBaseUOM(
+              Number(wo.shortageQty || 0),
+              "M",
+              displayUOM
+            ).toFixed(4),
+        }));
 
-list.push({
-  mpnId: row.mpnId,
+      list.push({
+        mpnId: row.mpnId,
 
-  mpn: row.mpn,
+        mpn: row.mpn,
 
-  description: row.description,
+        description: row.description,
 
-  manufacturer: row.manufacturer,
+        manufacturer: row.manufacturer,
 
-  supplier: supplierNames.join(", "),
+        supplier: supplierNames.join(", "),
 
-  // ✅ ORIGINAL MASTER UOM
-  uom: displayUOM,
+        supplierId: supplierIdsArray,
 
-  required:
-    Number(displayRequired).toFixed(4),
+        // ✅ ORIGINAL MASTER UOM
+        uom: displayUOM,
 
-  currentStock:
-    Number(displayStock).toFixed(4),
+        required:
+          Number(displayRequired).toFixed(4),
 
-  shortage:
-    Number(displayShortage).toFixed(4),
+        currentStock:
+          Number(displayStock).toFixed(4),
 
-  shortageByWorkOrders:
-    formattedShortageWO,
-});
+        shortage:
+          Number(displayShortage).toFixed(4),
+
+        shortageByWorkOrders:
+          formattedShortageWO,
+      });
     }
 
     // =========================================================
@@ -3977,8 +3984,8 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
   // );
 
   const drawingObjectIds = drawingIdStrs
-  .map((id) => toObjectId(id))
-  .filter(Boolean);
+    .map((id) => toObjectId(id))
+    .filter(Boolean);
 
   // 3) CostingItems only material
   const costingItems = await CostingItems.find({
@@ -3990,7 +3997,7 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
   // drawingId -> costingItems[]
   const costingByDrawing = new Map();
   for (const ci of costingItems) {
-  const key = String(ci.drawingId?._id || ci.drawingId);
+    const key = String(ci.drawingId?._id || ci.drawingId);
     const arr = costingByDrawing.get(key) || [];
     arr.push(ci);
     costingByDrawing.set(key, arr);
@@ -4053,9 +4060,9 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
 
   if (!mpnUsagePerMpn.size) return [];
 
- const mpnObjectIds = [...mpnIdStrSet]
-  .map((id) => toObjectId(id))
-  .filter(Boolean);
+  const mpnObjectIds = [...mpnIdStrSet]
+    .map((id) => toObjectId(id))
+    .filter(Boolean);
 
   // 5) MPN library
   // const mpnLibDocs = await MPN.find({ _id: { $in: mpnObjectIds } }).lean();
@@ -4070,14 +4077,14 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
   }
 
   // 6) UOM
- const uomIds = [
-  ...new Set(
-    Array.from(mpnUsagePerMpn.values())
-      .map((row) => row.uomId?._id || row.uomId)
-      .filter(Boolean)
-      .map((id) => String(id))
-  ),
-].filter((id) => mongoose.Types.ObjectId.isValid(id));
+  const uomIds = [
+    ...new Set(
+      Array.from(mpnUsagePerMpn.values())
+        .map((row) => row.uomId?._id || row.uomId)
+        .filter(Boolean)
+        .map((id) => String(id))
+    ),
+  ].filter((id) => mongoose.Types.ObjectId.isValid(id));
   const uomDocs = await UOM.find({ _id: { $in: uomIds } }).lean();
   const uomMap = new Map();
   for (const u of uomDocs) uomMap.set(String(u._id), u);
@@ -4092,9 +4099,9 @@ const buildPurchaseShortageList = async ({ manufacturer, supplier }) => {
   ];
   let supplierMap = new Map();
   if (supplierIdStrs.length) {
-   const supplierObjectIds = supplierIdStrs
-  .map((id) => toObjectId(id))
-  .filter(Boolean);
+    const supplierObjectIds = supplierIdStrs
+      .map((id) => toObjectId(id))
+      .filter(Boolean);
     const supplierDocs = await Suppliers.find({
       _id: { $in: supplierObjectIds },
     })

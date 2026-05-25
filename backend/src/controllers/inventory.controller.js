@@ -15,7 +15,7 @@ import SystemSettings from "../models/SystemSettings.js";
 
 import mongoose from "mongoose";
 import CostingItems from "../models/CostingItem.js";
-import { convertQty, convertToBaseUOM } from "../utils/uomController.js";
+import { convertQty, convertToBaseUOM, convertUom } from "../utils/uomController.js";
 
 
 const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
@@ -270,9 +270,10 @@ export const getInventoryList = async (req, res) => {
         "items.mpn": { $in: mpnIdsOnList },
       })
         .select(
-          "poNumber commitDate needDate supplier items.idNumber items.mpn items.qty items.receivedQty items.committedDate items.needDate status createdAt updatedAt"
+          "poNumber commitDate needDate supplier items.idNumber items.mpn items.uom items.qty items.receivedQty items.committedDate items.needDate status createdAt updatedAt"
         )
         .populate("items.mpn", "MPN Description Manufacturer")
+         .populate("items.uom", "code")
         .populate("supplier", "companyName email phone contactPerson")
         .lean();
     }
@@ -280,53 +281,174 @@ export const getInventoryList = async (req, res) => {
     // ✅ build PO Map: mpnId -> summary
     const poMap = new Map();
 
+
     for (const po of pendingPOs) {
-      for (const it of po.items || []) {
-        const mid = String(it?.mpn?._id || it?.mpn || "");
-        if (!mid) continue;
+  for (const it of po.items || []) {
 
-        const remainingQty = Number(it.qty || 0) - Number(it.receivedQty || 0);
-        if (remainingQty <= 0) continue;
+    const mid = String(
+      it?.mpn?._id || it?.mpn || ""
+    );
 
-        if (!poMap.has(mid)) {
-          poMap.set(mid, {
-            totalIncomingQty: 0,
-            incomingPONumbers: new Set(),
-            earliestCommitDate: null,
-            purchaseData: [],
-          });
-        }
+    if (!mid) continue;
 
-        const entry = poMap.get(mid);
-        entry.totalIncomingQty += remainingQty;
-        entry.incomingPONumbers.add(po.poNumber);
+    // ✅ find inventory item
+    const inventoryItem =
+      inventoryList.find(
+        (x) =>
+          String(x?.mpnId?._id) === mid
+      );
 
-        if (it.commitDate) {
-          const cd = new Date(it.commitDate);
-          if (!entry.earliestCommitDate || cd < entry.earliestCommitDate) {
-            entry.earliestCommitDate = cd;
-          }
-        }
+    // ✅ raw qty
+    const rawRemainingQty =
+      Number(it.qty || 0) -
+      Number(it.receivedQty || 0);
 
-        entry.purchaseData.push({
-          _id: po._id,
-          idNumber: it?.idNumber,
-          mpn: it.mpn,
-          poNumber: po.poNumber,
-          supplier: po.supplier || { name: "N/A" },
-          quantity: remainingQty,
-          totalQuantity: it.qty,
-          receivedQuantity: it.receivedQty || 0,
-          needDate: po.needDate ? new Date(po.needDate).toLocaleDateString() : "N/A",
-          committedDate: it.committedDate ? new Date(it.committedDate).toLocaleDateString() : "N/A",
-          status: po.status,
-          createdAt: po.createdAt,
-          updatedAt: po.updatedAt,
-          itemDescription: it.mpn?.Description || "N/A",
-          itemManufacturer: it.mpn?.Manufacturer || "N/A",
-        });
+    if (rawRemainingQty <= 0)
+      continue;
+
+    // ✅ PO UOM
+    const poUom =
+      it?.uom?.code || "";
+
+    // ✅ Inventory UOM
+    const inventoryUom =
+      inventoryItem?.mpnId?.UOM?.code || "";
+
+    // ✅ FINAL converted qty
+    const remainingQty =
+      convertUom({
+        qty: rawRemainingQty,
+        fromUom: poUom,
+        toUom: inventoryUom,
+      });
+
+    if (!poMap.has(mid)) {
+      poMap.set(mid, {
+        totalIncomingQty: 0,
+        incomingPONumbers: new Set(),
+        earliestCommitDate: null,
+        purchaseData: [],
+      });
+    }
+
+    const entry = poMap.get(mid);
+
+    entry.totalIncomingQty +=
+      remainingQty;
+
+    entry.incomingPONumbers.add(
+      po.poNumber
+    );
+
+    if (it.commitDate) {
+      const cd = new Date(
+        it.commitDate
+      );
+
+      if (
+        !entry.earliestCommitDate ||
+        cd < entry.earliestCommitDate
+      ) {
+        entry.earliestCommitDate =
+          cd;
       }
     }
+
+    entry.purchaseData.push({
+      _id: po._id,
+      idNumber: it?.idNumber,
+      mpn: it.mpn,
+      poNumber: po.poNumber,
+      supplier:
+        po.supplier || {
+          name: "N/A",
+        },
+
+      quantity: remainingQty,
+
+      totalQuantity: it.qty,
+
+      UOM: poUom,
+
+      receivedQuantity:
+        it.receivedQty || 0,
+
+      needDate: po.needDate
+        ? new Date(
+            po.needDate
+          ).toLocaleDateString()
+        : "N/A",
+
+      committedDate:
+        it.committedDate
+          ? new Date(
+              it.committedDate
+            ).toLocaleDateString()
+          : "N/A",
+
+      status: po.status,
+      createdAt: po.createdAt,
+      updatedAt: po.updatedAt,
+
+      itemDescription:
+        it.mpn?.Description ||
+        "N/A",
+
+      itemManufacturer:
+        it.mpn?.Manufacturer ||
+        "N/A",
+    });
+  }
+}
+
+    // for (const po of pendingPOs) {
+    //   for (const it of po.items || []) {
+    //     const mid = String(it?.mpn?._id || it?.mpn || "");
+    //     if (!mid) continue;
+
+    //     const remainingQty = Number(it.qty || 0) - Number(it.receivedQty || 0);
+    //     if (remainingQty <= 0) continue;
+
+    //     if (!poMap.has(mid)) {
+    //       poMap.set(mid, {
+    //         totalIncomingQty: 0,
+    //         incomingPONumbers: new Set(),
+    //         earliestCommitDate: null,
+    //         purchaseData: [],
+    //       });
+    //     }
+
+    //     const entry = poMap.get(mid);
+    //     entry.totalIncomingQty += remainingQty;
+    //     entry.incomingPONumbers.add(po.poNumber);
+
+    //     if (it.commitDate) {
+    //       const cd = new Date(it.commitDate);
+    //       if (!entry.earliestCommitDate || cd < entry.earliestCommitDate) {
+    //         entry.earliestCommitDate = cd;
+    //       }
+    //     }
+
+    //     entry.purchaseData.push({
+    //       _id: po._id,
+    //       idNumber: it?.idNumber,
+    //       mpn: it.mpn,
+    //       poNumber: po.poNumber,
+    //       supplier: po.supplier || { name: "N/A" },
+    //       quantity: remainingQty,
+    //       totalQuantity: it.qty,
+    //       UOM:it.uom.code,
+    //       receivedQuantity: it.receivedQty || 0,
+    //       needDate: po.needDate ? new Date(po.needDate).toLocaleDateString() : "N/A",
+    //       committedDate: it.committedDate ? new Date(it.committedDate).toLocaleDateString() : "N/A",
+    //       status: po.status,
+    //       createdAt: po.createdAt,
+    //       updatedAt: po.updatedAt,
+    //       itemDescription: it.mpn?.Description || "N/A",
+    //       itemManufacturer: it.mpn?.Manufacturer || "N/A",
+    //     });
+    //   }
+    // }
 
     // ✅ attach PO map to each inventory item
     const inventoryWithPOData = inventoryList.map((item) => {

@@ -65,13 +65,15 @@ const IncomingStockModal = ({ visible, onCancel, purchaseData }) => {
     key: index,
     mpn:item?.mpn?._id,
     idNumber:item?.idNumber,
+    UOM:item?.UOM,
     poNumber: item.poNumber || 'N/A',
     supplier: item.supplier?.companyName || (item.supplier?.companyName ? 'Supplier ID: ' + item.supplier.contactPerson : 'N/A'),
     qty: item.quantity || 0,
     needDate: item.needDate || 'N/A',
     committedDate: item.committedDate || 'N/A',
     status: item.poStatus || item.status || 'Pending',
-    statusIcon: getStatusIcon(item.poStatus || item.status)
+    statusIcon: getStatusIcon(item.poStatus || item.status),
+    totalQuantity:item?.totalQuantity
   }));
 
   // Helper function to get status icon
@@ -175,6 +177,11 @@ const handleCommitDateChange = async (record, newDate) => {
       dataIndex: 'supplier',
       key: 'supplier',
     },
+      {
+      title: 'UOM',
+      dataIndex: 'UOM',
+      key: 'UOM',
+    },
     {
       title: 'Qty',
       dataIndex: 'qty',
@@ -271,10 +278,10 @@ const handleCommitDateChange = async (record, newDate) => {
             <Text strong>Description: </Text>
             <Text>{productData.description}</Text>
           </div>
-          <div>
+          {/* <div>
             <Text strong>UOM: </Text>
             <Text>{productData.uom}</Text>
-          </div>
+          </div> */}
         </div>
       </Card>
 
@@ -302,7 +309,7 @@ const handleCommitDateChange = async (record, newDate) => {
         <div style={{ textAlign: 'center', padding: '8px' }}>
           <Text strong>Total Incoming Quantity: </Text>
           <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
-            {productData.totalIncoming} {productData.uom}
+            {productData.totalIncoming}
           </Text>
         </div>
       </Card>
