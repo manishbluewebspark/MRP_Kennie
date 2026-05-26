@@ -107,6 +107,7 @@ const PurchaseOrderDetailsPage = () => {
     return po.items.map((it, idx) => ({
       key: it._id || String(idx),
       description: it.description || "-",
+      manufacturer:it?.manufacturer,
       mpn: typeof it.mpn === "object" ? (it.mpn?.MPN || it.mpn?._id) : (it.mpn || "-"),
       uom: typeof it.uom === "object" ? (it.uom?.code || it.uom?.name || it.uom?._id) : (it.uom || "-"),
       quantity: it.qty ?? 0,
@@ -134,6 +135,7 @@ const PurchaseOrderDetailsPage = () => {
       render: (text) => <Text strong>{text}</Text>,
     },
     { title: "MPN ↓", dataIndex: "mpn", key: "mpn", width: 150 },
+     { title: "manufacturer", dataIndex: "manufacturer", key: "manufacturer", width: 150 },
     { title: "UOM ↓", dataIndex: "uom", key: "uom", width: 90, align: "center" },
     { title: "Qty ↓", dataIndex: "quantity", key: "quantity", width: 90, align: "center" },
     {

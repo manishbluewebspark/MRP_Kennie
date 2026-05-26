@@ -13,6 +13,8 @@ import { generatePurchaseOrderPDF } from "../middlewares/purchaseEmail.middlewar
 import { generatePurchaseOrderPDFBuffer } from "../utils/pdf/generatePurchaseOrderPDF.js";
 import { sendMailWithAttachment } from "../utils/mailer.js";
 import { convertToBaseUOM, convertToMeter } from "../utils/uomController.js";
+import User from "../models/User.js";
+import { createAlertOnce } from "../services/alertservice.js";
 
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -162,8 +164,50 @@ export const addPurchaseOrder = async (req, res) => {
 
     const APPROVAL_LIMIT = 5000;
 
+    // if (finalAmount > APPROVAL_LIMIT) {
+
+    //   requiresSecondLevelApproval = true;
+    // }
+
     if (finalAmount > APPROVAL_LIMIT) {
+
       requiresSecondLevelApproval = true;
+
+      // =========================================
+      // FIND USERS WITH APPROVAL PERMISSION
+      // =========================================
+
+      const approvalUsers = await User.find({
+        permissions: {
+          $in: [
+            "purchase.purchase_order_approval:edit_delete_add"
+          ]
+        }
+      }).select("_id name email");
+
+      // =========================================
+      // CREATE ALERTS
+      // =========================================
+
+      for (const user of approvalUsers) {
+
+        await createAlertOnce({
+
+          title: "Second Level of Approval",
+
+          message:
+            `Total Purchase Amount is more than ${APPROVAL_LIMIT}. ` +
+            `Approval by ${user.name} is required before proceeding further.`,
+
+          priority: "critical",
+
+          module: "purchase_order",
+
+          relatedId: user._id,
+
+          assignedTo: user._id,
+        });
+      }
     }
 
     const totals = {
@@ -466,8 +510,49 @@ export const updatePurchaseOrder = async (req, res) => {
 
     const APPROVAL_LIMIT = 5000;
 
-    if (finalAmount > APPROVAL_LIMIT) {
+    // if (finalAmount > APPROVAL_LIMIT) {
+    //   requiresSecondLevelApproval = true;
+    // }
+
+     if (finalAmount > APPROVAL_LIMIT) {
+
       requiresSecondLevelApproval = true;
+
+      // =========================================
+      // FIND USERS WITH APPROVAL PERMISSION
+      // =========================================
+
+      const approvalUsers = await User.find({
+        permissions: {
+          $in: [
+            "purchase.purchase_order_approval:edit_delete_add"
+          ]
+        }
+      }).select("_id name email");
+
+      // =========================================
+      // CREATE ALERTS
+      // =========================================
+
+      for (const user of approvalUsers) {
+
+        await createAlertOnce({
+
+          title: "Second Level of Approval",
+
+          message:
+            `Total Purchase Amount is more than ${APPROVAL_LIMIT}. ` +
+            `Approval by ${user.name} is required before proceeding further.`,
+
+          priority: "critical",
+
+          module: "purchase_order",
+
+          relatedId: user._id,
+
+          assignedTo: user._id,
+        });
+      }
     }
     // --------------------------------------------------
     // Update purchase order
@@ -1074,7 +1159,7 @@ export const exportPurchaseOrderPDF = async (req, res) => {
       })
       .populate({
         path: "items.mpn",
-        select: "MPN description",
+        select: "MPN Description",
       })
       .lean();
 
@@ -1118,6 +1203,9 @@ export const getPurchaseOrdersHistory = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
+    filter.status = {
+      $in: ["Completed", "Rejected"]
+    };
     // For header label
     const y = Number(year) || new Date().getUTCFullYear();
     const periodLabel = month
@@ -1241,6 +1329,7 @@ export const getPurchaseOrdersSummary = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
+    filter.status = "Completed"
     const summary = await PurchaseOrders.aggregate([
       { $match: filter },
       {

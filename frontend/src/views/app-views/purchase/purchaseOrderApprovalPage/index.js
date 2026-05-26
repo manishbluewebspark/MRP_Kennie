@@ -22,6 +22,7 @@ import PurchaseOrderService from "services/PurchaseOrderService";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchSuppliers } from "store/slices/supplierSlice";
 import { getAllCurrencies } from "store/slices/currencySlice";
+import { hasPermission } from "utils/auth";
 
 const { TextArea } = Input;
 
@@ -42,7 +43,7 @@ const PurchaseOrderApprovalPage = () => {
     const [rejectModalVisible, setRejectModalVisible] = useState(false);
     const [rejectReason, setRejectReason] = useState("");
     const [selectedPOId, setSelectedPOId] = useState(null);
-    
+
     const { suppliers } = useSelector(state => state.suppliers);
 
     // ---- API CALLS ----
@@ -97,7 +98,7 @@ const PurchaseOrderApprovalPage = () => {
     const processApproval = async (poId) => {
         try {
             const res = await PurchaseOrderService.updatePurchaseOrderstatus(poId, {
-                status: "Approved",
+                status: "Pending",
             });
 
             if (res.success) {
@@ -238,6 +239,7 @@ const PurchaseOrderApprovalPage = () => {
                             size="small"
                             onClick={() => handleApprove(record?._id)}
                             style={{ backgroundColor: "#22C55E", borderColor: "#22C55E" }}
+                            disabled={hasPermission('purchase_order_approval:edit_delete_add')}
                         >
                             Approve
                         </Button>
@@ -246,6 +248,7 @@ const PurchaseOrderApprovalPage = () => {
                             icon={<CloseOutlined />}
                             size="small"
                             onClick={() => showRejectModal(record?._id)}
+                            disabled={hasPermission('purchase_order_approval:edit_delete_add')}
                         >
                             Reject
                         </Button>

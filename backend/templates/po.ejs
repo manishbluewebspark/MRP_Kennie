@@ -368,9 +368,10 @@
       <table>
         <thead>
           <tr>
-            <th style="width:50px">No.</th>
+            <th style="width:50px" class="start">No.</th>
             <th style="width:120px">Part Number</th>
             <th>Description</th>
+            <th>Manufacturer</th>
             <th style="width:60px" class="center">Qty</th>
             <th style="width:60px" class="center">UOM</th>
             <th style="width:90px" class="num">Unit Price</th>
@@ -393,6 +394,9 @@
                   </td>
                   <td>
                     <%= it?.mpnText || it?.partNumber || it?.mpn?.MPN || "-" %>
+                  </td>
+                   <td>
+                    <%= it?.mpn?.Description || "-" %>
                   </td>
                   <td>
                     <%= it?.manufacturer || "-" %>

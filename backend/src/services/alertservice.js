@@ -31,7 +31,7 @@ const getWoNo = (wo) =>
   wo.workOrderNo || wo.workOrderNumber || wo.woNumber || String(wo._id);
 
 // -------------------- duplicate guard --------------------
-async function createAlertOnce({ title, module, relatedId, ...payload }) {
+export async function createAlertOnce({ title, module, relatedId, ...payload }) {
   // if no Alert model, still create (but can spam)
   if (Alert) {
     const exists = await Alert.exists({

@@ -187,6 +187,7 @@ const modules = [
         label: "Purchase Order Approval",
         actions: [
           { key: "view", label: "View Only" },
+          { key: "edit_delete_add", label: "Access to Approve" },
         ],
       },
       {
