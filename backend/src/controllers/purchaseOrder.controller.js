@@ -15,6 +15,7 @@ import { sendMailWithAttachment } from "../utils/mailer.js";
 import { convertToBaseUOM, convertToMeter } from "../utils/uomController.js";
 import User from "../models/User.js";
 import { createAlertOnce } from "../services/alertservice.js";
+import PurchaseSettings from "../models/PurchaseSettings.js";
 
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -162,12 +163,17 @@ export const addPurchaseOrder = async (req, res) => {
     const ostTax = +(subTotal * 0.09);
     const finalAmount = +(subTotal + freightAmount + ostTax);
 
-    const APPROVAL_LIMIT = 5000;
+
 
     // if (finalAmount > APPROVAL_LIMIT) {
 
     //   requiresSecondLevelApproval = true;
     // }
+    const purchaseSetting = await PurchaseSettings.findOne().lean();
+
+    const APPROVAL_LIMIT = Number(
+      purchaseSetting?.secondLevelApprovalAmountLimit || 5000
+    );
 
     if (finalAmount > APPROVAL_LIMIT) {
 
@@ -508,13 +514,17 @@ export const updatePurchaseOrder = async (req, res) => {
     const finalAmount = +(subTotal + freightAmount + ostTax);
 
 
-    const APPROVAL_LIMIT = 5000;
+    const purchaseSetting = await PurchaseSettings.findOne().lean();
+
+    const APPROVAL_LIMIT = Number(
+      purchaseSetting?.secondLevelApprovalAmountLimit || 5000
+    );
 
     // if (finalAmount > APPROVAL_LIMIT) {
     //   requiresSecondLevelApproval = true;
     // }
 
-     if (finalAmount > APPROVAL_LIMIT) {
+    if (finalAmount > APPROVAL_LIMIT) {
 
       requiresSecondLevelApproval = true;
 
@@ -1204,7 +1214,7 @@ export const getPurchaseOrdersHistory = async (req, res) => {
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
     filter.status = {
-      $in: ["Completed", "Rejected"]
+      $in: ["Completed", "Rejected","Approved"]
     };
     // For header label
     const y = Number(year) || new Date().getUTCFullYear();
@@ -1329,7 +1339,9 @@ export const getPurchaseOrdersSummary = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
-    filter.status = "Completed"
+    filter.status = {
+      $in: ["Completed", ,"Approved"]
+    };
     const summary = await PurchaseOrders.aggregate([
       { $match: filter },
       {

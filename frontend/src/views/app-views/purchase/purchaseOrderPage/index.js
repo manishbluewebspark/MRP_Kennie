@@ -187,9 +187,10 @@ const PurchaseOrderPage = () => {
          const res = await PurchaseOrderService.sendPurchaseOrderMail(poId);
             if (res.success) {
        
-        alert('Purchase Order sent successfully via email with PDF attachment!');
+        message.success('Purchase Order sent successfully via email with PDF attachment!');
+          fetchWorkOrders();
       } else {
-        alert('Failed to send Purchase Order: ' + res.error);
+        message.error('Failed to send Purchase Order: ' + res.error);
       }
 
     }

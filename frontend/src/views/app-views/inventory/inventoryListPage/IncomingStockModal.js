@@ -184,11 +184,11 @@ const handleCommitDateChange = async (record, newDate) => {
     },
     {
       title: 'Qty',
-      dataIndex: 'qty',
-      key: 'qty',
-      render: (qty) => (
+      dataIndex: 'totalQuantity',
+      key: 'totalQuantity',
+      render: (totalQuantity) => (
         <Space>
-          <Text>{qty}</Text>
+          <Text>{totalQuantity}</Text>
           {/* <Text type="secondary">{productData.uom}</Text> */}
         </Space>
       ),
@@ -305,14 +305,14 @@ const handleCommitDateChange = async (record, newDate) => {
       </Card>
 
       {/* Total Incoming Quantity */}
-      <Card size="small">
+      {/* <Card size="small">
         <div style={{ textAlign: 'center', padding: '8px' }}>
           <Text strong>Total Incoming Quantity: </Text>
           <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
             {productData.totalIncoming}
           </Text>
         </div>
-      </Card>
+      </Card> */}
     </Modal>
   );
 };

@@ -13,7 +13,8 @@ const PurchaseSettingsSchema = new Schema(
     defaultTerms: { type: String, default: "" }, // default terms & conditions
     status: { type: String, enum: ["active", "inactive"], default: "active" },
     paymentTerms: { type: [String], default: [] },
-incoterms: { type: [String], default: [] },
+    incoterms: { type: [String], default: [] },
+    secondLevelApprovalLimit: { type: Number, default: 0 },
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }
