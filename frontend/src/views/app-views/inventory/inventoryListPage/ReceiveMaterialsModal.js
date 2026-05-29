@@ -102,6 +102,14 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       align: 'center',
       render: (qty) => <Text strong>{qty}</Text>
     },
+     {
+      title: 'Last Received Qty',
+      dataIndex: 'receivedQtyTotal',
+      key: 'orderedQty',
+      width: 100,
+      align: 'center',
+      render: (receivedQtyTotal) => <Text strong>{receivedQtyTotal}</Text>
+    },
     {
       title: 'Need Date',
       dataIndex: 'needDate',
@@ -195,7 +203,11 @@ const handleSubmit = async () => {
     // Validate received quantities
     const itemsWithQuantities = purchaseOrderData?.items.filter(item => {
       const key = item._id || item.key;
-      const receivedQty = parseInt(receivedQuantities[key] || 0);
+      const previousReceivedQty = parseInt(item.receivedQtyTotal || item.receivedQty || 0);
+const currentReceivedQty = parseInt(receivedQuantities[key] || 0);
+
+// 🔥 DELTA CALCULATION (IMPORTANT)
+const receivedQty = currentReceivedQty - previousReceivedQty;
       return receivedQty > 0;
     });
 
@@ -207,7 +219,11 @@ const handleSubmit = async () => {
     // Prepare items array
     const items = itemsWithQuantities.map(item => {
       const key = item._id || item.key;
-      const receivedQty = parseInt(receivedQuantities[key] || 0);
+      const previousReceivedQty = parseInt(item.receivedQtyTotal || item.receivedQty || 0);
+const currentReceivedQty = parseInt(receivedQuantities[key] || 0);
+
+// 🔥 DELTA CALCULATION (IMPORTANT)
+const receivedQty = currentReceivedQty - previousReceivedQty;
       const rejectedQty = parseInt(rejectedQuantities[key] || 0);
 
       // Validate quantities don't exceed ordered

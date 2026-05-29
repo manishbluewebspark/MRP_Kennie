@@ -270,7 +270,7 @@ export const getInventoryList = async (req, res) => {
         "items.mpn": { $in: mpnIdsOnList },
       })
         .select(
-          "poNumber commitDate needDate supplier items.idNumber items.mpn items.uom items.qty items.receivedQty items.committedDate items.needDate status createdAt updatedAt"
+          "poNumber commitDate needDate supplier items.idNumber items.mpn items.uom items.qty items.pendingQty items.receivedQtyTotal items.committedDate items.needDate status createdAt updatedAt"
         )
         .populate("items.mpn", "MPN Description Manufacturer")
          .populate("items.uom", "code")
@@ -281,6 +281,8 @@ export const getInventoryList = async (req, res) => {
     // ✅ build PO Map: mpnId -> summary
     const poMap = new Map();
 
+
+  
 
     for (const po of pendingPOs) {
   for (const it of po.items || []) {
@@ -297,11 +299,11 @@ export const getInventoryList = async (req, res) => {
         (x) =>
           String(x?.mpnId?._id) === mid
       );
-
+      
     // ✅ raw qty
     const rawRemainingQty =
       Number(it.qty || 0) -
-      Number(it.receivedQty || 0);
+      Number(it.receivedQtyTotal || 0);
 
     if (rawRemainingQty <= 0)
       continue;
@@ -366,7 +368,8 @@ export const getInventoryList = async (req, res) => {
 
       quantity: remainingQty,
 
-      totalQuantity: it.qty,
+      totalQuantity: Number(it.qty || 0) -
+      Number(it.receivedQtyTotal || 0),
 
       UOM: poUom,
 

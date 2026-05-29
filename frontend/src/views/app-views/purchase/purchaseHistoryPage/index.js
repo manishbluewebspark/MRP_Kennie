@@ -45,6 +45,16 @@ const chip = (label) => (
 //     );
 // };
 
+const statusOptions = [
+    { label: "All", value: undefined },
+    { label: "Pending", value: "Pending" },
+    { label: "Emailed", value: "Emailed" },
+    // { label: "Acknowledged", value: "Acknowledged" },
+    { label: "Partially Received", value: "Partially Received" },
+    { label: "Completed", value: "Completed" },
+    // { label: "Closed", value: "Closed" },
+];
+
 const statusPill = (s) => {
 
     const label = (s || "Pending").toLowerCase();
@@ -152,7 +162,7 @@ const PurchaseHistoryByPeriod = () => {
     const [year, setYear] = useState(dayjs().year());
     const [month, setMonth] = useState(dayjs().month() + 1);
     const [supplier, setSupplier] = useState();
-    const [status, setStatus] = useState();
+    const [status, setStatus] = useState(undefined);
 
     const [groups, setGroups] = useState([]);
     const [periodLabel, setPeriodLabel] = useState("");
@@ -472,7 +482,7 @@ const PurchaseHistoryByPeriod = () => {
 
                     {periodType === "month" ? (
                         <>
-                            <Col xs={24} md={8} lg={6}>
+                            <Col xs={24} md={8} lg={3}>
                                 <div style={{ fontSize: 12, marginBottom: 6, fontWeight: 500 }}>Year</div>
                                 <DatePicker
                                     picker="year"
@@ -482,7 +492,7 @@ const PurchaseHistoryByPeriod = () => {
                                     disabled={suppliersLoading}
                                 />
                             </Col>
-                            <Col xs={24} md={8} lg={6}>
+                            <Col xs={24} md={8} lg={3}>
                                 <div style={{ fontSize: 12, marginBottom: 6, fontWeight: 500 }}>Month</div>
                                 <DatePicker
                                     picker="month"
@@ -521,6 +531,24 @@ const PurchaseHistoryByPeriod = () => {
                         >
                             {suppliers.map((s) => (
                                 <Option key={s._id} value={s._id}>{s.companyName}</Option>
+                            ))}
+                        </Select>
+                    </Col>
+                    <Col xs={24} md={8} lg={6}>
+                        <div style={{ fontSize: 12, marginBottom: 6, fontWeight: 500 }}>Status</div>
+                        <Select
+                            allowClear
+                            placeholder="Status"
+                            style={{ width: "100%" }}
+                            value={status}
+                            onChange={setStatus}
+                            showSearch
+                            optionFilterProp="children"
+                            // loading={suppliersLoading}
+                            // disabled={suppliersLoading}
+                        >
+                            {statusOptions?.map((s) => (
+                                <Option key={s.value} value={s.value}>{s.label}</Option>
                             ))}
                         </Select>
                     </Col>

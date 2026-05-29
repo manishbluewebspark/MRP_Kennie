@@ -1213,9 +1213,15 @@ export const getPurchaseOrdersHistory = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
-    filter.status = {
-      $in: ["Completed", "Rejected","Approved"]
-    };
+   const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed"];
+
+if (status) {
+  // single status filter
+  filter.status = status;
+} else {
+  // all statuses
+  filter.status = { $in: baseStatuses };
+}
     // For header label
     const y = Number(year) || new Date().getUTCFullYear();
     const periodLabel = month
@@ -1339,9 +1345,15 @@ export const getPurchaseOrdersSummary = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
-    filter.status = {
-      $in: ["Completed", ,"Approved"]
-    };
+   const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed"];
+
+if (status) {
+  // single status filter
+  filter.status = status;
+} else {
+  // all statuses
+  filter.status = { $in: baseStatuses };
+}
     const summary = await PurchaseOrders.aggregate([
       { $match: filter },
       {

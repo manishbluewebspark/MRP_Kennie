@@ -64,12 +64,21 @@ const PurchaseOrderPage = () => {
 
         setLoading(true);
         try {
+            // const statusFilter =
+            //     tab === "opening_orders"
+            //         ? ["Pending", "Emailed","Acknowledged","Rejected"]
+            //         : tab === "closed_orders"
+            //             ? "Closed"
+            //             : undefined;
+
             const statusFilter =
-                tab === "opening_orders"
-                    ? ["Pending", "Emailed","Acknowledged","Rejected"]
-                    : tab === "closed_orders"
-                        ? "Closed"
-                        : undefined;
+  tab === "opening_orders"
+    ? ["Pending", "Emailed", "Acknowledged", "Rejected"]
+    : tab === "closed_orders"
+      ? ["Closed"]
+      : tab === "partial_completion"
+        ? ["Partially Received"]
+        : undefined;
 
             const res = await PurchaseOrderService.getAllPurchaseOrders({
                 page: p,
@@ -310,7 +319,35 @@ const PurchaseOrderPage = () => {
 
 
     // Dummy partial completion data (if you want real, replace with API)
-    const partialCompletionData = [];
+    const partialCompletionData = (data || []).map((po) => {
+  const ordered =
+    po?.items?.reduce((sum, item) => sum + Number(item.qty || 0), 0) || 0;
+
+  const received =
+    po?.items?.reduce(
+      (sum, item) => sum + Number(item.receivedQtyTotal || 0),
+      0
+    ) || 0;
+
+  const pending = Math.max(0, ordered - received);
+
+  return {
+    key: po._id,
+
+    // ====== COLUMN KEYS ======
+    poNumber: po.poNumber,
+
+    supplier: po?.supplier?.companyName || po?.supplier || "N/A",
+
+    createdDate: po.createdAt,
+
+    amount: po?.totals?.finalAmount || 0,
+
+    ordered,
+    received,
+    pending,
+  };
+});
 
     const partialCompletionColumns = [
         {
