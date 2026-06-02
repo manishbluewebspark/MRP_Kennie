@@ -18,14 +18,15 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       const initialReceived = {};
       const initialRejected = {};
       const initialRemarks = {};
-      
+
       purchaseOrderData.items.forEach(item => {
         const key = item._id || item.key;
+
         initialReceived[key] = '';
         initialRejected[key] = '';
-        initialRemarks[key] = '';
+        initialRemarks[key] = item.remarks || '';
       });
-      
+
       setReceivedQuantities(initialReceived);
       setRejectedQuantities(initialRejected);
       setRemarks(initialRemarks);
@@ -40,11 +41,11 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       key: 'mpn',
       width: 120,
       render: (mpnData, record) => (
-      
-          <div style={{ fontWeight: 500 }}>
-            {mpnData?.MPN || record?.mpnData?.partNumber || 'N/A'}
-          </div>
-     
+
+        <div style={{ fontWeight: 500 }}>
+          {mpnData?.MPN || record?.mpnData?.partNumber || 'N/A'}
+        </div>
+
       )
     },
     {
@@ -76,9 +77,9 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       render: (uomData, record) => {
         const uomInfo = uomData || record?.uomDetails || {};
         const displayText = uomInfo.symbol || uomInfo.name || 'N/A';
-        
+
         return (
-          <div style={{ 
+          <div style={{
             padding: '4px 8px',
             backgroundColor: '#f0f7ff',
             border: '1px solid #d0e3ff',
@@ -102,13 +103,17 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       align: 'center',
       render: (qty) => <Text strong>{qty}</Text>
     },
-     {
+    {
       title: 'Last Received Qty',
       dataIndex: 'receivedQtyTotal',
       key: 'orderedQty',
       width: 100,
       align: 'center',
-      render: (receivedQtyTotal) => <Text strong>{receivedQtyTotal}</Text>
+      render: (_, record) => (
+        <Text strong>
+          {Number(record?.receivedQtyTotal || 0)}
+        </Text>
+      )
     },
     {
       title: 'Need Date',
@@ -125,10 +130,10 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       render: (_, record) => {
         const key = record._id || record.key;
         return (
-          <Input 
+          <Input
             type="number"
-            placeholder="0" 
-            size="small" 
+            placeholder="0"
+            size="small"
             style={{ width: '100%' }}
             value={receivedQuantities[key] || ''}
             onChange={(e) => handleQuantityChange(key, 'received', e.target.value)}
@@ -146,10 +151,10 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       render: (_, record) => {
         const key = record._id || record.key;
         return (
-          <Input 
+          <Input
             type="number"
-            placeholder="0" 
-            size="small" 
+            placeholder="0"
+            size="small"
             style={{ width: '100%' }}
             value={rejectedQuantities[key] || ''}
             onChange={(e) => handleQuantityChange(key, 'rejected', e.target.value)}
@@ -167,9 +172,9 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       render: (_, record) => {
         const key = record._id || record.key;
         return (
-          <Input 
-            placeholder="Enter remarks" 
-            size="small" 
+          <Input
+            placeholder="Enter remarks"
+            size="small"
             style={{ width: '100%' }}
             value={remarks[key] || ''}
             onChange={(e) => handleQuantityChange(key, 'remarks', e.target.value)}
@@ -198,72 +203,103 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
     }
   };
 
-const handleSubmit = async () => {
-  try {
-    // Validate received quantities
-    const itemsWithQuantities = purchaseOrderData?.items.filter(item => {
-      const key = item._id || item.key;
-      const previousReceivedQty = parseInt(item.receivedQtyTotal || item.receivedQty || 0);
-const currentReceivedQty = parseInt(receivedQuantities[key] || 0);
+  const handleSubmit = async () => {
+    try {
+      // Validate received quantities
+      const itemsWithQuantities = purchaseOrderData?.items.filter(item => {
+        const key = item._id || item.key;
 
-// 🔥 DELTA CALCULATION (IMPORTANT)
-const receivedQty = currentReceivedQty - previousReceivedQty;
-      return receivedQty > 0;
-    });
+        const currentReceivedQty =
+          Number(receivedQuantities[key] || 0);
 
-    if (!itemsWithQuantities || itemsWithQuantities.length === 0) {
-      message.error('Please enter received quantity for at least one item');
-      return;
-    }
+        const rejectedQty =
+          Number(rejectedQuantities[key] || 0);
 
-    // Prepare items array
-    const items = itemsWithQuantities.map(item => {
-      const key = item._id || item.key;
-      const previousReceivedQty = parseInt(item.receivedQtyTotal || item.receivedQty || 0);
-const currentReceivedQty = parseInt(receivedQuantities[key] || 0);
+        return currentReceivedQty > 0 || rejectedQty > 0;
+      });
 
-// 🔥 DELTA CALCULATION (IMPORTANT)
-const receivedQty = currentReceivedQty - previousReceivedQty;
-      const rejectedQty = parseInt(rejectedQuantities[key] || 0);
-
-      // Validate quantities don't exceed ordered
-      if (receivedQty + rejectedQty > item.qty) {
-        throw new Error(`Total quantity cannot exceed ordered quantity for ${item.description}`);
+      if (!itemsWithQuantities || itemsWithQuantities.length === 0) {
+        message.error('Please enter received quantity for at least one item');
+        return;
       }
 
-      return {
-        mpnId: item.mpn, // ✅ Backend ko mpnId chahiye
-        itemId: item._id,
-        receivedQty: receivedQty,
-        rejectedQty: rejectedQty,
-        description: item.description,
-        orderedQty: item.qty,
-        unitPrice: item.unitPrice,
-        remarks: remarks[key] || ''
+      // Prepare items array
+      const items = itemsWithQuantities.map(item => {
+        const key = item._id || item.key;
+
+        const lastReceivedQty = Number(item.receivedQtyTotal || 0);
+
+        // User jo textbox me enter kar raha hai
+        const currentReceivedQty = Number(receivedQuantities[key] || 0);
+
+        const rejectedQty = Number(rejectedQuantities[key] || 0);
+
+        const remark = remarks[key]?.trim() || '';
+
+        // Remarks mandatory
+        if (rejectedQty > 0 && !remark) {
+          throw new Error(
+            `Remarks is required for ${item.description}`
+          );
+        }
+
+        // Received Qty Last Received se kam nahi ho sakti
+        if (currentReceivedQty < lastReceivedQty) {
+          throw new Error(
+            `${item.description}: Received Qty cannot be less than Last Received Qty (${lastReceivedQty})`
+          );
+        }
+
+        // Ordered Qty se jyada nahi ho sakti
+        if (currentReceivedQty > Number(item.qty || 0)) {
+          throw new Error(
+            `${item.description}: Received Qty cannot exceed Ordered Qty (${item.qty})`
+          );
+        }
+
+        // Actual qty received in this transaction
+        const receivedQty =
+          currentReceivedQty - lastReceivedQty;
+
+        if (receivedQty === 0 && rejectedQty === 0) {
+          throw new Error(
+            `${item.description}: Please enter Received Qty or Rejected Qty`
+          );
+        }
+
+        return {
+          mpnId: item.mpn,
+          itemId: item._id,
+          receivedQty,
+          rejectedQty,
+          description: item.description,
+          orderedQty: item.qty,
+          unitPrice: item.unitPrice,
+          remarks: remark
+        };
+      });
+
+      // Final submission data
+      const submissionData = {
+        purchaseOrderId: purchaseOrderData?._id,
+        supplierId: purchaseOrderData?.supplier?._id,
+        receivedBy: "user_id_here", // ✅ Actual user ID dalo
+        items: items, // ✅ Yeh main field hai
+        notes: `Materials received for PO: ${purchaseOrderData?.poNumber}`,
+        receiveDate: new Date()
       };
-    });
 
-    // Final submission data
-    const submissionData = {
-      purchaseOrderId: purchaseOrderData?._id,
-      supplierId: purchaseOrderData?.supplier?._id,
-      receivedBy: "user_id_here", // ✅ Actual user ID dalo
-      items: items, // ✅ Yeh main field hai
-      notes: `Materials received for PO: ${purchaseOrderData?.poNumber}`,
-      receiveDate: new Date()
-    };
+      // console.log('Final Submission Data:', JSON.stringify(submissionData, null, 2));
 
-    // console.log('Final Submission Data:', JSON.stringify(submissionData, null, 2));
+      if (onSubmit) {
+        await onSubmit(submissionData);
+      }
 
-    if (onSubmit) {
-      await onSubmit(submissionData);
+    } catch (error) {
+      console.error('Validation failed:', error);
+      message.error(error.message || 'Failed to receive materials');
     }
-
-  } catch (error) {
-    console.error('Validation failed:', error);
-    message.error(error.message || 'Failed to receive materials');
-  }
-};
+  };
 
   const handleCancel = () => {
     // Reset form when canceling
@@ -355,7 +391,7 @@ const receivedQty = currentReceivedQty - previousReceivedQty;
             pagination={false}
             size="small"
             scroll={{ x: 1000 }}
-            style={{ 
+            style={{
               border: '1px solid #d9d9d9',
               borderRadius: 6,
             }}

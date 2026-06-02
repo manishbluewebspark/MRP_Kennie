@@ -329,6 +329,12 @@ const PurchaseOrderPage = () => {
       0
     ) || 0;
 
+     const rejected =
+    po?.items?.reduce(
+      (sum, item) => sum + Number(item.rejectedQtyTotal || 0),
+      0
+    ) || 0;
+
   const pending = Math.max(0, ordered - received);
 
   return {
@@ -345,6 +351,7 @@ const PurchaseOrderPage = () => {
 
     ordered,
     received,
+    rejected,
     pending,
   };
 });
@@ -428,19 +435,25 @@ const PurchaseOrderPage = () => {
                             <div>
                                 Ordered:{" "}
                                 <strong style={{ color: "#111827" }}>
-                                    {record?.ordered ?? 100}
+                                    {record?.ordered ?? 0}
                                 </strong>
                             </div>
                             <div>
                                 Received:{" "}
                                 <strong style={{ color: "#111827" }}>
-                                    {record?.received ?? 60}
+                                    {record?.received ?? 0}
+                                </strong>
+                            </div>
+                             <div>
+                                Rejected:{" "}
+                                <strong style={{ color: "#111827" }}>
+                                    {record?.rejected ?? 0}
                                 </strong>
                             </div>
                             <div>
                                 Pending:{" "}
                                 <strong style={{ color: "#111827" }}>
-                                    {record?.pending ?? 40}
+                                    {record?.pending ?? 0}
                                 </strong>
                             </div>
                         </div>

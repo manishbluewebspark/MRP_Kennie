@@ -103,13 +103,24 @@ export const createReceiveMaterial = async (req, res) => {
     // 2️⃣ Loop through received items
     // ============================
     for (const line of items) {
+      if (
+        Number(line.rejectedQty || 0) > 0 &&
+        !line.remarks?.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Remarks is required when rejected quantity is entered."
+        });
+      }
+
+
       const mpnId = getId(line.mpnId || line.mpn);
 
       if (!mpnId || !mongoose.Types.ObjectId.isValid(mpnId)) continue;
 
       const mpnDoc = mpnMap.get(String(mpnId));
 
-      console.log('-------mpnDoc',mpnDoc)
+      console.log('-------mpnDoc', mpnDoc)
       // ✅ Master UOM from MPN (Reference)
       const masterUomId = getId(mpnDoc?.UOM || mpnDoc?.uom) || null;
       const masterUomName = getUomName(masterUomId);
@@ -127,7 +138,7 @@ export const createReceiveMaterial = async (req, res) => {
       const fromUOMId = await MPN.findById(line.mpnId._id)
 
 
-      console.log('-------acceptedQty',acceptedQty,fromUomId,masterUomId)
+      console.log('-------acceptedQty', acceptedQty, fromUomId, masterUomId)
       const acceptedQtyInMaster = await convertToInventoryUom({
         qty: acceptedQty,
         fromUom: fromUomId,
@@ -142,17 +153,31 @@ export const createReceiveMaterial = async (req, res) => {
         const newReceivedTotal = prevReceivedTotal + receivedQty;
         const newRejectedTotal = prevRejectedTotal + rejectedQty;
 
-        const newAcceptedTotal = Math.max(newReceivedTotal - newRejectedTotal, 0);
-        const pendingQty = Math.max(orderedQty - newAcceptedTotal, 0);
+        // Client Requirement:
+        // Last Received Qty = Previous Last Received Qty + Current Received Qty
+        // Pending Qty = Ordered Qty - Last Received Qty
+
+        const pendingQty = Math.max(
+          orderedQty - newReceivedTotal,
+          0
+        );
 
         poItem.receivedQtyTotal = newReceivedTotal;
         poItem.rejectedQtyTotal = newRejectedTotal;
         poItem.pendingQty = pendingQty;
 
-        if (newAcceptedTotal <= 0 && newRejectedTotal > 0) poItem.status = "Rejected";
-        else if (newAcceptedTotal > 0 && pendingQty === 0) poItem.status = "Accepted";
-        else if (newAcceptedTotal > 0 && pendingQty > 0) poItem.status = "Partially Accepted";
-        else poItem.status = "Pending";
+        // Status based only on received quantity
+        if (newReceivedTotal >= orderedQty) {
+          poItem.status = "Accepted";
+        } else if (newReceivedTotal > 0) {
+          poItem.status = "Partially Accepted";
+        } else {
+          poItem.status = "Pending";
+        }
+
+        if (line.remarks?.trim()) {
+          poItem.remarks = line.remarks.trim();
+        }
 
         if (line.remarks) poItem.remarks = line.remarks;
 
@@ -174,7 +199,7 @@ export const createReceiveMaterial = async (req, res) => {
         });
       } else {
         const ordered = Number(line.orderedQty || 0);
-        const pendingQty = Math.max(ordered - acceptedQty, 0);
+        const pendingQty = Math.max(ordered - acceptedQty + rejectedQty);
 
         grnItems.push({
           mpnId,
@@ -257,10 +282,11 @@ export const createReceiveMaterial = async (req, res) => {
       updatedItems.every((it) => {
         const qty = Number(it.qty || 0);
         const receivedTotal = Number(it.receivedQtyTotal || 0);
-        const rejectedTotal = Number(it.rejectedQtyTotal || 0);
-        const acceptedTotal = Math.max(receivedTotal - rejectedTotal, 0);
-        return qty > 0 && acceptedTotal >= qty;
+
+        return qty > 0 && receivedTotal >= qty;
       });
+
+ 
 
     const someAccepted = updatedItems.some((it) => {
       const receivedTotal = Number(it.receivedQtyTotal || 0);
@@ -270,7 +296,7 @@ export const createReceiveMaterial = async (req, res) => {
     });
 
     // if (allFullyReceived) po.status = "Completed";
-        if (allFullyReceived) po.status = "Closed";
+    if (allFullyReceived) po.status = "Closed";
     else if (someAccepted) po.status = "Partially Received";
     else if (!["Cancelled", "Closed"].includes(po.status)) po.status = "Pending";
 
