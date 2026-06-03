@@ -441,7 +441,7 @@ const PurchaseOrderPage = () => {
                             <div>
                                 Received:{" "}
                                 <strong style={{ color: "#111827" }}>
-                                    {record?.received ?? 0}
+                                    {record?.received - record?.rejected ?? 0}
                                 </strong>
                             </div>
                              <div>
