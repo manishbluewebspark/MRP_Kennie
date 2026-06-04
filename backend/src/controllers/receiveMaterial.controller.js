@@ -4,7 +4,7 @@ import MPN from "../models/library/MPN.js";
 import PurchaseOrders from "../models/PurchaseOrders.js";
 import ReceiveMaterial from "../models/ReceiveMaterial.js";
 import UOM from "../models/UOM.js";
-import { convertQty, convertToInventoryUom } from "../utils/uomController.js";
+import { convertQty, convertToInventoryUom, convertToMeter } from "../utils/uomController.js";
 
 // ============================
 export const createReceiveMaterial = async (req, res) => {
@@ -120,7 +120,7 @@ export const createReceiveMaterial = async (req, res) => {
 
       const mpnDoc = mpnMap.get(String(mpnId));
 
-      console.log('-------mpnDoc', mpnDoc)
+      // console.log('-------mpnDoc', mpnDoc)
       // ✅ Master UOM from MPN (Reference)
       const masterUomId = getId(mpnDoc?.UOM || mpnDoc?.uom) || null;
       const masterUomName = getUomName(masterUomId);
@@ -138,12 +138,14 @@ export const createReceiveMaterial = async (req, res) => {
       const fromUOMId = await MPN.findById(line.mpnId._id)
 
 
-      console.log('-------acceptedQty', acceptedQty, fromUomId, masterUomId)
-      const acceptedQtyInMaster = await convertToInventoryUom({
+      // console.log('-------acceptedQty', acceptedQty, fromUomId, masterUomId)
+      const acceptedQtyInMaster = await convertToMeter({
         qty: acceptedQty,
         fromUom: fromUomId,
-        toUom: masterUomId,
+        // toUom: masterUomId,
       });
+
+      // console.log('-------acceptedQtyInMaster',acceptedQtyInMaster)
       // ---- PO totals update ----
       if (poItem) {
         const orderedQty = Number(poItem.qty || line.orderedQty || 0);
@@ -219,6 +221,15 @@ export const createReceiveMaterial = async (req, res) => {
         });
       }
 
+
+      const before = await Inventory.findOne({
+  mpnId: new mongoose.Types.ObjectId(mpnId)
+});
+
+console.log(
+  "BEFORE:",
+  before.balanceQuantity
+);
       // ============================
       // ✅ Inventory update (MASTER UOM)
       // ============================
@@ -238,6 +249,15 @@ export const createReceiveMaterial = async (req, res) => {
           { upsert: true, new: true }
         );
       }
+
+      const after = await Inventory.findOne({
+  mpnId: new mongoose.Types.ObjectId(mpnId)
+});
+
+console.log(
+  "AFTER:",
+  after.balanceQuantity
+);
 
       // 4️⃣ MPN.purchaseHistory update
       const purchaseHistoryEntry = {

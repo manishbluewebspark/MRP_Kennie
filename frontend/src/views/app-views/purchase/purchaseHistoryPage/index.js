@@ -111,10 +111,17 @@ const statusPill = (s) => {
             break;
 
         case "completed":
-        case "closed":
+      
             style = {
                 bg: "#DCFCE7",
                 color: "#166534"
+            };
+            break;
+
+       case "closed":
+        style = {
+                bg: "#f7f7f7",
+                color: "#c3542f"
             };
             break;
 

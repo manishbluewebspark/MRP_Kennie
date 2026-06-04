@@ -1213,7 +1213,7 @@ export const getPurchaseOrdersHistory = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
-   const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed"];
+   const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed","Closed"];
 
 if (status) {
   // single status filter
@@ -1345,7 +1345,7 @@ export const getPurchaseOrdersSummary = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
-   const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed"];
+   const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed","Closed"];
 
 if (status) {
   // single status filter

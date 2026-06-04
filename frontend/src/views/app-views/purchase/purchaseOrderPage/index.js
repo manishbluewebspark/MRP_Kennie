@@ -460,7 +460,7 @@ const PurchaseOrderPage = () => {
                     </div>
 
                     {/* RIGHT BUTTON */}
-                    <div style={{ display: "flex", alignItems: "flex-start" }}>
+                    {/* <div style={{ display: "flex", alignItems: "flex-start" }}>
                         <button
                             // onClick={() => console.log("Receive Goods clicked")}
                             style={{
@@ -483,7 +483,7 @@ const PurchaseOrderPage = () => {
                         >
                             Receive Goods
                         </button>
-                    </div>
+                    </div> */}
                 </div>
             ),
         },
