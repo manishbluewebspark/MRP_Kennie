@@ -159,10 +159,10 @@ export const createReceiveMaterial = async (req, res) => {
         // Last Received Qty = Previous Last Received Qty + Current Received Qty
         // Pending Qty = Ordered Qty - Last Received Qty
 
-        const pendingQty = Math.max(
-          orderedQty - newReceivedTotal,
-          0
-        );
+       const pendingQty = Math.max(
+  orderedQty - (newReceivedTotal + newRejectedTotal),
+  0
+);
 
         poItem.receivedQtyTotal = newReceivedTotal;
         poItem.rejectedQtyTotal = newRejectedTotal;
@@ -294,31 +294,32 @@ console.log(
 
     await newGRN.save();
 
-    // 6️⃣ PO overall status
-    const updatedItems = po.items || [];
+  const updatedItems = po.items || [];
 
-    const allFullyReceived =
-      updatedItems.length > 0 &&
-      updatedItems.every((it) => {
-        const qty = Number(it.qty || 0);
-        const receivedTotal = Number(it.receivedQtyTotal || 0);
+const allProcessed = updatedItems.length > 0 && updatedItems.every((it) => {
+  const orderedQty = Number(it.qty || 0);
+  const receivedTotal = Number(it.receivedQtyTotal || 0);
+  const rejectedTotal = Number(it.rejectedQtyTotal || 0);
 
-        return qty > 0 && receivedTotal >= qty;
-      });
+  const processedQty = receivedTotal + rejectedTotal;
 
- 
+  return processedQty >= orderedQty;
+});
 
-    const someAccepted = updatedItems.some((it) => {
-      const receivedTotal = Number(it.receivedQtyTotal || 0);
-      const rejectedTotal = Number(it.rejectedQtyTotal || 0);
-      const acceptedTotal = Math.max(receivedTotal - rejectedTotal, 0);
-      return acceptedTotal > 0;
-    });
+const anyProcessed = updatedItems.some((it) => {
+  const receivedTotal = Number(it.receivedQtyTotal || 0);
+  const rejectedTotal = Number(it.rejectedQtyTotal || 0);
 
-    // if (allFullyReceived) po.status = "Completed";
-    if (allFullyReceived) po.status = "Closed";
-    else if (someAccepted) po.status = "Partially Received";
-    else if (!["Cancelled", "Closed"].includes(po.status)) po.status = "Pending";
+  return (receivedTotal + rejectedTotal) > 0;
+});
+
+if (allProcessed) {
+  po.status = "Closed";
+} else if (anyProcessed) {
+  po.status = "Partially Received";
+} else if (!["Cancelled", "Closed"].includes(po.status)) {
+  po.status = "Pending";
+}
 
     await po.save();
 
