@@ -42,7 +42,7 @@ const PurchaseOrdersReceivePage = () => {
 
     // ✅ Page load pe Pending POs fetch
     useEffect(() => {
-        dispatch(fetchPurchaseOrders({ status: ["Partially Received","Acknowledged","Emailed"] }));
+        dispatch(fetchPurchaseOrders({ status: ["Partially Received", "Acknowledged", "Emailed"] }));
     }, [dispatch]);
 
     // 🔹 Card pe "Click to receive"
@@ -73,7 +73,7 @@ const PurchaseOrdersReceivePage = () => {
                 // PO list ko refresh karo (sirf Pending hi chahiye toh)
                 dispatch(
                     fetchPurchaseOrders({
-                        status: ["Emailed", "Partially Received"],
+                        status: ["Partially Received", "Acknowledged", "Emailed"],
                     })
                 );
 
@@ -94,6 +94,45 @@ const PurchaseOrdersReceivePage = () => {
         setIsReceiveMaterialModalOpen(false);
         setSelectedPO(null);
     };
+
+    const handleClosePO = async (id) => {
+  try {
+    const po = selectedPO;
+
+    const canClose = po?.items?.every((item) => {
+      const orderedQty = Number(item.qty || 0);
+      const receivedQty = Number(item.receivedQtyTotal || 0);
+      const rejectedQty = Number(item.rejectedQtyTotal || 0);
+
+      return (
+        receivedQty >= orderedQty ||
+        receivedQty + rejectedQty >= orderedQty
+      );
+    });
+
+    if (!canClose) {
+      return message.error(
+        "PO cannot be closed. Ordered Qty must be fully received or received + rejected must equal ordered qty."
+      );
+    }
+
+    await ReceiveMaterialService.closePurchaseOrder(id);
+
+    message.success("PO Closed Successfully");
+
+    setIsReceiveMaterialModalOpen(false);
+
+    dispatch(
+      fetchPurchaseOrders({
+        status: ["Partially Received", "Acknowledged", "Emailed"],
+      })
+    );
+  } catch (err) {
+    message.error(
+      err?.response?.data?.message || "Failed to close PO"
+    );
+  }
+};
 
     // 🔄 Loading state
     if (isLoading && !purchaseOrders.length) {
@@ -266,6 +305,7 @@ const PurchaseOrdersReceivePage = () => {
                 onCancel={handleModalCancel}
                 onSubmit={handleReceiveSubmit}
                 purchaseOrderData={selectedPO}
+                closePO={handleClosePO}
             />
         </div>
     );

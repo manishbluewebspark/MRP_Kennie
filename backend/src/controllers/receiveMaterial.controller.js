@@ -165,8 +165,9 @@ export const createReceiveMaterial = async (req, res) => {
 );
 
         poItem.receivedQtyTotal = newReceivedTotal;
-        poItem.rejectedQtyTotal = newRejectedTotal;
+        poItem.rejectedQtyTotal = rejectedQty;
         poItem.pendingQty = pendingQty;
+        // poItem.remarks = 
 
         // Status based only on received quantity
         if (newReceivedTotal >= orderedQty) {
@@ -181,7 +182,7 @@ export const createReceiveMaterial = async (req, res) => {
           poItem.remarks = line.remarks.trim();
         }
 
-        if (line.remarks) poItem.remarks = line.remarks;
+        // if (line.remarks) poItem.remarks = line.remarks;
 
         grnItems.push({
           mpnId, // ✅ always string id
@@ -296,28 +297,41 @@ console.log(
 
   const updatedItems = po.items || [];
 
-const allProcessed = updatedItems.length > 0 && updatedItems.every((it) => {
-  const orderedQty = Number(it.qty || 0);
-  const receivedTotal = Number(it.receivedQtyTotal || 0);
-  const rejectedTotal = Number(it.rejectedQtyTotal || 0);
+// const allProcessed = updatedItems.length > 0 && updatedItems.every((it) => {
+//   const orderedQty = Number(it.qty || 0);
+//   const receivedTotal = Number(it.receivedQtyTotal || 0);
+//   const rejectedTotal = Number(it.rejectedQtyTotal || 0);
 
-  const processedQty = receivedTotal + rejectedTotal;
+//   const processedQty = receivedTotal + rejectedTotal;
 
-  return processedQty >= orderedQty;
+//   return processedQty >= orderedQty;
+// });
+
+// const anyProcessed = updatedItems.some((it) => {
+//   const receivedTotal = Number(it.receivedQtyTotal || 0);
+//   const rejectedTotal = Number(it.rejectedQtyTotal || 0);
+
+//   return (receivedTotal + rejectedTotal) > 0;
+// });
+
+// if (allProcessed) {
+//   po.status = "Closed";
+// } else if (anyProcessed) {
+//   po.status = "Partially Received";
+// } else if (!["Cancelled", "Closed"].includes(po.status)) {
+//   po.status = "Pending";
+// }
+
+const anyReceived = updatedItems.some((it) => {
+  return (
+    Number(it.receivedQtyTotal || 0) > 0 ||
+    Number(it.rejectedQtyTotal || 0) > 0
+  );
 });
 
-const anyProcessed = updatedItems.some((it) => {
-  const receivedTotal = Number(it.receivedQtyTotal || 0);
-  const rejectedTotal = Number(it.rejectedQtyTotal || 0);
-
-  return (receivedTotal + rejectedTotal) > 0;
-});
-
-if (allProcessed) {
-  po.status = "Closed";
-} else if (anyProcessed) {
+if (anyReceived) {
   po.status = "Partially Received";
-} else if (!["Cancelled", "Closed"].includes(po.status)) {
+} else {
   po.status = "Pending";
 }
 
@@ -559,3 +573,47 @@ if (allProcessed) {
 //     });
 //   }
 // };
+
+
+export const closePurchaseOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+
+    const po = await PurchaseOrders.findById(id);
+
+    if (!po) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase Order not found",
+      });
+    }
+
+    if (po.status === "Closed") {
+      return res.status(400).json({
+        success: false,
+        message: "Purchase Order already closed",
+      });
+    }
+
+    po.status = "Closed";
+    po.closedAt = new Date();
+    po.closedBy = req.user._id;
+    po.closeRemarks = "Close PO Manual";
+
+    await po.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Purchase Order closed successfully",
+      data: po,
+    });
+  } catch (error) {
+    console.error("closePurchaseOrder", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

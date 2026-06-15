@@ -10,5 +10,12 @@ ReceiveMaterialService.takeReceiveMaterial = function (data) {
   });
 };
 
+ReceiveMaterialService.closePurchaseOrder = function (id) {
+  return fetch({
+    url: `/receive-material/close-po/${id}`,
+    method: "put",
+  });
+};
+
 export default ReceiveMaterialService;
 

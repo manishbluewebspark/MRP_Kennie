@@ -339,7 +339,7 @@ const PurchaseOrderPage = () => {
 
   return {
     key: po._id,
-
+    _id:po?._id,
     // ====== COLUMN KEYS ======
     poNumber: po.poNumber,
 
@@ -348,7 +348,7 @@ const PurchaseOrderPage = () => {
     createdDate: po.createdAt,
 
     amount: po?.totals?.finalAmount || 0,
-
+    status:po?.status,
     ordered,
     received,
     rejected,
@@ -484,9 +484,27 @@ const PurchaseOrderPage = () => {
                             Receive Goods
                         </button>
                     </div> */}
+                    <div style={{ display: "flex", gap: 6 }}>
+          <ActionButtons
+            onEdit={() => handleEdit(record?._id)}
+            // onDelete={() => handleDelete(record?._id)}
+            // onInfo={() =>
+            //   navigate(`/app/purchase/view-purchase-order/${record?._id}`)
+            // }
+            onMail={() => handleSendMail(record?._id)}
+            // onCross={() => confirmClose(record?._id)}
+            showEdit
+            // showInfo
+            // showDelete
+            // showCross
+            showMail={record?.status === "Partially Received"}
+            iconOnly
+          />
+        </div>
                 </div>
             ),
         },
+        
     ];
 
     const closedOrderColumns = [

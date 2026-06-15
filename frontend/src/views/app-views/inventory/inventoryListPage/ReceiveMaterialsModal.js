@@ -6,12 +6,16 @@ import { formatDate } from 'utils/formatDate';
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData }) => {
+const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData, closePO }) => {
+  console.log("closePO", closePO);
+  console.log("type", typeof closePO);
   const [form] = Form.useForm();
   const [receivedQuantities, setReceivedQuantities] = useState({});
   const [rejectedQuantities, setRejectedQuantities] = useState({});
   const [remarks, setRemarks] = useState({});
 
+
+  console.log('----purchaseOrderData', purchaseOrderData)
   // Initialize quantities when modal opens or purchaseOrderData changes
   useEffect(() => {
     if (visible && purchaseOrderData?.items) {
@@ -116,6 +120,14 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
       )
     },
     {
+      title: 'Rejected Qty',
+      dataIndex: 'rejectedQtyTotal',
+      key: 'rejectedQtyTotal',
+      width: 100,
+      align: 'center',
+      render: (rejectedQtyTotal) => <Text strong>{rejectedQtyTotal}</Text>
+    },
+    {
       title: 'Need Date',
       dataIndex: 'needDate',
       key: 'needDate',
@@ -132,6 +144,12 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
         return (
           <Input
             type="number"
+            // disabled={
+            //   (
+            //     Number(record?.receivedQtyTotal || 0) +
+            //     Number(record?.rejectedQtyTotal || 0)
+            //   ) >= Number(record?.qty || 0)
+            // }
             placeholder="0"
             size="small"
             style={{ width: '100%' }}
@@ -153,6 +171,11 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
         return (
           <Input
             type="number"
+            // disabled={
+            //   (Number(record?.receivedQtyTotal || 0) +
+            //     Number(record?.rejectedQtyTotal || 0)) >=
+            //   Number(record?.qty || 0)
+            // }
             placeholder="0"
             size="small"
             style={{ width: '100%' }}
@@ -173,6 +196,11 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
         const key = record._id || record.key;
         return (
           <Input
+            // disabled={
+            //   (Number(record?.receivedQtyTotal || 0) +
+            //     Number(record?.rejectedQtyTotal || 0)) >=
+            //   Number(record?.qty || 0)
+            // }
             placeholder="Enter remarks"
             size="small"
             style={{ width: '100%' }}
@@ -258,10 +286,10 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
         }
 
         // Actual qty received in this transaction
- const receivedQty = Math.max(
-  currentReceivedQty - lastReceivedQty,
-  0
-);
+        const receivedQty = Math.max(
+          currentReceivedQty - lastReceivedQty,
+          0
+        );
 
         if (receivedQty === 0 && rejectedQty === 0) {
           throw new Error(
@@ -312,11 +340,68 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
     onCancel();
   };
 
+  const handleClosePO = (id) => {
+    if (typeof closePO === "function") {
+      closePO(id);
+    } else {
+      console.error("closePO is not a function", closePO);
+    }
+  };
+
   // Prepare table data with proper keys
   const tableData = purchaseOrderData?.items?.map(item => ({
     ...item,
     key: item._id || item.key
   })) || [];
+
+
+  const allItemsProcessed =
+    purchaseOrderData?.items?.length > 0 &&
+    purchaseOrderData.items.every((item) => {
+      const processed =
+        Number(item?.receivedQtyTotal || 0) +
+        Number(item?.rejectedQtyTotal || 0);
+
+      return processed >= Number(item?.qty || 0);
+    });
+
+  const hasPendingItems =
+    purchaseOrderData?.items?.some((item) => {
+      const processed =
+        Number(item?.receivedQtyTotal || 0) +
+        Number(item?.rejectedQtyTotal || 0);
+
+      return processed < Number(item?.qty || 0);
+    }) || false;
+
+  const hasAnyActivity =
+    purchaseOrderData?.items?.some((item) => {
+      return (
+        Number(item?.receivedQtyTotal || 0) > 0 ||
+        Number(item?.rejectedQtyTotal || 0) > 0
+      );
+    }) || false;
+
+
+
+  const isPOCompleted =
+    purchaseOrderData?.items?.length > 0 &&
+    purchaseOrderData.items.every((item) => {
+      const ordered = Number(item?.qty || 0);
+
+      const received = Number(item?.receivedQtyTotal || 0);
+
+      const rejected = Number(item?.rejectedQtyTotal || 0);
+
+      return (
+        received >= ordered ||
+        (received + rejected) >= ordered
+      );
+    });
+
+ const canForceClose =
+  purchaseOrderData?.status !== "Closed" &&
+  hasAnyActivity;
 
   return (
     <Modal
@@ -403,11 +488,32 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData 
         <Divider style={{ margin: '16px 0' }} />
 
         {/* Footer Buttons */}
-        <div style={{ textAlign: 'right' }}>
-          <Button onClick={handleCancel} style={{ marginRight: 8 }}>
+        <div style={{ textAlign: "right" }}>
+          <Button
+            onClick={handleCancel}
+            style={{ marginRight: 8 }}
+          >
             Cancel
           </Button>
-          <Button type="primary" onClick={handleSubmit}>
+
+          {canForceClose && (
+            <Button
+              danger
+              onClick={() => handleClosePO(purchaseOrderData?._id)}
+              style={{ marginRight: 8 }}
+            >
+              Close PO
+            </Button>
+          )}
+
+          <Button
+            type="primary"
+            onClick={handleSubmit}
+            // disabled={
+            //   isPOCompleted ||
+            //   purchaseOrderData?.status === "Closed"
+            // }
+          >
             Receive Materials
           </Button>
         </div>

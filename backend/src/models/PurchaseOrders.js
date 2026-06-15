@@ -178,6 +178,21 @@ const PurchaseOrderSchema = new Schema(
       totalMaxPurchaseQty: { type: Number, default: 0 },
       totalOrderedQty: { type: Number, default: 0 }
     },
+    closedAt: {
+  type: Date,
+  default: null,
+},
+
+closedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User",
+  default: null,
+},
+
+closeRemarks: {
+  type: String,
+  default: "",
+},
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }

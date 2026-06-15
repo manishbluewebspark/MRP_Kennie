@@ -468,6 +468,15 @@ export const updatePurchaseOrder = async (req, res) => {
     // Items processing
     // --------------------------------------------------
 
+    const existingPO = await PurchaseOrders.findById(id);
+
+    if (!existingPO) {
+      return res.status(404).json({
+        success: false,
+        error: "Purchase order not found",
+      });
+    }
+
     let subTotal = 0;
 
     const items = (data.items || []).map((item) => {
@@ -477,18 +486,56 @@ export const updatePurchaseOrder = async (req, res) => {
 
       const extPrice = +(qty * unitPrice * (1 - discount / 100));
 
-      // const inventory = inventoryMap.get(String(item.mpn));
+      const oldItem = existingPO.items.find(
+        (x) =>
+          String(x._id) === String(item._id) ||
+          String(x.mpn) === String(item.mpn)
+      );
 
-      // if (inventory) {
-      //   const balanceQuantity = num(inventory.balanceQuantity);
-      //   const incomingQuantity = num(inventory.incomingQuantity);
+      let receivedQtyTotal = Number(oldItem?.receivedQtyTotal || 0);
+      let rejectedQtyTotal = Number(oldItem?.rejectedQtyTotal || 0);
 
-      //   const allowedQty = balanceQuantity + incomingQuantity;
+      // =========================================
+      // PO PARTIALLY RECEIVED CASE
+      // =========================================
 
-      //   if (qty > allowedQty) {
-      //     requiresSecondLevelApproval = true;
-      //   }
-      // }
+      if (
+        existingPO.status === "Partially Received" &&
+        oldItem
+      ) {
+        const oldQty = Number(oldItem.qty || 0);
+
+        // Qty reduce hui
+        if (qty < oldQty) {
+          let reduceBy = oldQty - qty;
+
+          // Pehle rejected qty se adjust karo
+          if (rejectedQtyTotal > 0) {
+            const rejectedReduction = Math.min(
+              rejectedQtyTotal,
+              reduceBy
+            );
+
+            rejectedQtyTotal =
+              rejectedQtyTotal - rejectedReduction;
+
+            reduceBy = reduceBy - rejectedReduction;
+          }
+
+          // Safety validation
+          if (receivedQtyTotal > qty) {
+            throw new Error(
+              `${item.description || item.mpn
+              }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
+            );
+          }
+        }
+      }
+
+      const pendingQty = Math.max(
+        qty - (receivedQtyTotal + rejectedQtyTotal),
+        0
+      );
 
       subTotal += extPrice;
 
@@ -498,6 +545,9 @@ export const updatePurchaseOrder = async (req, res) => {
         unitPrice,
         discount,
         extPrice,
+        receivedQtyTotal,
+        rejectedQtyTotal,
+        // pendingQty,
       };
     });
 
@@ -568,14 +618,31 @@ export const updatePurchaseOrder = async (req, res) => {
     // Update purchase order
     // --------------------------------------------------
 
+
+    let poStatus = existingPO.status;
+
+    // Sirf approval case me status change karo
+    if (requiresSecondLevelApproval) {
+      poStatus = "Pending Approval";
+    }
+
+    // Partially Received ko preserve rakho
+    if (existingPO.status === "Partially Received") {
+      poStatus = "Partially Received";
+    }
+
+    // Closed ko preserve rakho
+    if (existingPO.status === "Closed") {
+      poStatus = "Closed";
+    }
+
+
     const updated = await PurchaseOrders.findByIdAndUpdate(
       id,
       {
         ...data,
         requiresSecondLevelApproval,
-        status: requiresSecondLevelApproval
-          ? "Pending Approval"
-          : "Pending",
+        status: poStatus,
         items,
         totals: {
           freightAmount,
@@ -1027,10 +1094,11 @@ export const getPurchaseOrderById = async (req, res) => {
 /**
  * Send Purchase Order by Email
  */
+
+
 export const sendPurchaseOrderMail = async (req, res) => {
   try {
     const { id } = req.params;
-    // const { toEmail } = req.body; // optional override
 
     const purchaseOrder = await PurchaseOrders.findById(id)
       .populate("supplier")
@@ -1044,117 +1112,384 @@ export const sendPurchaseOrderMail = async (req, res) => {
       })
       .lean();
 
+    console.log('--------purchaseOrder', purchaseOrder)
 
     if (!purchaseOrder) {
-      return res.status(404).json({ success: false, message: "Purchase Order not found" });
-    }
-
-
-
-    const receiverEmail = purchaseOrder?.supplier?.email;
-    if (!receiverEmail) {
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
-        message: "Supplier email not found. Please send `toEmail` in body.",
+        message: "Purchase Order not found",
       });
     }
 
-    // ✅ Generate PDF buffer (no temp file needed)
-    const pdfBuffer = await generatePurchaseOrderPDFBuffer(purchaseOrder);
-    const ackUrl = `${process.env.BACKEND_API_URL}/purchase-orders/accept/ack/${purchaseOrder._id}`;
-    // ✅ Send Email with attachment
-    await sendMailWithAttachment({
-      to: receiverEmail,
-      subject: `Purchase Order - ${purchaseOrder.poNumber}`,
-      html: `
-  <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color:#111; line-height:1.6;">
-    
-    <p style="margin:0 0 12px;">
-      Hello ${purchaseOrder?.supplier?.name || "Team"},
-    </p>
+    const receiverEmail = purchaseOrder?.supplier?.email;
 
-    <p style="margin:0 0 12px;">
-      Please find attached <b>Purchase Order ${purchaseOrder?.poNumber || ""}</b>
-      ${purchaseOrder?.poDate ? `dated <b>${new Date(purchaseOrder.poDate).toLocaleDateString("en-GB")}</b>` : ""}.
-    </p>
+    if (!receiverEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Supplier email not found",
+      });
+    }
 
-    <div style="margin:14px 0 14px; padding:12px; background:#f6faff; border:1px solid #d6e4ff; border-radius:8px;">
-      <div style="font-size:13px; color:#333;">
-        <div><b>PO No:</b> ${purchaseOrder?.poNumber || "-"}</div>
-        ${purchaseOrder?.referenceNo ? `<div><b>Reference No:</b> ${purchaseOrder.referenceNo}</div>` : ""}
-        ${purchaseOrder?.needDate ? `<div><b>Need Date:</b> ${new Date(purchaseOrder.needDate).toLocaleDateString("en-GB")}</div>` : ""}
-        ${purchaseOrder?.shipToAddress ? `<div style="margin-top:8px;"><b>Ship To:</b><br/>${String(purchaseOrder.shipToAddress).replace(/\n/g, "<br/>")}</div>` : ""}
+    const isPartialReceived =
+      purchaseOrder.status === "Partially Received";
+
+    const pdfBuffer =
+      await generatePurchaseOrderPDFBuffer(purchaseOrder);
+
+    const ackUrl =
+      `${process.env.BACKEND_API_URL}/purchase-orders/accept/ack/${purchaseOrder._id}`;
+
+    let subject = "";
+    let html = "";
+
+    // =====================================================
+    // PARTIAL RECEIVED MAIL
+    // =====================================================
+
+    if (isPartialReceived) {
+      const rejectedItems = purchaseOrder.items.filter(
+        (item) => Number(item?.receivedQtyTotal || 0) > 0
+      );
+
+      console.log('----rejectedItems', rejectedItems)
+
+      subject = `Rejected Material / Replacement Required - ${purchaseOrder.poNumber}`;
+
+      html = `
+      <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;">
+        
+        <p>
+          Hello ${purchaseOrder?.supplier?.name || "Team"},
+        </p>
+
+        <p>
+          We would like to inform you that materials received
+          against Purchase Order
+          <b>${purchaseOrder.poNumber}</b>
+          have been inspected.
+        </p>
+
+        <p>
+          Some quantity has been rejected and replacement
+          is required.
+        </p>
+
+        <table
+          style="
+            border-collapse:collapse;
+            width:100%;
+            margin-top:15px;
+          "
+        >
+          <tr>
+            <th style="border:1px solid #ddd;padding:8px;">
+              Item
+            </th>
+            <th style="border:1px solid #ddd;padding:8px;">
+              Ordered
+            </th>
+            <th style="border:1px solid #ddd;padding:8px;">
+              Received
+            </th>
+            <th style="border:1px solid #ddd;padding:8px;">
+              Rejected
+            </th>
+          </tr>
+
+          ${rejectedItems
+          .map(
+            (item) => `
+                <tr>
+                  <td style="border:1px solid #ddd;padding:8px;">
+                    ${item?.description || ""}
+                  </td>
+                  <td style="border:1px solid #ddd;padding:8px;">
+                    ${item?.qty || 0}
+                  </td>
+                  <td style="border:1px solid #ddd;padding:8px;">
+                    ${item?.receivedQtyTotal || 0}
+                  </td>
+                  <td style="border:1px solid #ddd;padding:8px;color:red;">
+                    ${item?.rejectedQtyTotal || 0}
+                  </td>
+                </tr>
+              `
+          )
+          .join("")}
+        </table>
+
+        <p style="margin-top:20px;">
+          Kindly arrange replacement for the rejected quantity
+          and share the expected delivery date.
+        </p>
+
+        <p>
+          Regards,<br/>
+          <b>Exxel Technology Pte Ltd</b>
+        </p>
       </div>
-    </div>
+      `;
+    }
 
-    <p style="margin:0 0 12px;">
-      Kindly acknowledge receipt and share the <b>committed delivery date</b>.
-      If you have any questions or need clarifications, please reply to this email.
-    </p>
+    // =====================================================
+    // NORMAL PO MAIL
+    // =====================================================
 
-      <!-- ACK BUTTON -->
-  <div style="margin:20px 0; text-align:center;">
-    <a
-      href="${ackUrl}"
-      style="
-        display:inline-block;
-        padding:12px 28px;
-        background:#16a34a;
-        color:#fff;
-        text-decoration:none;
-        border-radius:6px;
-        font-weight:bold;
-      "
-    >
-      ✔ Acknowledge Purchase Order
-    </a>
-  </div>
+    else {
+      subject = `Purchase Order - ${purchaseOrder.poNumber}`;
 
-  <p style="font-size:13px; color:#555;">
-    By clicking the button above, you confirm receipt of this Purchase Order.
-  </p>
+      html = `
+      <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color:#111; line-height:1.6;">
 
-    <p style="margin:0;">
-      Regards,<br/>
-      <b>Exxel Technology Pte Ltd</b><br/>
-      ${purchaseOrder?.createdBy?.email ? `<span style="color:#555;">${purchaseOrder.createdBy.email}</span>` : ""}
-    </p>
+        <p>
+          Hello ${purchaseOrder?.supplier?.name || "Team"},
+        </p>
 
-    <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
+        <p>
+          Please find attached
+          <b>Purchase Order ${purchaseOrder?.poNumber || ""}</b>
+          ${purchaseOrder?.poDate
+          ? `dated <b>${new Date(
+            purchaseOrder.poDate
+          ).toLocaleDateString("en-GB")}</b>`
+          : ""
+        }.
+        </p>
 
-    <p style="margin:0; font-size:12px; color:#777;">
-      This is an auto-generated email. Please do not share confidential information with unintended recipients.
-    </p>
-  </div>
-`,
+        <div
+          style="
+            margin:14px 0;
+            padding:12px;
+            background:#f6faff;
+            border:1px solid #d6e4ff;
+            border-radius:8px;
+          "
+        >
+          <div>
+            <div>
+              <b>PO No:</b> ${purchaseOrder?.poNumber || "-"}
+            </div>
 
-      attachments: [
+            ${purchaseOrder?.referenceNo
+          ? `<div><b>Reference No:</b> ${purchaseOrder.referenceNo}</div>`
+          : ""
+        }
+
+            ${purchaseOrder?.needDate
+          ? `<div><b>Need Date:</b> ${new Date(
+            purchaseOrder.needDate
+          ).toLocaleDateString("en-GB")}</div>`
+          : ""
+        }
+          </div>
+        </div>
+
+        <p>
+          Kindly acknowledge receipt and share the
+          <b>committed delivery date</b>.
+        </p>
+
+        <div style="margin:20px 0;text-align:center;">
+          <a
+            href="${ackUrl}"
+            style="
+              display:inline-block;
+              padding:12px 28px;
+              background:#16a34a;
+              color:#fff;
+              text-decoration:none;
+              border-radius:6px;
+              font-weight:bold;
+            "
+          >
+            ✔ Acknowledge Purchase Order
+          </a>
+        </div>
+
+        <p>
+          Regards,<br/>
+          <b>Exxel Technology Pte Ltd</b>
+        </p>
+
+      </div>
+      `;
+    }
+
+    const mailOptions = {
+      to: receiverEmail,
+      subject,
+      html,
+    };
+
+    if (!isPartialReceived) {
+      mailOptions.attachments = [
         {
           filename: `PO_${purchaseOrder.poNumber}.pdf`,
           content: pdfBuffer,
           contentType: "application/pdf",
         },
-      ],
-    });
+      ];
+    }
 
-    // ✅ Update PO status
-    await PurchaseOrders.findByIdAndUpdate(id, {
-      status: "Emailed",
-      emailedAt: new Date(),
-    });
+    await sendMailWithAttachment(mailOptions);
+
+    // =====================================================
+    // STATUS UPDATE
+    // =====================================================
+
+    if (!isPartialReceived) {
+      await PurchaseOrders.findByIdAndUpdate(id, {
+        status: "Emailed",
+        emailedAt: new Date(),
+      });
+    }
 
     return res.json({
       success: true,
-      message: `PO emailed successfully to ${receiverEmail}`
+      message: `PO emailed successfully to ${receiverEmail}`,
     });
   } catch (error) {
     console.error("❌ sendPurchaseOrderMail error:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
+// export const sendPurchaseOrderMail = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     // const { toEmail } = req.body; // optional override
+
+//     const purchaseOrder = await PurchaseOrders.findById(id)
+//       .populate("supplier")
+//       .populate({
+//         path: "items.uom",
+//         select: "name code",
+//       })
+//       .populate({
+//         path: "items.mpn",
+//         select: "MPN description",
+//       })
+//       .lean();
+
+
+
+
+//     if (!purchaseOrder) {
+//       return res.status(404).json({ success: false, message: "Purchase Order not found" });
+//     }
+
+
+//     const isPartialReceived =
+//   purchaseOrder.status === "Partially Received";
+
+
+//     const receiverEmail = purchaseOrder?.supplier?.email;
+//     if (!receiverEmail) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Supplier email not found. Please send `toEmail` in body.",
+//       });
+//     }
+
+//     // ✅ Generate PDF buffer (no temp file needed)
+//     const pdfBuffer = await generatePurchaseOrderPDFBuffer(purchaseOrder);
+//     const ackUrl = `${process.env.BACKEND_API_URL}/purchase-orders/accept/ack/${purchaseOrder._id}`;
+//     // ✅ Send Email with attachment
+//     await sendMailWithAttachment({
+//       to: receiverEmail,
+//       subject: `Purchase Order - ${purchaseOrder.poNumber}`,
+//       html: `
+//   <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color:#111; line-height:1.6;">
+
+//     <p style="margin:0 0 12px;">
+//       Hello ${purchaseOrder?.supplier?.name || "Team"},
+//     </p>
+
+//     <p style="margin:0 0 12px;">
+//       Please find attached <b>Purchase Order ${purchaseOrder?.poNumber || ""}</b>
+//       ${purchaseOrder?.poDate ? `dated <b>${new Date(purchaseOrder.poDate).toLocaleDateString("en-GB")}</b>` : ""}.
+//     </p>
+
+//     <div style="margin:14px 0 14px; padding:12px; background:#f6faff; border:1px solid #d6e4ff; border-radius:8px;">
+//       <div style="font-size:13px; color:#333;">
+//         <div><b>PO No:</b> ${purchaseOrder?.poNumber || "-"}</div>
+//         ${purchaseOrder?.referenceNo ? `<div><b>Reference No:</b> ${purchaseOrder.referenceNo}</div>` : ""}
+//         ${purchaseOrder?.needDate ? `<div><b>Need Date:</b> ${new Date(purchaseOrder.needDate).toLocaleDateString("en-GB")}</div>` : ""}
+//         ${purchaseOrder?.shipToAddress ? `<div style="margin-top:8px;"><b>Ship To:</b><br/>${String(purchaseOrder.shipToAddress).replace(/\n/g, "<br/>")}</div>` : ""}
+//       </div>
+//     </div>
+
+//     <p style="margin:0 0 12px;">
+//       Kindly acknowledge receipt and share the <b>committed delivery date</b>.
+//       If you have any questions or need clarifications, please reply to this email.
+//     </p>
+
+//       <!-- ACK BUTTON -->
+//   <div style="margin:20px 0; text-align:center;">
+//     <a
+//       href="${ackUrl}"
+//       style="
+//         display:inline-block;
+//         padding:12px 28px;
+//         background:#16a34a;
+//         color:#fff;
+//         text-decoration:none;
+//         border-radius:6px;
+//         font-weight:bold;
+//       "
+//     >
+//       ✔ Acknowledge Purchase Order
+//     </a>
+//   </div>
+
+//   <p style="font-size:13px; color:#555;">
+//     By clicking the button above, you confirm receipt of this Purchase Order.
+//   </p>
+
+//     <p style="margin:0;">
+//       Regards,<br/>
+//       <b>Exxel Technology Pte Ltd</b><br/>
+//       ${purchaseOrder?.createdBy?.email ? `<span style="color:#555;">${purchaseOrder.createdBy.email}</span>` : ""}
+//     </p>
+
+//     <hr style="border:none; border-top:1px solid #eee; margin:18px 0;" />
+
+//     <p style="margin:0; font-size:12px; color:#777;">
+//       This is an auto-generated email. Please do not share confidential information with unintended recipients.
+//     </p>
+//   </div>
+// `,
+
+//       attachments: [
+//         {
+//           filename: `PO_${purchaseOrder.poNumber}.pdf`,
+//           content: pdfBuffer,
+//           contentType: "application/pdf",
+//         },
+//       ],
+//     });
+
+//     // ✅ Update PO status
+//     await PurchaseOrders.findByIdAndUpdate(id, {
+//       status: "Emailed",
+//       emailedAt: new Date(),
+//     });
+
+//     return res.json({
+//       success: true,
+//       message: `PO emailed successfully to ${receiverEmail}`
+//     });
+//   } catch (error) {
+//     console.error("❌ sendPurchaseOrderMail error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 
 export const exportPurchaseOrderPDF = async (req, res) => {
@@ -1213,15 +1548,15 @@ export const getPurchaseOrdersHistory = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
-   const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed","Closed"];
+    const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed", "Closed"];
 
-if (status) {
-  // single status filter
-  filter.status = status;
-} else {
-  // all statuses
-  filter.status = { $in: baseStatuses };
-}
+    if (status) {
+      // single status filter
+      filter.status = status;
+    } else {
+      // all statuses
+      filter.status = { $in: baseStatuses };
+    }
     // For header label
     const y = Number(year) || new Date().getUTCFullYear();
     const periodLabel = month
@@ -1345,15 +1680,15 @@ export const getPurchaseOrdersSummary = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
-   const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed","Closed"];
+    const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed", "Closed"];
 
-if (status) {
-  // single status filter
-  filter.status = status;
-} else {
-  // all statuses
-  filter.status = { $in: baseStatuses };
-}
+    if (status) {
+      // single status filter
+      filter.status = status;
+    } else {
+      // all statuses
+      filter.status = { $in: baseStatuses };
+    }
     const summary = await PurchaseOrders.aggregate([
       { $match: filter },
       {
