@@ -322,14 +322,20 @@ console.log(
 //   po.status = "Pending";
 // }
 
-const anyReceived = updatedItems.some((it) => {
-  return (
-    Number(it.receivedQtyTotal || 0) > 0 ||
-    Number(it.rejectedQtyTotal || 0) > 0
-  );
+const allReceived = updatedItems.every((it) => {
+  const orderedQty = Number(it.qty || 0);
+  const receivedQty = Number(it.receivedQtyTotal || 0);
+
+  return receivedQty >= orderedQty;
 });
 
-if (anyReceived) {
+const anyReceived = updatedItems.some((it) => {
+  return Number(it.receivedQtyTotal || 0) > 0;
+});
+
+if (allReceived) {
+  po.status = "Closed";
+} else if (anyReceived) {
   po.status = "Partially Received";
 } else {
   po.status = "Pending";
