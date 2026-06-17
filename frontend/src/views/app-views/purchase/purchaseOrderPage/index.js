@@ -52,6 +52,13 @@ const PurchaseOrderPage = () => {
     const [activeTab, setActiveTab] = useState("opening_orders");
     const [selectedRows, setSelectedRows] = useState([]);
     const { suppliers } = useSelector(state => state.suppliers);
+
+const [pagination, setPagination] = useState({
+  page: 1,
+  limit: 10,
+  total: 0,
+});
+
     // ---- API CALLS ----
 
     const fetchWorkOrders = async (params = {}) => {
@@ -88,6 +95,13 @@ const PurchaseOrderPage = () => {
             });
 
             setData(res?.data || []);
+
+           setPagination({
+  page: res.page || 1,
+  limit: res.limit || 10,
+  total: res.total || 0,
+});
+
         } catch (e) {
             console.error(e);
             message.error("Failed to fetch purchase orders");
@@ -117,10 +131,20 @@ const PurchaseOrderPage = () => {
         }
     };
 
+    // useEffect(() => {
+    //     fetchWorkOrders({ page: 1, limit, search, activeTab });
+    //     // eslint-disable-next-line react-hooks/exhaustive-deps
+    // }, [activeTab]);
+
     useEffect(() => {
-        fetchWorkOrders({ page: 1, limit, search, activeTab });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab]);
+  fetchWorkOrders({
+    page: pagination.page,
+    limit: pagination.limit,
+    search,
+    activeTab,
+  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [activeTab, pagination.page, pagination.limit, search]);
 
     useEffect(() => {
         getPurchaseShortageData();
@@ -1324,7 +1348,7 @@ const PurchaseShortageCard = ({ record }) => {
 
             {/* TABLE CARD */}
             <Card>
-                <Table
+                {/* <Table
                     rowKey={activeTab === "mpn_shortage" ? "mpnId" : "_id"}
                     columns={getCurrentColumns()}
                     dataSource={getCurrentData()}
@@ -1340,7 +1364,44 @@ const PurchaseShortageCard = ({ record }) => {
                             }
                             : null
                     }
-                />
+                /> */}
+
+         <Table
+  rowKey={activeTab === "mpn_shortage" ? "mpnId" : "_id"}
+  columns={getCurrentColumns()}
+  dataSource={getCurrentData()}
+  loading={loading}
+  scroll={{ x: 1000 }}
+  pagination={
+    activeTab === "mpn_shortage"
+      ? false
+      : {
+          current: pagination.page,
+          pageSize: pagination.limit,
+          total: pagination.total,
+          showSizeChanger: true,
+          pageSizeOptions: ["10", "25", "50", "100"],
+          showTotal: (total, range) =>
+            `${range[0]}-${range[1]} of ${total} items`,
+          onChange: (page, pageSize) => {
+            setPagination((prev) => ({
+              ...prev,
+              page,
+              limit: pageSize,
+            }));
+          },
+        }
+  }
+  rowSelection={
+    activeTab === "mpn_shortage"
+      ? {
+          type: "checkbox",
+          selectedRowKeys: selectedRows,
+          onChange: (selectedKeys) => setSelectedRows(selectedKeys),
+        }
+      : null
+  }
+/>
             </Card>
 
             <GlobalFilterModal

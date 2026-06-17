@@ -18,11 +18,36 @@ const PurchaseSupplierManagementPage = () => {
   const [gstApplicable, setGstApplicable] = useState(false);
 
 
+  const [pagination, setPagination] = useState({
+  page: 1,
+  limit: 10,
+  total: 0,
+});
+
   useEffect(() => {
-    dispatch(fetchSuppliers());
-    dispatch(getAllCurrencies());
-    dispatch(getAllPurchaseSettings())
-  }, [dispatch]);
+  loadSuppliers();
+  dispatch(getAllCurrencies());
+  dispatch(getAllPurchaseSettings());
+}, [dispatch, pagination.page, pagination.limit]);
+
+
+const loadSuppliers = async () => {
+  const res = await dispatch(
+    fetchSuppliers({
+      page: pagination.page,
+      limit: pagination.limit,
+    })
+  );
+
+  const payload = res?.payload;
+
+  setPagination(prev => ({
+    ...prev,
+    page: payload?.page || pagination.page,
+    limit: payload?.limit || pagination.limit,
+    total: payload?.total || 0,
+  }));
+};
 
   const handleCreate = async (data) => {
 
@@ -32,7 +57,7 @@ const PurchaseSupplierManagementPage = () => {
     }
 
     setIsModalVisible(false);
-    dispatch(fetchSuppliers());
+   loadSuppliers();
   };
 
   const handleEdit = async (id, data) => {
@@ -47,7 +72,7 @@ const PurchaseSupplierManagementPage = () => {
     );
 
     message.success("Supplier updated successfully");
-    dispatch(fetchSuppliers());
+  loadSuppliers();
     setIsModalVisible(false);
     setEditingSupplier(null);
   };
@@ -56,12 +81,12 @@ const PurchaseSupplierManagementPage = () => {
   const handleDelete = async (id) => {
     await dispatch(deleteSupplier(id));
     message.success("Supplier deleted successfully");
-    dispatch(fetchSuppliers());
+     loadSuppliers();
   };
 
   const handleEditClick = (supplier) => {
     setEditingSupplier(supplier);
-    dispatch(fetchSuppliers());
+    loadSuppliers();
     setIsModalVisible(true);
   };
 
@@ -167,12 +192,29 @@ const PurchaseSupplierManagementPage = () => {
       </div>
 
       <Card>
-        <Table
-          columns={columns}
-          dataSource={suppliers}
-          loading={loading}
-          rowKey="_id"
-        />
+       <Table
+  columns={columns}
+  dataSource={suppliers}
+  loading={loading}
+  rowKey="_id"
+  scroll={{ x: 1200 }}
+  pagination={{
+    current: pagination.page,
+    pageSize: pagination.limit,
+    total: pagination.total,
+    showSizeChanger: true,
+    pageSizeOptions: ["10", "25", "50", "100"],
+    showTotal: (total, range) =>
+      `${range[0]}-${range[1]} of ${total} suppliers`,
+    onChange: (page, pageSize) => {
+      setPagination(prev => ({
+        ...prev,
+        page,
+        limit: pageSize,
+      }));
+    },
+  }}
+/>
       </Card>
 
       <AddSupplierModal

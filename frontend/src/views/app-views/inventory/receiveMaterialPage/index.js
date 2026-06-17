@@ -42,7 +42,13 @@ const PurchaseOrdersReceivePage = () => {
 
     // ✅ Page load pe Pending POs fetch
     useEffect(() => {
-        dispatch(fetchPurchaseOrders({ status: ["Partially Received", "Acknowledged", "Emailed"] }));
+        dispatch(
+            fetchPurchaseOrders({
+                status: ["Partially Received", "Acknowledged", "Emailed"],
+                page: 1,
+                limit: 100,
+            })
+        );
     }, [dispatch]);
 
     // 🔹 Card pe "Click to receive"
@@ -96,43 +102,43 @@ const PurchaseOrdersReceivePage = () => {
     };
 
     const handleClosePO = async (id) => {
-  try {
-    const po = selectedPO;
+        try {
+            const po = selectedPO;
 
-    const canClose = po?.items?.every((item) => {
-      const orderedQty = Number(item.qty || 0);
-      const receivedQty = Number(item.receivedQtyTotal || 0);
-      const rejectedQty = Number(item.rejectedQtyTotal || 0);
+            const canClose = po?.items?.every((item) => {
+                const orderedQty = Number(item.qty || 0);
+                const receivedQty = Number(item.receivedQtyTotal || 0);
+                const rejectedQty = Number(item.rejectedQtyTotal || 0);
 
-      return (
-        receivedQty >= orderedQty ||
-        receivedQty + rejectedQty >= orderedQty
-      );
-    });
+                return (
+                    receivedQty >= orderedQty ||
+                    receivedQty + rejectedQty >= orderedQty
+                );
+            });
 
-    if (!canClose) {
-      return message.error(
-        "PO cannot be closed. Ordered Qty must be fully received or received + rejected must equal ordered qty."
-      );
-    }
+            if (!canClose) {
+                return message.error(
+                    "PO cannot be closed. Ordered Qty must be fully received or received + rejected must equal ordered qty."
+                );
+            }
 
-    await ReceiveMaterialService.closePurchaseOrder(id);
+            await ReceiveMaterialService.closePurchaseOrder(id);
 
-    message.success("PO Closed Successfully");
+            message.success("PO Closed Successfully");
 
-    setIsReceiveMaterialModalOpen(false);
+            setIsReceiveMaterialModalOpen(false);
 
-    dispatch(
-      fetchPurchaseOrders({
-        status: ["Partially Received", "Acknowledged", "Emailed"],
-      })
-    );
-  } catch (err) {
-    message.error(
-      err?.response?.data?.message || "Failed to close PO"
-    );
-  }
-};
+            dispatch(
+                fetchPurchaseOrders({
+                    status: ["Partially Received", "Acknowledged", "Emailed"],
+                })
+            );
+        } catch (err) {
+            message.error(
+                err?.response?.data?.message || "Failed to close PO"
+            );
+        }
+    };
 
     // 🔄 Loading state
     if (isLoading && !purchaseOrders.length) {

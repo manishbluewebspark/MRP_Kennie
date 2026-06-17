@@ -44,6 +44,12 @@ const PurchaseOrderApprovalPage = () => {
     const [rejectReason, setRejectReason] = useState("");
     const [selectedPOId, setSelectedPOId] = useState(null);
 
+    const [pagination, setPagination] = useState({
+  page: 1,
+  limit: 10,
+  total: 0,
+});
+
     const { suppliers } = useSelector(state => state.suppliers);
 
     // ---- API CALLS ----
@@ -65,6 +71,13 @@ const PurchaseOrderApprovalPage = () => {
             });
 
             setData(res?.data || []);
+
+            setPagination(prev => ({
+      ...prev,
+      page: res?.page || p,
+      limit: res?.limit || l,
+      total: res?.total || 0,
+    }));
         } catch (e) {
             console.error(e);
             message.error("Failed to fetch purchase orders");
@@ -74,8 +87,20 @@ const PurchaseOrderApprovalPage = () => {
     };
 
     useEffect(() => {
-        fetchWorkOrders({ page: 1, limit, search });
-    }, []);
+  fetchWorkOrders({
+    page: pagination.page,
+    limit: pagination.limit,
+    search,
+  });
+}, []);
+
+useEffect(() => {
+  fetchWorkOrders({
+    page: pagination.page,
+    limit: pagination.limit,
+    search,
+  });
+}, [pagination.page, pagination.limit]);
 
     useEffect(() => {
         dispatch(fetchSuppliers());
@@ -269,10 +294,18 @@ const PurchaseOrderApprovalPage = () => {
 
     // ---- HANDLERS ----
 
-    const handleSearch = useDebounce((value) => {
-        setPage(1);
-        fetchWorkOrders({ page: 1, limit, search: value });
-    }, 500);
+   const handleSearch = useDebounce((value) => {
+  setPagination(prev => ({
+    ...prev,
+    page: 1,
+  }));
+
+  fetchWorkOrders({
+    page: 1,
+    limit: pagination.limit,
+    search: value,
+  });
+}, 500);
 
     return (
         <div>
@@ -316,14 +349,29 @@ const PurchaseOrderApprovalPage = () => {
 
             {/* TABLE CARD */}
             <Card>
-                <Table
-                    rowKey="_id"
-                    columns={columns}
-                    dataSource={data}
-                    loading={loading}
-                    pagination={false}
-                    scroll={{ x: 1000 }}
-                />
+               <Table
+  rowKey="_id"
+  columns={columns}
+  dataSource={data}
+  loading={loading}
+  scroll={{ x: 1000 }}
+  pagination={{
+    current: pagination.page,
+    pageSize: pagination.limit,
+    total: pagination.total,
+    showSizeChanger: true,
+    pageSizeOptions: ["10", "25", "50", "100"],
+    showTotal: (total, range) =>
+      `${range[0]}-${range[1]} of ${total} items`,
+    onChange: (page, pageSize) => {
+      setPagination(prev => ({
+        ...prev,
+        page,
+        limit: pageSize,
+      }));
+    },
+  }}
+/>
             </Card>
 
             {/* REJECTION REASON MODAL */}
