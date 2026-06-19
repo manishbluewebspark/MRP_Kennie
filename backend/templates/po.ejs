@@ -38,7 +38,7 @@
       }
 
       .page {
-        padding: 20px;
+        padding: 10px;
         page-break-after: always;
         border: 1px solid black;
       }
@@ -239,9 +239,9 @@
 
       .header-right {
         display: flex;
-        width: 60%;
-        font-size: 11px;
-        line-height: 1.4;
+        width: 50%;
+        font-size: 10px;
+        line-height: 1;
       }
 
       .header-right .right-col {
@@ -264,6 +264,13 @@
         color: red;
         font-weight: 600;
       }
+
+      .header-left p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #000;
+}
     </style>
   </head>
 
@@ -272,9 +279,9 @@
 
       <div class="header">
         <!-- LEFT : LOGO -->
-        <div class="header-left">
-          <img src="<%= po?.companyLogo || '' %>" alt="EXXEL TECHNLOGY PTE LTD" class="company-logo" />
-        </div>
+      <div class="header-left">
+  <p>EXXEL TECHNOLOGY PTE LTD</p>
+</div>
 
         <!-- RIGHT : DETAILS -->
         <div class="header-right">
@@ -355,10 +362,10 @@
         </div>
         <div class="row">
           <div class="cell"><b>Incoterms:</b>
-            <%= po?.incoterms || "-" %>
+            <%= po?.supplier?.incoTerms || "-" %>
           </div>
           <div class="cell"><b>Payment Terms:</b>
-            <%= po?.paymentTerms || "30 days" %>
+            <%= po?.supplier?.paymentTerms || "-" %>
           </div>
         </div>
       </div>
@@ -396,7 +403,7 @@
                     <%= it?.mpnText || it?.partNumber || it?.mpn?.MPN || "-" %>
                   </td>
                    <td>
-                    <%= it?.mpn?.Description || "-" %>
+                    <%= it?.description || "-" %>
                   </td>
                   <td>
                     <%= it?.manufacturer || "-" %>

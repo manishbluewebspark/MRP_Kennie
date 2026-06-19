@@ -159,9 +159,12 @@ export const addPurchaseOrder = async (req, res) => {
       };
     });
 
+
     // -------------------- totals --------------------
-    const ostTax = +(subTotal * 0.09);
-    const finalAmount = +(subTotal + freightAmount + ostTax);
+
+    const finalAmount = +(subTotal + freightAmount + data.ostTax);
+
+    console.log('------finalAmount', finalAmount)
 
 
 
@@ -175,7 +178,7 @@ export const addPurchaseOrder = async (req, res) => {
       purchaseSetting?.secondLevelApprovalAmountLimit || 5000
     );
 
-    if (finalAmount > APPROVAL_LIMIT) {
+    if (data?.totals?.finalAmount > APPROVAL_LIMIT) {
 
       requiresSecondLevelApproval = true;
 
@@ -217,10 +220,10 @@ export const addPurchaseOrder = async (req, res) => {
     }
 
     const totals = {
-      subTotalAmount: subTotal,
-      ostTax,
-      finalAmount,
-      freightAmount,
+      subTotalAmount: data?.totals?.subTotalAmount,
+      ostTax: data?.totals?.ostTax,
+      finalAmount: data?.totals?.finalAmount,
+      freightAmount: data?.totals?.freightAmount,
     };
 
     // -------------------- create purchase order --------------------
@@ -233,7 +236,7 @@ export const addPurchaseOrder = async (req, res) => {
       supplier: data.supplier,
       shipToAddress: data.shipToAddress || "",
       termsConditions: data.termsConditions || "",
-      freightAmount,
+      freightAmount: data?.totals?.freightAmount,
 
       requiresSecondLevelApproval,
       status: requiresSecondLevelApproval
@@ -674,6 +677,76 @@ export const updatePurchaseOrder = async (req, res) => {
   }
 };
 
+
+export const updatePurchaseOrderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Purchase Order ID is required",
+      });
+    }
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: "Status is required",
+      });
+    }
+
+    const purchaseOrder = await PurchaseOrders.findById(id);
+
+    if (!purchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase Order not found",
+      });
+    }
+
+    // Closed -> Pending
+    if (
+      purchaseOrder.status === "Closed" &&
+      status === "Pending"
+    ) {
+      purchaseOrder.items = purchaseOrder.items.map((item) => ({
+        ...item.toObject(),
+
+        receivedQtyTotal: 0,
+        rejectedQtyTotal: 0,
+        pendingQty: 0,
+
+        receivedQty: 0,
+        rejectedQty: 0,
+        acceptedQty: 0,
+        shortQty: 0,
+
+        remarks: "",
+        status: "Pending",
+      }));
+    }
+
+    purchaseOrder.status = status;
+
+    await purchaseOrder.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Purchase Order status updated successfully",
+      data: purchaseOrder,
+    });
+  } catch (error) {
+    console.error("updatePurchaseOrderStatus Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // export const updatePurchaseOrder = async (req, res) => {
 //   try {
 //     const { id } = req.params;
@@ -865,53 +938,53 @@ export const updatePurchaseOrder = async (req, res) => {
 //   }
 // };
 
-export const updatePurchaseOrderStatus = async (req, res) => {
-  try {
-    const { id } = req.params;              // PO ID from URL
-    const { status } = req.body;            // new status from body
+// export const updatePurchaseOrderStatus = async (req, res) => {
+//   try {
+//     const { id } = req.params;              // PO ID from URL
+//     const { status } = req.body;            // new status from body
 
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Purchase Order ID is required",
-      });
-    }
+//     if (!id) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Purchase Order ID is required",
+//       });
+//     }
 
-    if (!status) {
-      return res.status(400).json({
-        success: false,
-        message: "Status is required",
-      });
-    }
+//     if (!status) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Status is required",
+//       });
+//     }
 
-    // Update status only
-    const updated = await PurchaseOrders.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true, runValidators: true }
-    );
+//     // Update status only
+//     const updated = await PurchaseOrders.findByIdAndUpdate(
+//       id,
+//       { status },
+//       { new: true, runValidators: true }
+//     );
 
-    if (!updated) {
-      return res.status(404).json({
-        success: false,
-        message: "Purchase Order not found",
-      });
-    }
+//     if (!updated) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Purchase Order not found",
+//       });
+//     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Purchase Order status updated successfully",
-      data: updated,
-    });
+//     return res.status(200).json({
+//       success: true,
+//       message: "Purchase Order status updated successfully",
+//       data: updated,
+//     });
 
-  } catch (error) {
-    console.error("updatePurchaseOrderStatus Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+//   } catch (error) {
+//     console.error("updatePurchaseOrderStatus Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 
 
@@ -1821,6 +1894,41 @@ export const getPurchaseShortageList = async (req, res) => {
       });
     }
 
+
+    // =========================================================
+    // PURCHASE ORDERS (EMAILED)
+    // Reduce shortage by already ordered quantity
+    // =========================================================
+
+    const emailedPOs = await PurchaseOrders.find({
+      status: {
+        $in: ["Emailed", "Acknowledged"]
+      },
+      // isDeleted: { $ne: true },
+    })
+      .select("items status")
+      .lean();
+
+    const poReservedMap = new Map();
+
+    for (const po of emailedPOs) {
+      for (const item of po.items || []) {
+        if (!item?.mpn) continue;
+
+        const mpnId = String(item.mpn);
+
+        const currentReserved =
+          poReservedMap.get(mpnId) || 0;
+
+        poReservedMap.set(
+          mpnId,
+          currentReserved + Number(item.qty || 0)
+        );
+      }
+    }
+
+
+    console.log('------poReservedMap', poReservedMap)
     // =========================================================
     // 4) FETCH ALL MPN LIBS
     // =========================================================
@@ -2071,6 +2179,12 @@ export const getPurchaseShortageList = async (req, res) => {
         row.totalRequired || 0
       );
 
+      const reservedPOQty = Number(
+        poReservedMap.get(row.mpnId) || 0
+      );
+
+      console.log('-------reservedPOQty', reservedPOQty)
+
       // =====================================================
       // FINAL SHORTAGE
       // =====================================================
@@ -2078,9 +2192,12 @@ export const getPurchaseShortageList = async (req, res) => {
       const finalShortage =
         Math.max(
           totalRequired -
-          globalStock,
+          globalStock -
+          reservedPOQty,
           0
         );
+
+      console.log('-------finalShortage', finalShortage)
 
       // =====================================================
       // NO SHORTAGE => SKIP
@@ -2111,7 +2228,7 @@ export const getPurchaseShortageList = async (req, res) => {
       // =====================================================
 
       let remainingStock =
-        globalStock;
+        globalStock + reservedPOQty;
 
       const shortageByWorkOrders =
         [];
@@ -2197,6 +2314,8 @@ export const getPurchaseShortageList = async (req, res) => {
           "M",
           displayUOM
         );
+
+      console.log('-----displayShortage', displayShortage)
 
       // =====================================================
       // SHORTAGE BY WO

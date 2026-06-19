@@ -138,14 +138,14 @@ export const createReceiveMaterial = async (req, res) => {
       const fromUOMId = await MPN.findById(line.mpnId._id)
 
 
-      // console.log('-------acceptedQty', acceptedQty, fromUomId, masterUomId)
+      console.log('-------acceptedQty', poItem.receivedQtyTotal, fromUomId,receivedQty)
       const acceptedQtyInMaster = await convertToMeter({
-        qty: acceptedQty,
+        qty:receivedQty,
         fromUom: fromUomId,
         // toUom: masterUomId,
       });
 
-      // console.log('-------acceptedQtyInMaster',acceptedQtyInMaster)
+      console.log('-------acceptedQtyInMaster',acceptedQtyInMaster)
       // ---- PO totals update ----
       if (poItem) {
         const orderedQty = Number(poItem.qty || line.orderedQty || 0);

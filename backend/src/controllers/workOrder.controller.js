@@ -9008,11 +9008,15 @@ export const saveWorkOrderStage = async (req, res) => {
           });
         }
 
-        const baseQty = await convertToInventoryUom({
-          qty: currentPickedQty,
-          fromUom: material.uomId,
-          toUom: inventory.mpnId.UOM,
-        });
+        // const baseQty = await convertToInventoryUom({
+        //   qty: currentPickedQty,
+        //   fromUom: material.uomId,
+        //   toUom: inventory.mpnId.UOM,
+        // });
+
+        const baseQty = await convertToMeter({qty:currentPickedQty,fromUom: material.uomId,})
+
+        console.log('--------baseQty',inventory.balanceQuantity,baseQty)
 
         if (inventory.balanceQuantity < baseQty) {
           return res.status(400).json({

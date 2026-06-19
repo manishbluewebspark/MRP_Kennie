@@ -103,11 +103,12 @@ const PurchaseOrderForm = () => {
   const { uoms } = useSelector((state) => state.uoms);
   const [lastPOOrderNumber, setLastPOOrderNumber] = useState([]);
   const [isOfficePO, setIsOfficePO] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
   const { workOrderSettings } = useSelector(
     (state) => state.systemSettings
   );
 
-  // console.log('---workOrderSettings', workOrderSettings)
+  console.log('---selectedSupplier', selectedSupplier)
   /** ---------- totals as numbers ---------- */
   const calcTotals = () => {
     const sub = orderItems.reduce((sum, it) => {
@@ -115,8 +116,10 @@ const PurchaseOrderForm = () => {
     }, 0);
     const freight = n(form.getFieldValue('freightAmount'));
     const gstPercent = Number(workOrderSettings?.gstSettings?.gstPercentage || 0);
-    const ostTax = sub * (gstPercent / 100);
-
+  const ostTax = selectedSupplier?.gst
+  ? sub * (gstPercent / 100)
+  : 0;
+    
     const finalAmount = sub + freight + ostTax;
     return {
       subTotalAmount: sub,
@@ -676,6 +679,13 @@ const PurchaseOrderForm = () => {
                   size="large"
                   showSearch
                   optionFilterProp="children"
+                    onChange={(value) => {
+      const supplier = suppliers?.find(
+        (s) => s._id === value
+      );
+
+      setSelectedSupplier(supplier);
+    }}
                 // disabled={fromShortage && !isEditMode} // lock when from shortage
                 >
                   {suppliers?.map((s) => (
@@ -840,7 +850,7 @@ const PurchaseOrderForm = () => {
                 ${totals.freightAmount.toFixed(2)}
               </Col>
             </Row>
-            <Row gutter={16} style={{ marginBottom: 8 }}>
+             <Row gutter={16} style={{ marginBottom: 8 }}>
               <Col span={12}>
                 <Text>GST Tax ({workOrderSettings?.gstSettings?.gstPercentage}%):</Text>
               </Col>
@@ -848,6 +858,7 @@ const PurchaseOrderForm = () => {
                 ${totals.ostTax.toFixed(2)}
               </Col>
             </Row>
+           
 
             <Divider style={{ margin: '16px 0' }} />
 
