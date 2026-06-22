@@ -266,11 +266,11 @@
       }
 
       .header-left p {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: #000;
-}
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        color: #000;
+      }
     </style>
   </head>
 
@@ -279,9 +279,9 @@
 
       <div class="header">
         <!-- LEFT : LOGO -->
-      <div class="header-left">
-  <p>EXXEL TECHNOLOGY PTE LTD</p>
-</div>
+        <div class="header-left">
+          <p>EXXEL TECHNOLOGY PTE LTD</p>
+        </div>
 
         <!-- RIGHT : DETAILS -->
         <div class="header-right">
@@ -317,7 +317,7 @@
           <%= fmtDate(po?.poDate) %>
         </div>
         <div class="info-cell"><b>Currency:</b>
-          <%= currency %>
+          <%= supplier?.currency?.code %>
         </div>
         <div class="info-cell"><b>Buyer:</b> Procurement Dept</div>
         <div class="info-cell"><b>Page:</b> 1 of 1</div>
@@ -345,7 +345,7 @@
           <p>
           <pre style="margin:0"><%= shipTo %></pre>
           </p>
-          <p>Attn: <%= po?.shipToAttn || "Kennie Seow" %>
+          <!-- <p>Attn: <%= po?.shipToAttn || "Kennie Seow" %> -->
           </p>
         </div>
       </div>
@@ -402,7 +402,7 @@
                   <td>
                     <%= it?.mpnText || it?.partNumber || it?.mpn?.MPN || "-" %>
                   </td>
-                   <td>
+                  <td>
                     <%= it?.description || "-" %>
                   </td>
                   <td>

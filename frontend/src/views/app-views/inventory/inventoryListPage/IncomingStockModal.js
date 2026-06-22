@@ -12,18 +12,20 @@ dayjs.extend(customParseFormat);
 
 
 const parseCommittedDate = (raw) => {
-  if (!raw) return null;
-  if (raw === "N/A") return null;
+  if (!raw || raw === "N/A") return null;
 
-  // 1) Try ISO / normal date string
+  // ISO
   let d = dayjs(raw);
   if (d.isValid()) return d;
 
-  // 2) Try DD/MM/YYYY (agar aise store kiya ho DB me)
+  // DD/MM/YYYY
   d = dayjs(raw, "DD/MM/YYYY", true);
   if (d.isValid()) return d;
 
-  // 3) Kuch bhi samajh na aaye → null (no crash)
+  // D/M/YYYY
+  d = dayjs(raw, "D/M/YYYY", true);
+  if (d.isValid()) return d;
+
   return null;
 };
 

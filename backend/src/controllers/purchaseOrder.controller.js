@@ -396,47 +396,46 @@ export const updatePurchaseOrder = async (req, res) => {
     // 1️⃣ SPECIAL CASE: committedDate update
     // --------------------------------------------------
 
-    if (
-      !Array.isArray(data.items) &&
-      data.idNumber &&
-      data.mpn &&
-      data.committedDate
-    ) {
-      const po = await PurchaseOrders.findById(id);
+ if (
+  !Array.isArray(data.items) &&
+  data.idNumber &&
+  data.mpn &&
+  Object.prototype.hasOwnProperty.call(data, "committedDate")
+) {
+  const po = await PurchaseOrders.findById(id);
 
-      if (!po) {
-        return res
-          .status(404)
-          .json({ success: false, error: "Purchase order not found" });
-      }
+  if (!po) {
+    return res.status(404).json({
+      success: false,
+      error: "Purchase order not found",
+    });
+  }
 
-      const idx = po.items.findIndex(
-        (it) =>
-          String(it.idNumber) === String(data.idNumber) &&
-          String(it.mpn) === String(data.mpn)
-      );
+  const idx = po.items.findIndex(
+    (it) =>
+      String(it.idNumber).trim() === String(data.idNumber).trim() &&
+      String(it.mpn) === String(data.mpn)
+  );
 
-      if (idx === -1) {
-        return res.status(404).json({
-          success: false,
-          error: "PO item not found for given idNumber + mpn",
-        });
-      }
+  if (idx === -1) {
+    return res.status(404).json({
+      success: false,
+      error: "PO item not found for given idNumber + mpn",
+    });
+  }
 
-      po.items[idx].committedDate = new Date(data.committedDate);
+  po.items[idx].committedDate = data.committedDate
+    ? new Date(data.committedDate)
+    : null;
 
-      // if (po.status) {
-      //   po.status = po.status;
-      // }
+  await po.save();
 
-      await po.save();
-
-      return res.json({
-        success: true,
-        message: "Committed date updated successfully",
-        data: po,
-      });
-    }
+  return res.json({
+    success: true,
+    message: "Committed date updated successfully",
+    data: po,
+  });
+}
 
     // --------------------------------------------------
     // 2️⃣ DEFAULT FULL UPDATE FLOW
@@ -1145,7 +1144,10 @@ export const getPurchaseOrderById = async (req, res) => {
           select: "code"   // 👈 sirf currency code
         }
       })
-      .populate("workOrderNo", "workOrderNo, poNumber,projectNo ")
+   .populate({
+  path: "workOrderNo",
+  select: "workOrderNo poNumber projectNo"
+})
       .populate({
         path: "items.mpn",   // populate each item’s MPN reference
         model: "MPNLibrary",        // make sure this matches your model name
@@ -1570,7 +1572,13 @@ export const exportPurchaseOrderPDF = async (req, res) => {
     const { id } = req.params;
 
     const purchaseOrder = await PurchaseOrders.findById(id)
-      .populate("supplier")
+     .populate({
+    path: "supplier",
+    populate: {
+      path: "currency",
+      select: "code"
+    }
+  })
       .populate({
         path: "items.uom",
         select: "name code",
@@ -1587,6 +1595,8 @@ export const exportPurchaseOrderPDF = async (req, res) => {
         message: "Purchase Order not found",
       });
     }
+
+    
 
     // ✅ Generate PDF buffer
     const pdfBuffer = await generatePurchaseOrderPDFBuffer(purchaseOrder);
