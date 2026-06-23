@@ -123,7 +123,7 @@ const PurchaseOrderSchema = new Schema(
     workOrderNo: {
       type: Schema.Types.ObjectId,
       ref: "WorkOrder",
-      required: true,
+      required: false,
     },
 
     shipToAddress: { type: String },
