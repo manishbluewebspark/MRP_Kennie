@@ -1175,18 +1175,23 @@ export const sendPurchaseOrderMail = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const purchaseOrder = await PurchaseOrders.findById(id)
-      .populate("supplier")
+      const purchaseOrder = await PurchaseOrders.findById(id)
+     .populate({
+    path: "supplier",
+    populate: {
+      path: "currency",
+      select: "code"
+    }
+  })
       .populate({
         path: "items.uom",
         select: "name code",
       })
       .populate({
         path: "items.mpn",
-        select: "MPN description",
+        select: "MPN Description",
       })
       .lean();
-
     console.log('--------purchaseOrder', purchaseOrder)
 
     if (!purchaseOrder) {

@@ -34,10 +34,16 @@ export const generatePurchaseOrderPDFBuffer = async (purchaseOrder) => {
 
     // A4 PDF
     const pdfBuffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "12mm", right: "10mm", bottom: "12mm", left: "10mm" },
-    });
+  format: 'A4',
+  printBackground: true,
+  preferCSSPageSize: true,
+  margin: {
+    top: '10mm',
+    right: '10mm',
+    bottom: '10mm',
+    left: '10mm',
+  },
+});
 
     return pdfBuffer;
   } finally {

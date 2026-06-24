@@ -86,12 +86,12 @@ async function buildDemandMap() {
   //   .lean();
 
   const workOrders = await WorkOrder.find({
-  isProductionComplete: false,
-})
-  .select(
-    "_id drawingId quantity processHistory"
-  )
-  .lean();
+    isProductionComplete: false,
+  })
+    .select(
+      "_id drawingId quantity processHistory"
+    )
+    .lean();
 
   if (!workOrders.length) return new Map();
 
@@ -273,7 +273,7 @@ export const getInventoryList = async (req, res) => {
           "poNumber commitDate needDate supplier items.idNumber items.mpn items.uom items.qty items.pendingQty items.receivedQtyTotal items.committedDate items.needDate status createdAt updatedAt"
         )
         .populate("items.mpn", "MPN Description Manufacturer")
-         .populate("items.uom", "code")
+        .populate("items.uom", "code")
         .populate("supplier", "companyName email phone contactPerson")
         .lean();
     }
@@ -282,127 +282,127 @@ export const getInventoryList = async (req, res) => {
     const poMap = new Map();
 
 
-  
+
 
     for (const po of pendingPOs) {
-  for (const it of po.items || []) {
+      for (const it of po.items || []) {
 
-    const mid = String(
-      it?.mpn?._id || it?.mpn || ""
-    );
+        const mid = String(
+          it?.mpn?._id || it?.mpn || ""
+        );
 
-    if (!mid) continue;
+        if (!mid) continue;
 
-    // ✅ find inventory item
-    const inventoryItem =
-      inventoryList.find(
-        (x) =>
-          String(x?.mpnId?._id) === mid
-      );
-      
-    // ✅ raw qty
-    const rawRemainingQty =
-      Number(it.qty || 0) -
-      Number(it.receivedQtyTotal || 0);
+        // ✅ find inventory item
+        const inventoryItem =
+          inventoryList.find(
+            (x) =>
+              String(x?.mpnId?._id) === mid
+          );
 
-    if (rawRemainingQty <= 0)
-      continue;
+        // ✅ raw qty
+        const rawRemainingQty =
+          Number(it.qty || 0) -
+          Number(it.receivedQtyTotal || 0);
 
-    // ✅ PO UOM
-    const poUom =
-      it?.uom?.code || "";
+        if (rawRemainingQty <= 0)
+          continue;
 
-    // ✅ Inventory UOM
-    const inventoryUom =
-      inventoryItem?.mpnId?.UOM?.code || "";
+        // ✅ PO UOM
+        const poUom =
+          it?.uom?.code || "";
 
-    // ✅ FINAL converted qty
-    const remainingQty =
-      convertUom({
-        qty: rawRemainingQty,
-        fromUom: poUom,
-        toUom: inventoryUom,
-      });
+        // ✅ Inventory UOM
+        const inventoryUom =
+          inventoryItem?.mpnId?.UOM?.code || "";
 
-    if (!poMap.has(mid)) {
-      poMap.set(mid, {
-        totalIncomingQty: 0,
-        incomingPONumbers: new Set(),
-        earliestCommitDate: null,
-        purchaseData: [],
-      });
-    }
+        // ✅ FINAL converted qty
+        const remainingQty =
+          convertUom({
+            qty: rawRemainingQty,
+            fromUom: poUom,
+            toUom: inventoryUom,
+          });
 
-    const entry = poMap.get(mid);
+        if (!poMap.has(mid)) {
+          poMap.set(mid, {
+            totalIncomingQty: 0,
+            incomingPONumbers: new Set(),
+            earliestCommitDate: null,
+            purchaseData: [],
+          });
+        }
 
-    entry.totalIncomingQty +=
-      remainingQty;
+        const entry = poMap.get(mid);
 
-    entry.incomingPONumbers.add(
-      po.poNumber
-    );
+        entry.totalIncomingQty +=
+          remainingQty;
 
-    if (it.commitDate) {
-      const cd = new Date(
-        it.commitDate
-      );
+        entry.incomingPONumbers.add(
+          po.poNumber
+        );
 
-      if (
-        !entry.earliestCommitDate ||
-        cd < entry.earliestCommitDate
-      ) {
-        entry.earliestCommitDate =
-          cd;
+        if (it.commitDate) {
+          const cd = new Date(
+            it.commitDate
+          );
+
+          if (
+            !entry.earliestCommitDate ||
+            cd < entry.earliestCommitDate
+          ) {
+            entry.earliestCommitDate =
+              cd;
+          }
+        }
+
+        entry.purchaseData.push({
+          _id: po._id,
+          idNumber: it?.idNumber,
+          mpn: it.mpn,
+          poNumber: po.poNumber,
+          supplier:
+            po.supplier || {
+              name: "N/A",
+            },
+
+          quantity: remainingQty,
+
+          totalQuantity: Number(it.qty || 0) -
+            Number(it.receivedQtyTotal || 0),
+
+          UOM: poUom,
+
+          receivedQuantity:
+            it.receivedQty || 0,
+
+          needDate: po.needDate
+            ? new Date(
+              po.needDate
+            ).toLocaleDateString()
+            : "N/A",
+
+          committedDate:
+            it.committedDate
+              ? new Date(
+                it.committedDate
+              ).toLocaleDateString()
+              : "N/A",
+
+          status: po.status,
+          createdAt: po.createdAt,
+          updatedAt: po.updatedAt,
+
+          itemDescription:
+            it.mpn?.Description ||
+            "N/A",
+
+          itemManufacturer:
+            it.mpn?.Manufacturer ||
+            "N/A",
+        });
       }
     }
-
-    entry.purchaseData.push({
-      _id: po._id,
-      idNumber: it?.idNumber,
-      mpn: it.mpn,
-      poNumber: po.poNumber,
-      supplier:
-        po.supplier || {
-          name: "N/A",
-        },
-
-      quantity: remainingQty,
-
-      totalQuantity: Number(it.qty || 0) -
-      Number(it.receivedQtyTotal || 0),
-
-      UOM: poUom,
-
-      receivedQuantity:
-        it.receivedQty || 0,
-
-      needDate: po.needDate
-        ? new Date(
-            po.needDate
-          ).toLocaleDateString()
-        : "N/A",
-
-      committedDate:
-        it.committedDate
-          ? new Date(
-              it.committedDate
-            ).toLocaleDateString()
-          : "N/A",
-
-      status: po.status,
-      createdAt: po.createdAt,
-      updatedAt: po.updatedAt,
-
-      itemDescription:
-        it.mpn?.Description ||
-        "N/A",
-
-      itemManufacturer:
-        it.mpn?.Manufacturer ||
-        "N/A",
-    });
-  }
-}
 
     // for (const po of pendingPOs) {
     //   for (const it of po.items || []) {
@@ -481,24 +481,29 @@ export const getInventoryList = async (req, res) => {
       // const netQty = calcNetQty(balanceQty, demandQty);
 
       const demandQty = Number(
-  demandMap.get(mpnIdStr) || 0
-);
+        demandMap.get(mpnIdStr) || 0
+      );
 
-const pickedQty = Number(
-  pickedMap.get(mpnIdStr) || 0
-);
+      const pickedQty = Number(
+        pickedMap.get(mpnIdStr) || 0
+      );
 
-// ✅ IMPORTANT
-// demand should reduce by picked qty
-const effectiveDemand = Math.max(
-  0,
-  demandQty - pickedQty
-);
+      // ✅ IMPORTANT
+      // demand should reduce by picked qty
+      const effectiveDemand = Math.max(
+        0,
+        demandQty - pickedQty
+      );
 
-const netQty = calcNetQty(
-  balanceQty,
-  demandQty
-);
+      // const netQty = calcNetQty(
+      //   balanceQty,
+      //   demandQty
+      // );
+
+      const netQty = calcNetQty(
+        balanceQty,
+        effectiveDemand
+      );
 
       const shortageQty = netQty < 0 ? Math.abs(netQty) : 0;
 
@@ -525,9 +530,9 @@ const netQty = calcNetQty(
 
         balanceQuantity: balanceQty.toFixed(4),
         IncomingQty: incomingQty,
-        DemandQty: demandQty,
-PickedQty: pickedQty,
-EffectiveDemandQty: effectiveDemand,
+        DemandQty: effectiveDemand,
+        PickedQty: pickedQty,
+        EffectiveDemandQty: demandQty,
         // ✅ IMPORTANT:
         NetQty: netQty,              // raw balance+incoming-demand
         ShortageQty: shortageQty.toFixed(4),    // display/alert qty (negative or 0)
@@ -2065,11 +2070,11 @@ export const getCompleteDrawingsMTO = async (req, res) => {
     // 1️⃣ Base query: sirf woh WorkOrders jo drawing ke saath linked hain
     const woQuery = {
       drawingId: { $exists: true, $ne: null },
-       // QC Done
-  isProductionComplete: true,
+      // QC Done
+      isProductionComplete: true,
 
-  // Delivered nahi hona chahiye
-  delivered: { $ne: true }
+      // Delivered nahi hona chahiye
+      delivered: { $ne: true }
     };
 
     // woQuery.isProductionComplete = true

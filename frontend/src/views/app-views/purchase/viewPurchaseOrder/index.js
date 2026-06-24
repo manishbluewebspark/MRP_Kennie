@@ -117,14 +117,36 @@ const PurchaseOrderDetailsPage = () => {
     }));
   }, [po]);
 
+  // const totals = useMemo(() => {
+  //   const t = po?.totals || {};
+  //   const freight = Number(t?.freightAmount || 0);
+  //   const sub = Number(t?.subTotalAmount || 0);
+  //   const tax = Number(t?.ostTax || 0);
+  //   const finalAmount = Number(t?.finalAmount || 0);
+  //   return { freight, sub, tax, finalAmount };
+  // }, [po]);
+
   const totals = useMemo(() => {
-    const t = po?.totals || {};
-    const freight = Number(t?.freightAmount || 0);
-    const sub = Number(t?.subTotalAmount || 0);
-    const tax = Number(t?.ostTax || 0);
-    const finalAmount = Number(t?.finalAmount || 0);
-    return { freight, sub, tax, finalAmount };
-  }, [po]);
+  const t = po?.totals || {};
+
+  const freight = Number(t?.freightAmount || 0);
+  const sub = Number(t?.subTotalAmount || 0);
+  const tax = Number(t?.ostTax || 0);
+  const finalAmount = Number(t?.finalAmount || 0);
+
+  const taxPercentage = sub > 0 ? (tax / sub) * 100 : 0;
+
+  return {
+    freight,
+    sub,
+    tax,
+    finalAmount,
+    taxPercentage,
+  };
+}, [po]);
+
+
+
 
   const poItemsColumns = [
     {
@@ -281,7 +303,7 @@ const PurchaseOrderDetailsPage = () => {
                   <Text>{fmtMoney(totals.sub)}</Text>
                 </div>
                 <div style={{ marginBottom: 8 }}>
-                  <Text strong>Tax (GST): </Text>
+                  <Text strong>Tax (GST {totals?.taxPercentage}%): </Text>
                   <Text>{fmtMoney(totals.tax)}</Text>
                 </div>
                 <div style={{ marginBottom: 8 }}>

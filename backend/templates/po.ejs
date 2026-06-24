@@ -20,6 +20,10 @@
   const terms = po?.termsConditions || "";
   const items = Array.isArray(po?.items) ? po.items : [];
   const totals = po?.totals || {};
+  const taxPercentage =
+  Number(totals?.subTotalAmount) > 0
+  ? (Number(totals?.ostTax || 0) / Number(totals?.subTotalAmount)) * 100
+  : 0;
   %>
 
   <!doctype html>
@@ -35,13 +39,32 @@
       body {
         font-family: Arial, Helvetica, sans-serif;
         color: #111;
+
       }
 
       .page {
-        padding: 10px;
-        page-break-after: always;
-        border: 1px solid black;
+        min-height: 99vh;
+
+        display: flex;
+        flex-direction: column;
+
       }
+
+      .content {
+        padding: 10px;
+        border: 1px solid black;
+        flex: 1;
+      }
+
+      .terms {
+        margin-top: 24px;
+        border: 1px solid #999;
+        padding: 10px;
+
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
 
       .header {
         display: flex;
@@ -216,11 +239,7 @@
         border-top: 1px solid #ddd;
       }
 
-      .terms {
-        margin-top: 24px;
-        border: 1px solid #999;
-        padding: 10px;
-      }
+
 
       .terms h3 {
         font-size: 12px;
@@ -276,185 +295,200 @@
 
   <body>
     <div class="page">
-
-      <div class="header">
-        <!-- LEFT : LOGO -->
-        <div class="header-left">
-          <p>EXXEL TECHNOLOGY PTE LTD</p>
-        </div>
-
-        <!-- RIGHT : DETAILS -->
-        <div class="header-right">
-          <!-- RIGHT LEFT PART : ADDRESS -->
-          <div class="right-col address-block">
-            <p>1 Kaki Bukit Ave 3</p>
-            <p>KB-1 #03-07</p>
-            <p>Singapore 416087</p>
+      <div class="content">
+        <div class="header">
+          <!-- LEFT : LOGO -->
+          <div class="header-left">
+            <p>EXXEL TECHNOLOGY PTE LTD</p>
           </div>
 
-          <!-- RIGHT RIGHT PART : CONTACT -->
-          <div class="right-col contact-block">
-            <p>Tel : (65) 6743-4553</p>
-            <p>Fax : (65) 6743-6929</p>
-            <p>Email : sales@exxeltech.com</p>
-            <p class="website">exxeltech.com</p>
-            <p>UEN/GST No: 199407327W</p>
+          <!-- RIGHT : DETAILS -->
+          <div class="header-right">
+            <!-- RIGHT LEFT PART : ADDRESS -->
+            <div class="right-col address-block">
+              <p>1 Kaki Bukit Ave 3</p>
+              <p>KB-1 #03-07</p>
+              <p>Singapore 416087</p>
+            </div>
+
+            <!-- RIGHT RIGHT PART : CONTACT -->
+            <div class="right-col contact-block">
+              <p>Tel : (65) 6743-4553</p>
+              <p>Fax : (65) 6743-6929</p>
+              <p>Email : sales@exxeltech.com</p>
+              <!-- <p class="website">exxeltech.com</p> -->
+              <p>UEN/GST No: 199407327W</p>
+            </div>
+          </div>
+
+        </div>
+
+
+
+        <div class="po-title">
+          <h2>PURCHASE ORDER</h2>
+          <div class="po-no">PO No: <%= poNo %>
           </div>
         </div>
 
-      </div>
-
-
-
-      <div class="po-title">
-        <h2>PURCHASE ORDER</h2>
-        <div class="po-no">PO No: <%= poNo %>
-        </div>
-      </div>
-
-      <div class="info-row">
-        <div class="info-cell"><b>Date:</b>
-          <%= fmtDate(po?.poDate) %>
-        </div>
-        <div class="info-cell"><b>Currency:</b>
-          <%= supplier?.currency?.code %>
-        </div>
-        <div class="info-cell"><b>Buyer:</b> Procurement Dept</div>
-        <div class="info-cell"><b>Page:</b> 1 of 1</div>
-      </div>
-
-      <div class="two-col">
-        <div class="box">
-          <div class="box-title">Order To:</div>
-          <p><b>
-              <%= supplier?.companyName || supplier?.name || "-" %>
-            </b></p>
-          <p>
-            <%= supplier?.address || "" %>
-          </p>
-          <p>Tel: <%= supplier?.phone || "-" %>
-          </p>
-          <p>Attn: <%= supplier?.contactPerson || supplier?.name || "-" %>
-          </p>
-          <p>Email: <%= supplier?.email || "-" %>
-          </p>
-        </div>
-
-        <div class="box">
-          <div class="box-title">Ship To:</div>
-          <p>
-          <pre style="margin:0"><%= shipTo %></pre>
-          </p>
-          <!-- <p>Attn: <%= po?.shipToAttn || "Kennie Seow" %> -->
-          </p>
-        </div>
-      </div>
-
-      <div class="section-title">Delivery &amp; Payment</div>
-      <div class="delivery">
-        <div class="row">
-          <div class="cell"><b>Need Date:</b>
-            <%= fmtDate(po?.needDate) %>
+        <div class="info-row">
+          <div class="info-cell"><b>Date:</b>
+            <%= fmtDate(po?.poDate) %>
           </div>
-          <div class="cell"><b>ETA Date:</b>
-            <%= fmtDate(po?.etaDate) %>
+          <div class="info-cell"><b>Currency:</b>
+            <%= supplier?.currency?.code %>
+          </div>
+          <div class="info-cell"><b>Buyer:</b> Procurement Dept</div>
+
+        </div>
+
+        <div class="two-col">
+          <div class="box">
+            <div class="box-title">Order To:</div>
+            <p><b>
+                <%= supplier?.companyName || supplier?.name || "-" %>
+              </b></p>
+            <p>
+              <%= supplier?.address || "" %>
+            </p>
+            <p>Tel: <%= supplier?.phone || "-" %>
+            </p>
+            <p>Attn: <%= supplier?.contactPerson || supplier?.name || "-" %>
+            </p>
+            <p>Email: <%= supplier?.email || "-" %>
+            </p>
+          </div>
+
+          <div class="box">
+            <div class="box-title">Ship To:</div>
+            <p>
+            <pre style="margin:0"><%= shipTo %></pre>
+            </p>
+            <!-- <p>Attn: <%= po?.shipToAttn || "Kennie Seow" %> -->
+            </p>
           </div>
         </div>
-        <div class="row">
-          <div class="cell"><b>Incoterms:</b>
-            <%= po?.supplier?.incoTerms || "-" %>
+
+        <div class="section-title">Delivery &amp; Payment</div>
+        <div class="delivery">
+          <div class="row">
+            <div class="cell"><b>Need Date:</b>
+              <%= fmtDate(po?.needDate) %>
+            </div>
+            <div class="cell"><b>ETA Date:</b>
+              <%= fmtDate(po?.etaDate) %>
+            </div>
           </div>
-          <div class="cell"><b>Payment Terms:</b>
-            <%= po?.supplier?.paymentTerms || "-" %>
+          <div class="row">
+            <div class="cell"><b>Incoterms:</b>
+              <%= po?.supplier?.incoTerms || "-" %>
+            </div>
+            <div class="cell"><b>Payment Terms:</b>
+              <%= po?.supplier?.paymentTerms || "-" %>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="section-title">Order Details</div>
+        <div class="section-title">Order Details</div>
 
-      <table>
-        <thead>
-          <tr>
-            <th style="width:50px" class="start">No.</th>
-            <th style="width:120px">Part Number</th>
-            <th>Description</th>
-            <th>Manufacturer</th>
-            <th style="width:60px" class="center">Qty</th>
-            <th style="width:60px" class="center">UOM</th>
-            <th style="width:90px" class="num">Unit Price</th>
-            <th style="width:90px" class="num">Dis Price</th>
-            <th style="width:90px" class="num">Ext. Price</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          <% if(items.length===0) { %>
+        <table>
+          <thead>
             <tr>
-              <td colspan="8">No items</td>
+              <th style="width:50px" class="start">No.</th>
+              <th style="width:120px">Part Number</th>
+              <th>Description</th>
+              <th>Manufacturer</th>
+              <th style="width:60px" class="center">Qty</th>
+              <th style="width:60px" class="center">UOM</th>
+              <th style="width:90px" class="num">Unit Price</th>
+              <th style="width:90px" class="num">Dis Price</th>
+              <th style="width:90px" class="num">Ext. Price</th>
             </tr>
-            <% } %>
+          </thead>
 
-              <% items.forEach((it, idx)=> { %>
-                <tr>
-                  <td class="center">
-                    <%= idx + 1 %>
-                  </td>
-                  <td>
-                    <%= it?.mpnText || it?.partNumber || it?.mpn?.MPN || "-" %>
-                  </td>
-                  <td>
-                    <%= it?.description || "-" %>
-                  </td>
-                  <td>
-                    <%= it?.manufacturer || "-" %>
-                  </td>
-                  <td class="center">
-                    <%= it?.qty ?? 0 %>
-                  </td>
-                  <td class="center">
-                    <%= it?.uomText || it?.uom?.code || "-" %>
-                  </td>
-                  <td class="num">S$<%= money(it?.unitPrice) %>
-                  </td>
-                  <td class="num">
-                    <%= Number(it?.discount || 0).toFixed(2) %>
-                  </td>
-                  <td class="num">
-                    <%= Number(it?.extPrice || 0).toFixed(2) %>
-                  </td>
-                  </td>
-                </tr>
-                <% }) %>
-        </tbody>
-      </table>
+          <tbody>
+            <% if(items.length===0) { %>
+              <tr>
+                <td colspan="8">No items</td>
+              </tr>
+              <% } %>
 
-      <div class="totals">
-        <div class="totals-box" style="border:1px solid #999;padding:10px">
-          <div class="totals-line"><span>Freight Cost:</span> <span>
-              <%= money(totals?.freightAmount) %>
-            </span></div>
-          <div class="totals-line"><span>Discount:</span> <span>
-              <%= money(totals?.discountAmount) %>
-            </span></div>
-          <div class="totals-line"><span>Sub-Total:</span> <span>
-              <%= money(totals?.subTotalAmount) %>
-            </span></div>
-          <div class="totals-line"><span>9% GST Tax:</span> <span>
-              <%= money(totals?.ostTax) %>
-            </span></div>
-          <div class="totals-line grand"><span>Grand Total:</span> <span>
-              <%= money(totals?.finalAmount) %>
-            </span>
+                <% items.forEach((it, idx)=> { %>
+                  <tr>
+                    <td class="center">
+                      <%= idx + 1 %>
+                    </td>
+                    <td>
+                      <%= it?.mpnText || it?.partNumber || it?.mpn?.MPN || "-" %>
+                    </td>
+                    <td>
+                      <%= it?.description || "-" %>
+                    </td>
+                    <td>
+                      <%= it?.manufacturer || "-" %>
+                    </td>
+                    <td class="center">
+                      <%= it?.qty ?? 0 %>
+                    </td>
+                    <td class="center">
+                      <%= it?.uomText || it?.uom?.code || "-" %>
+                    </td>
+                    <td class="num">S$<%= money(it?.unitPrice) %>
+                    </td>
+                    <td class="num">
+                      <%= Number(it?.discount || 0).toFixed(2) %>
+                    </td>
+                    <td class="num">
+                      <%= Number(it?.extPrice || 0).toFixed(2) %>
+                    </td>
+                    </td>
+                  </tr>
+                  <% }) %>
+          </tbody>
+        </table>
+
+
+
+
+
+
+
+
+        <div class="totals">
+          <div class="totals-box" style="border:1px solid #999;padding:10px">
+            <div class="totals-line"><span>Freight Cost:</span> <span>
+                <%= money(totals?.freightAmount) %>
+              </span></div>
+            <div class="totals-line"><span>Discount:</span> <span>
+                <%= money(totals?.discountAmount) %>
+              </span></div>
+            <div class="totals-line"><span>Sub-Total:</span> <span>
+                <%= money(totals?.subTotalAmount) %>
+              </span></div>
+            <div class="totals-line"><span>
+                <%= taxPercentage %>% GST Tax:
+              </span> <span>
+                <%= money(totals?.ostTax) %>
+              </span></div>
+            <div class="totals-line grand"><span>Grand Total:</span> <span>
+                <%= money(totals?.finalAmount) %>
+              </span>
+            </div>
           </div>
         </div>
+
       </div>
 
-      <div class="terms">
-        <h3>Terms and Conditions:</h3>
-        <pre><%= terms %></pre>
-      </div>
 
+      <% if (terms) { %>
+        <div class="terms">
+          <h3>Terms and Conditions:</h3>
+          <pre><%= terms %></pre>
+        </div>
+        <% } %>
     </div>
+
+
   </body>
 
   </html>
