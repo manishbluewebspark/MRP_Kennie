@@ -119,7 +119,8 @@ const PurchaseOrderSchema = new Schema(
 
     referenceNo: { type: String },
     needDate: { type: Date },
-
+    etaDate: { type: Date },
+    taxPercentage:{type:Number,default:0},
     workOrderNo: {
       type: Schema.Types.ObjectId,
       ref: "WorkOrder",
@@ -136,6 +137,7 @@ const PurchaseOrderSchema = new Schema(
       subTotalAmount: { type: Number, default: 0 },
       ostTax: { type: Number, default: 0 },
       finalAmount: { type: Number, default: 0 },
+      totalDiscount: { type: Number, default: 0 },
     },
 
     status: {

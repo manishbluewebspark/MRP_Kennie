@@ -108,26 +108,77 @@ const PurchaseOrderForm = () => {
     (state) => state.systemSettings
   );
 
-  console.log('---selectedSupplier', selectedSupplier)
+  const freightAmount = Form.useWatch('freightAmount', form);
+
+
   /** ---------- totals as numbers ---------- */
+  // const calcTotals = () => {
+  //   const sub = orderItems.reduce((sum, it) => {
+  //     return sum + itemExt(it.qty, it.unitPrice, it.discPercentage);
+  //   }, 0);
+  //   const freight = Number(freightAmount || 0);
+  //   const gstPercent = Number(workOrderSettings?.gstSettings?.gstPercentage || 0);
+
+  // const ostTax = selectedSupplier?.gst
+  // ? sub + freight * (gstPercent / 100)
+  // : 0;
+
+  //   const finalAmount =  ostTax;
+  //   return {
+  //     subTotalAmount: sub,
+  //     freightAmount: freight,
+  //     ostTax,
+  //     finalAmount,
+  //   };
+  // };
+  // const totals = calcTotals();
+
   const calcTotals = () => {
-    const sub = orderItems.reduce((sum, it) => {
-      return sum + itemExt(it.qty, it.unitPrice, it.discPercentage);
+    // Gross Amount (without discount)
+    const grossAmount = orderItems.reduce((sum, it) => {
+      return sum + (n(it.qty) * n(it.unitPrice));
     }, 0);
-    const freight = n(form.getFieldValue('freightAmount'));
-    const gstPercent = Number(workOrderSettings?.gstSettings?.gstPercentage || 0);
-  const ostTax = selectedSupplier?.gst
-  ? sub * (gstPercent / 100)
-  : 0;
-    
-    const finalAmount = sub + freight + ostTax;
+
+    // Total Discount
+    const totalDiscount = orderItems.reduce((sum, it) => {
+      const lineAmount = n(it.qty) * n(it.unitPrice);
+      const discountAmount =
+        lineAmount * (n(it.discPercentage) / 100);
+
+      return sum + discountAmount;
+    }, 0);
+
+    // Sub Total after discount
+    const subTotalAmount = grossAmount - totalDiscount;
+
+    const freight = Number(freightAmount || 0);
+
+    const gstPercent = Number(
+      workOrderSettings?.gstSettings?.gstPercentage || 0
+    );
+
+    // GST on (SubTotal + Freight)
+    const taxableAmount = subTotalAmount + freight;
+
+    const ostTax = selectedSupplier?.gst
+      ? taxableAmount * (gstPercent / 100)
+      : 0;
+
+    const finalAmount =
+      subTotalAmount +
+      freight +
+      ostTax;
+
     return {
-      subTotalAmount: sub,
-      freightAmount: freight,
+      grossAmount,
+      totalDiscount,
+      subTotalAmount,
+      freight,
       ostTax,
       finalAmount,
     };
   };
+
   const totals = calcTotals();
 
   /** ---------- columns ---------- */
@@ -241,7 +292,7 @@ const PurchaseOrderForm = () => {
           size="small"
           min={0}
           step={0.01}
-                precision={3} 
+          precision={3}
           value={record.unitPrice}
           onChange={(v) => handleItemChange(record.key, 'unitPrice', n(v))}
           style={{ width: '100%' }}
@@ -340,6 +391,9 @@ const PurchaseOrderForm = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, id, lastPOOrderNumber]);
 
+
+
+
   const loadForEdit = async (poId) => {
     setLoading(true);
     try {
@@ -352,6 +406,7 @@ const PurchaseOrderForm = () => {
         referenceNo: po.referenceNo,
         workOrderNo: po.workOrderNo?._id || po.workOrderNo || undefined,
         needDate: po.needDate ? dayjs(po.needDate) : null,
+        etaDate: po.etaDate ? dayjs(po.etaDate) : null,
         supplier: po.supplier?._id || po.supplier,
         shipToAddress: po.shipToAddress,
         termsConditions: po.termsConditions,
@@ -370,6 +425,14 @@ const PurchaseOrderForm = () => {
         discPercentage: n(it.discount, 0),
       }));
       setOrderItems(items.length ? items : []);
+
+        if (po.supplier?._id && suppliers?.length) {
+    const supplier = suppliers.find(
+      (s) => String(s._id) === String(po.supplier?._id)
+    );
+
+    setSelectedSupplier(supplier || null);
+  }
     } catch (e) {
       message.error('Failed to load purchase order');
     } finally {
@@ -492,52 +555,52 @@ const PurchaseOrderForm = () => {
   };
 
   const handleItemChange = (key, field, value) => {
-  // ✅ MPN validation for Office PO
-  if (field === 'mpn' && isOfficePO) {
-    const selectedMPN = librarys?.mpnList?.find(
-      (m) => m._id === value
-    );
+    // ✅ MPN validation for Office PO
+    if (field === 'mpn' && isOfficePO) {
+      const selectedMPN = librarys?.mpnList?.find(
+        (m) => m._id === value
+      );
 
-    if (
-      selectedMPN &&
-      !['Office Supplies/Equipment'].includes(
-        selectedMPN.Category?.name
-      )
-    ) {
-      message.error('Accept Office Supplies/Equipment items only');
-      return; // ❌ yahin stop, state update nahi hoga
-    }
-  }
-
-  setOrderItems((prev) =>
-    prev.map((item) => {
-      if (item.key !== key) return item;
-
-      let updated = { ...item, [field]: value };
-
-      // when MPN changes, auto-fill from library
-      if (field === 'mpn') {
-        const match = librarys?.mpnList?.find((m) => m._id === value);
-        if (match) {
-          const uomId =
-            match?.UOM?._id || match?.UOM?.name || updated.uom || '';
-
-          updated = {
-            ...updated,
-            description: match.Description || '',
-            manufacturer: match.Manufacturer || '',
-            uom: uomId,
-            qty: 1,
-            unitPrice: n(match.RFQUnitPrice, 0),
-            discPercentage: 0,
-          };
-        }
+      if (
+        selectedMPN &&
+        !['Office Supplies/Equipment'].includes(
+          selectedMPN.Category?.name
+        )
+      ) {
+        message.error('Accept Office Supplies/Equipment items only');
+        return; // ❌ yahin stop, state update nahi hoga
       }
+    }
 
-      return updated;
-    })
-  );
-};
+    setOrderItems((prev) =>
+      prev.map((item) => {
+        if (item.key !== key) return item;
+
+        let updated = { ...item, [field]: value };
+
+        // when MPN changes, auto-fill from library
+        if (field === 'mpn') {
+          const match = librarys?.mpnList?.find((m) => m._id === value);
+          if (match) {
+            const uomId =
+              match?.UOM?._id || match?.UOM?.name || updated.uom || '';
+
+            updated = {
+              ...updated,
+              description: match.Description || '',
+              manufacturer: match.Manufacturer || '',
+              uom: uomId,
+              qty: 1,
+              unitPrice: n(match.RFQUnitPrice, 0),
+              discPercentage: 0,
+            };
+          }
+        }
+
+        return updated;
+      })
+    );
+  };
 
 
   // const handleItemChange = (key, field, value) => {
@@ -611,15 +674,18 @@ const PurchaseOrderForm = () => {
         ...values,
         poDate: values.poDate ? values.poDate.format('YYYY-MM-DD') : null,
         needDate: values.needDate ? values.needDate.format('YYYY-MM-DD') : null,
+        etaDate: values.etaDate ? values.etaDate.format('YYYY-MM-DD') : null,
         supplier: values.supplier || null,
         workOrderNo: values.workOrderNo || null,
         freightAmount: n(values.freightAmount),
+        taxPercentage: workOrderSettings?.gstSettings?.gstPercentage,
         items,
         totals: {
           subTotalAmount: totalsNum.subTotalAmount,
-          freightAmount: totalsNum.freightAmount,
+          freightAmount: totalsNum.freight,
           ostTax: totalsNum.ostTax,
           finalAmount: totalsNum.finalAmount,
+          totalDiscount:totalsNum?.totalDiscount
         },
       };
 
@@ -679,13 +745,13 @@ const PurchaseOrderForm = () => {
                   size="large"
                   showSearch
                   optionFilterProp="children"
-                    onChange={(value) => {
-      const supplier = suppliers?.find(
-        (s) => s._id === value
-      );
+                  onChange={(value) => {
+                    const supplier = suppliers?.find(
+                      (s) => s._id === value
+                    );
 
-      setSelectedSupplier(supplier);
-    }}
+                    setSelectedSupplier(supplier);
+                  }}
                 // disabled={fromShortage && !isEditMode} // lock when from shortage
                 >
                   {suppliers?.map((s) => (
@@ -709,6 +775,17 @@ const PurchaseOrderForm = () => {
             <Col span={6}>
               <Text type="primary" style={{ fontSize: 16 }}>Need Date</Text>
               <Form.Item name="needDate">
+                <DatePicker
+                  format="DD/MM/YYYY"
+                  size="large"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+
+            <Col span={6}>
+              <Text type="primary" style={{ fontSize: 16 }}>Expected Date</Text>
+              <Form.Item name="etaDate">
                 <DatePicker
                   format="DD/MM/YYYY"
                   size="large"
@@ -836,42 +913,59 @@ const PurchaseOrderForm = () => {
 
             <Row gutter={16} style={{ marginBottom: 8 }}>
               <Col span={12}>
-                <Text strong>Sub-Total Amount:</Text>
+                <Text>Gross Amount:</Text>
               </Col>
-              <Col span={12} style={{ textAlign: 'right' }}>
+              <Col span={12} style={{ textAlign: "right" }}>
+                ${totals.grossAmount.toFixed(2)}
+              </Col>
+            </Row>
+
+            <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Col span={12}>
+                <Text>Discount:</Text>
+              </Col>
+              <Col span={12} style={{ textAlign: "right", color: "#ff4d4f" }}>
+                - ${totals.totalDiscount.toFixed(2)}
+              </Col>
+            </Row>
+
+            <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Col span={12}>
+                <Text strong>Sub Total:</Text>
+              </Col>
+              <Col span={12} style={{ textAlign: "right" }}>
                 ${totals.subTotalAmount.toFixed(2)}
               </Col>
             </Row>
+
             <Row gutter={16} style={{ marginBottom: 8 }}>
               <Col span={12}>
                 <Text>Freight Amount:</Text>
               </Col>
-              <Col span={12} style={{ textAlign: 'right' }}>
-                ${totals.freightAmount.toFixed(2)}
+              <Col span={12} style={{ textAlign: "right" }}>
+                ${totals.freight.toFixed(2)}
               </Col>
             </Row>
-             <Row gutter={16} style={{ marginBottom: 8 }}>
+
+            <Row gutter={16} style={{ marginBottom: 8 }}>
               <Col span={12}>
-                <Text>GST Tax ({workOrderSettings?.gstSettings?.gstPercentage}%):</Text>
+                <Text>
+                  GST Tax ({workOrderSettings?.gstSettings?.gstPercentage}%):
+                </Text>
               </Col>
-              <Col span={12} style={{ textAlign: 'right' }}>
+              <Col span={12} style={{ textAlign: "right" }}>
                 ${totals.ostTax.toFixed(2)}
               </Col>
             </Row>
-           
 
-            <Divider style={{ margin: '16px 0' }} />
-
-            <Row gutter={16}>
+            <Row gutter={16} style={{ marginBottom: 8 }}>
               <Col span={12}>
-                <Text strong style={{ fontSize: 16 }}>
-                  Final Amount:
+                <Text>
+                  Final Amount
                 </Text>
               </Col>
-              <Col span={12} style={{ textAlign: 'right' }}>
-                <Text strong style={{ fontSize: 16, color: '#1890ff' }}>
-                  ${totals.finalAmount.toFixed(2)}
-                </Text>
+              <Col span={12} style={{ textAlign: "right" }}>
+                ${totals.finalAmount.toFixed(2)}
               </Col>
             </Row>
           </div>

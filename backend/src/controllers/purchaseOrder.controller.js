@@ -224,6 +224,7 @@ export const addPurchaseOrder = async (req, res) => {
       ostTax: data?.totals?.ostTax,
       finalAmount: data?.totals?.finalAmount,
       freightAmount: data?.totals?.freightAmount,
+      totalDiscount:data?.totals?.totalDiscount,
     };
 
     // -------------------- create purchase order --------------------
@@ -233,6 +234,8 @@ export const addPurchaseOrder = async (req, res) => {
       referenceNo: data.referenceNo,
       workOrderNo: data.workOrderNo,
       needDate: data.needDate,
+      etaDate: data.etaDate,
+      taxPercentage:data?.taxPercentage || 0,
       supplier: data.supplier,
       shipToAddress: data.shipToAddress || "",
       termsConditions: data.termsConditions || "",
@@ -557,14 +560,25 @@ export const updatePurchaseOrder = async (req, res) => {
     // Totals calculation
     // --------------------------------------------------
 
+    // const freightAmount = num(
+    //   data.totals?.freightAmount ?? data.freightAmount
+    // );
+
+    // const ostTax = +(subTotal * data?.taxPercentage);
+
+    // const finalAmount = +(subTotal + freightAmount + ostTax);
+
     const freightAmount = num(
-      data.totals?.freightAmount ?? data.freightAmount
-    );
+  data.totals?.freightAmount ?? data.freightAmount
+);
 
-    const ostTax = +(subTotal * 0.09);
+const subTotals = num(data.totals?.subTotalAmount);
 
-    const finalAmount = +(subTotal + freightAmount + ostTax);
+const ostTax = num(data.totals?.ostTax);
 
+const finalAmount = num(data.totals?.finalAmount);
+
+const totalDiscount = num(data.totals?.totalDiscount)
 
     const purchaseSetting = await PurchaseSettings.findOne().lean();
 
@@ -648,9 +662,10 @@ export const updatePurchaseOrder = async (req, res) => {
         items,
         totals: {
           freightAmount,
-          subTotalAmount: subTotal,
+          subTotalAmount: subTotals,
           ostTax,
           finalAmount,
+          totalDiscount
         },
       },
       { new: true, runValidators: true }

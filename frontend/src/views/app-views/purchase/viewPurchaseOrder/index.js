@@ -34,7 +34,7 @@ const PurchaseOrderDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [downloadPdf,setDownloadPdf] = useState(false)
+  const [downloadPdf, setDownloadPdf] = useState(false)
   const [po, setPo] = useState(null);
 
   useEffect(() => {
@@ -68,6 +68,7 @@ const PurchaseOrderDetailsPage = () => {
           ? (po.workOrderNo?.workOrderNo || po.workOrderNo?._id)
           : po.workOrderNo,
       needDate: fmtDate(po.needDate),
+      etaDate: fmtDate(po.etaDate),
       expectedDate: fmtDate(po.expectedDate),
       shipToAddress: po.shipToAddress || "-",
       termsConditions: po.termsConditions || "",
@@ -107,7 +108,7 @@ const PurchaseOrderDetailsPage = () => {
     return po.items.map((it, idx) => ({
       key: it._id || String(idx),
       description: it.description || "-",
-      manufacturer:it?.manufacturer,
+      manufacturer: it?.manufacturer,
       mpn: typeof it.mpn === "object" ? (it.mpn?.MPN || it.mpn?._id) : (it.mpn || "-"),
       uom: typeof it.uom === "object" ? (it.uom?.code || it.uom?.name || it.uom?._id) : (it.uom || "-"),
       quantity: it.qty ?? 0,
@@ -126,22 +127,31 @@ const PurchaseOrderDetailsPage = () => {
   //   return { freight, sub, tax, finalAmount };
   // }, [po]);
 
-  const totals = useMemo(() => {
+ const totals = useMemo(() => {
   const t = po?.totals || {};
 
-  const freight = Number(t?.freightAmount || 0);
-  const sub = Number(t?.subTotalAmount || 0);
-  const tax = Number(t?.ostTax || 0);
-  const finalAmount = Number(t?.finalAmount || 0);
+  const freight = Number(t.freightAmount || 0);
+  const sub = Number(t.subTotalAmount || 0);
+  const tax = Number(t.ostTax || 0);
 
-  const taxPercentage = sub > 0 ? (tax / sub) * 100 : 0;
+  const discountAmount = (po?.items || []).reduce(
+    (sum, item) =>
+      sum +
+      (Number(item.qty || 0) * Number(item.unitPrice || 0)) -
+      Number(item.extPrice || 0),
+    0
+  );
 
   return {
     freight,
     sub,
     tax,
-    finalAmount,
-    taxPercentage,
+    discountAmount,
+
+    // ALWAYS USE BACKEND VALUE
+    finalAmount: Number(t.finalAmount || 0),
+
+    taxPercentage: Number(po?.taxPercentage || 0),
   };
 }, [po]);
 
@@ -157,7 +167,7 @@ const PurchaseOrderDetailsPage = () => {
       render: (text) => <Text strong>{text}</Text>,
     },
     { title: "MPN ↓", dataIndex: "mpn", key: "mpn", width: 150 },
-     { title: "manufacturer", dataIndex: "manufacturer", key: "manufacturer", width: 150 },
+    { title: "manufacturer", dataIndex: "manufacturer", key: "manufacturer", width: 150 },
     { title: "UOM ↓", dataIndex: "uom", key: "uom", width: 90, align: "center" },
     { title: "Qty ↓", dataIndex: "quantity", key: "quantity", width: 90, align: "center" },
     {
@@ -231,7 +241,7 @@ const PurchaseOrderDetailsPage = () => {
           <Descriptions.Item label="Reference No">{poInfoData.referenceNo}</Descriptions.Item>
           <Descriptions.Item label="Work Order No">{poInfoData.workOrderNo || "-"}</Descriptions.Item>
           <Descriptions.Item label="Need Date">{poInfoData.needDate}</Descriptions.Item>
-          <Descriptions.Item label="Expected Date">{poInfoData.expectedDate || "-"}</Descriptions.Item>
+          <Descriptions.Item label="Expected Date">{poInfoData.etaDate || "-"}</Descriptions.Item>
           <Descriptions.Item label="Ship To Address" span={2}>
             <Text>{poInfoData.shipToAddress}</Text>
           </Descriptions.Item>
@@ -286,43 +296,76 @@ const PurchaseOrderDetailsPage = () => {
           style={{ marginBottom: 24 }}
         />
 
-        {/* Totals */}
-        <div
-          style={{
-            backgroundColor: "#fafafa",
-            padding: "16px 24px",
-            borderRadius: 6,
-            marginTop: 24,
-          }}
-        >
-          <Row gutter={16} justify="end">
-            <Col xs={24} md={12} lg={8}>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ marginBottom: 8 }}>
-                  <Text strong>Subtotal: </Text>
-                  <Text>{fmtMoney(totals.sub)}</Text>
-                </div>
-                <div style={{ marginBottom: 8 }}>
-                  <Text strong>Tax (GST {totals?.taxPercentage}%): </Text>
-                  <Text>{fmtMoney(totals.tax)}</Text>
-                </div>
-                <div style={{ marginBottom: 8 }}>
-                  <Text strong>Freight: </Text>
-                  <Text>{fmtMoney(totals.freight)}</Text>
-                </div>
-                <Divider style={{ margin: "12px 0" }} />
-                <div>
-                  <Text strong style={{ fontSize: 16 }}>
-                    Total Amount:{" "}
-                  </Text>
-                  <Text strong style={{ fontSize: 16, color: "#1890ff" }}>
-                    {fmtMoney(totals.finalAmount)}
-                  </Text>
-                </div>
-              </div>
-            </Col>
-          </Row>
+   <div
+  style={{
+    display: "flex",
+    justifyContent: "flex-end",
+    marginTop: 20,
+  }}
+>
+  <div
+    style={{
+      minWidth: 350,
+      textAlign: "right",
+      background: "#fafafa",
+      padding: 16,
+      borderRadius: 8,
+    }}
+  >
+         {/* Totals */}
+        <div style={{ marginBottom: 8 }}>
+          <Text strong>Gross Amount: </Text>
+          <Text>
+            {fmtMoney(
+              totals.sub + totals.discountAmount
+            )}
+          </Text>
         </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <Text strong>Discount: </Text>
+          <Text type="danger">
+            -{fmtMoney(totals.discountAmount)}
+          </Text>
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <Text strong>Sub Total: </Text>
+          <Text>{fmtMoney(totals.sub)}</Text>
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <Text strong>Freight: </Text>
+          <Text>{fmtMoney(totals.freight)}</Text>
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <Text strong>
+            GST ({totals.taxPercentage}%):
+          </Text>
+          <Text>{fmtMoney(totals.tax)}</Text>
+        </div>
+
+        <Divider style={{ margin: "12px 0" }} />
+
+        <div>
+          <Text strong style={{ fontSize: 16 }}>
+            Total Amount:
+          </Text>
+
+          <Text
+            strong
+            style={{
+              fontSize: 16,
+              color: "#1890ff",
+              marginLeft: 10,
+            }}
+          >
+            {fmtMoney(totals.finalAmount)}
+          </Text>
+        </div>
+       </div>
+       </div>
       </Card>
 
       {/* Terms & Conditions */}
@@ -373,7 +416,7 @@ const PurchaseOrderDetailsPage = () => {
             cursor: "pointer",
           }}
         >
-          {downloadPdf ? "Downloading..." :"Export PDF"}
+          {downloadPdf ? "Downloading..." : "Export PDF"}
         </button>
       </div>
     </div>

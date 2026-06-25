@@ -21,9 +21,7 @@
   const items = Array.isArray(po?.items) ? po.items : [];
   const totals = po?.totals || {};
   const taxPercentage =
-  Number(totals?.subTotalAmount) > 0
-  ? (Number(totals?.ostTax || 0) / Number(totals?.subTotalAmount)) * 100
-  : 0;
+  Number(po?.taxPercentage)
   %>
 
   <!doctype html>
@@ -345,18 +343,21 @@
         <div class="two-col">
           <div class="box">
             <div class="box-title">Order To:</div>
-            <p><b>
-                <%= supplier?.companyName || supplier?.name || "-" %>
-              </b></p>
             <p>
-              <%= supplier?.address || "" %>
+                <pre style="margin:0"><%= supplier?.companyName || supplier?.name || "-" %></pre>
+              </p>
+            <p>
+              <pre style="margin:0"><%= supplier?.companyAddress || "" %></pre>
             </p>
-            <p>Tel: <%= supplier?.phone || "-" %>
+            
+           
+            <p><pre style="margin:0"><%= supplier?.email || "-" %></pre>
             </p>
-            <p>Attn: <%= supplier?.contactPerson || supplier?.name || "-" %>
+            <p> <pre style="margin:0"><%= supplier?.phone || "-" %></pre>
             </p>
-            <p>Email: <%= supplier?.email || "-" %>
+             <p><pre style="margin:0">Attn: <%= supplier?.contactPerson || supplier?.name || "-" %></pre>
             </p>
+            
           </div>
 
           <div class="box">
@@ -401,7 +402,7 @@
               <th style="width:60px" class="center">Qty</th>
               <th style="width:60px" class="center">UOM</th>
               <th style="width:90px" class="num">Unit Price</th>
-              <th style="width:90px" class="num">Dis Price</th>
+              <!-- <th style="width:90px" class="num">Dis Price</th> -->
               <th style="width:90px" class="num">Ext. Price</th>
             </tr>
           </thead>
@@ -433,11 +434,11 @@
                     <td class="center">
                       <%= it?.uomText || it?.uom?.code || "-" %>
                     </td>
-                    <td class="num">S$<%= money(it?.unitPrice) %>
+                    <td class="num"><%= money(it?.unitPrice) %>
                     </td>
-                    <td class="num">
+                    <!-- <td class="num">
                       <%= Number(it?.discount || 0).toFixed(2) %>
-                    </td>
+                    </td> -->
                     <td class="num">
                       <%= Number(it?.extPrice || 0).toFixed(2) %>
                     </td>
@@ -456,15 +457,20 @@
 
         <div class="totals">
           <div class="totals-box" style="border:1px solid #999;padding:10px">
+             <div class="totals-line"><span>Gross Amount:</span> <span>
+                <%= money(totals?.subTotalAmount + totals?.totalDiscount) %>
+              </span></div>
+              <div class="totals-line"><span>Discount:</span> <span>
+                -<%= money(totals?.totalDiscount) %>
+              </span></div>
+                <div class="totals-line"><span>Sub-Total:</span> <span>
+                <%= money(totals?.subTotalAmount) %>
+              </span></div>
             <div class="totals-line"><span>Freight Cost:</span> <span>
                 <%= money(totals?.freightAmount) %>
               </span></div>
-            <div class="totals-line"><span>Discount:</span> <span>
-                <%= money(totals?.discountAmount) %>
-              </span></div>
-            <div class="totals-line"><span>Sub-Total:</span> <span>
-                <%= money(totals?.subTotalAmount) %>
-              </span></div>
+            
+          
             <div class="totals-line"><span>
                 <%= taxPercentage %>% GST Tax:
               </span> <span>
