@@ -1258,65 +1258,36 @@ export const sendPurchaseOrderMail = async (req, res) => {
         </p>
 
         <p>
-          We would like to inform you that materials received
-          against Purchase Order
-          <b>${purchaseOrder.poNumber}</b>
-          have been inspected.
+          We would like to inform you that this Purchase Order <b>${purchaseOrder.poNumber}</b> is being revised accordingly as per discussed.
         </p>
 
-        <p>
-          Some quantity has been rejected and replacement
-          is required.
-        </p>
+       
 
-        <table
-          style="
-            border-collapse:collapse;
-            width:100%;
-            margin-top:15px;
-          "
-        >
-          <tr>
-            <th style="border:1px solid #ddd;padding:8px;">
-              Item
-            </th>
-            <th style="border:1px solid #ddd;padding:8px;">
-              Ordered
-            </th>
-            <th style="border:1px solid #ddd;padding:8px;">
-              Received
-            </th>
-            <th style="border:1px solid #ddd;padding:8px;">
-              Rejected
-            </th>
-          </tr>
+        
 
-          ${rejectedItems
-          .map(
-            (item) => `
-                <tr>
-                  <td style="border:1px solid #ddd;padding:8px;">
-                    ${item?.description || ""}
-                  </td>
-                  <td style="border:1px solid #ddd;padding:8px;">
-                    ${item?.qty || 0}
-                  </td>
-                  <td style="border:1px solid #ddd;padding:8px;">
-                    ${item?.receivedQtyTotal || 0}
-                  </td>
-                  <td style="border:1px solid #ddd;padding:8px;color:red;">
-                    ${item?.rejectedQtyTotal || 0}
-                  </td>
-                </tr>
-              `
-          )
-          .join("")}
-        </table>
+        
 
         <p style="margin-top:20px;">
           Kindly arrange replacement for the rejected quantity
           and share the expected delivery date.
         </p>
+
+        <div style="margin:20px 0;text-align:center;">
+          <a
+            href="${ackUrl}"
+            style="
+              display:inline-block;
+              padding:12px 28px;
+              background:#16a34a;
+              color:#fff;
+              text-decoration:none;
+              border-radius:6px;
+              font-weight:bold;
+            "
+          >
+            ✔ Acknowledge Purchase Order
+          </a>
+        </div>
 
         <p>
           Regards,<br/>
@@ -4951,11 +4922,12 @@ export const acceptPurchaseOrder = async (req, res) => {
     const { id } = req.params;
 
     const po = await PurchaseOrders.findById(id);
+
     if (!po) {
       return res.status(404).send("<h3>Purchase Order not found</h3>");
     }
 
-    // Already Accepted
+    // Already Acknowledged
     if (po.status === "Acknowledged") {
       return res.send(`
         <h3>✅ Purchase Order already accepted</h3>
@@ -4963,15 +4935,22 @@ export const acceptPurchaseOrder = async (req, res) => {
       `);
     }
 
-    // ✅ Update status
-    po.status = "Acknowledged";
-    po.acceptedAt = new Date();
+    // ✅ Special case: Partially Received → Closed
+    if (po.status === "Partially Received") {
+      po.status = "Closed";
+      po.closedAt = new Date(); // optional tracking field
+    } else {
+      // Normal flow
+      po.status = "Acknowledged";
+      po.acceptedAt = new Date();
+    }
+
     await po.save();
 
     return res.send(`
       <div style="font-family:Arial;padding:20px">
         <h2>✅ Thank you!</h2>
-        <p>Purchase Order <b>${po.poNumber}</b> has been <b>ACCEPTED</b> successfully.</p>
+        <p>Purchase Order <b>${po.poNumber}</b> has been <b>${po.status.toUpperCase()}</b> successfully.</p>
         <p>You may now close this window.</p>
       </div>
     `);
@@ -4981,3 +4960,39 @@ export const acceptPurchaseOrder = async (req, res) => {
     return res.status(500).send("Something went wrong");
   }
 };
+
+// export const acceptPurchaseOrder = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const po = await PurchaseOrders.findById(id);
+//     if (!po) {
+//       return res.status(404).send("<h3>Purchase Order not found</h3>");
+//     }
+
+//     // Already Accepted
+//     if (po.status === "Acknowledged") {
+//       return res.send(`
+//         <h3>✅ Purchase Order already accepted</h3>
+//         <p>PO Number: ${po.poNumber}</p>
+//       `);
+//     }
+
+//     // ✅ Update status
+//     po.status = "Acknowledged";
+//     po.acceptedAt = new Date();
+//     await po.save();
+
+//     return res.send(`
+//       <div style="font-family:Arial;padding:20px">
+//         <h2>✅ Thank you!</h2>
+//         <p>Purchase Order <b>${po.poNumber}</b> has been <b>ACCEPTED</b> successfully.</p>
+//         <p>You may now close this window.</p>
+//       </div>
+//     `);
+
+//   } catch (error) {
+//     console.error("ACCEPT ERROR:", error);
+//     return res.status(500).send("Something went wrong");
+//   }
+// };
