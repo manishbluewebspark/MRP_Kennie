@@ -344,20 +344,23 @@
           <div class="box">
             <div class="box-title">Order To:</div>
             <p>
-                <pre style="margin:0"><%= supplier?.companyName || supplier?.name || "-" %></pre>
-              </p>
+            <pre style="margin:0"><%= supplier?.companyName || supplier?.name || "-" %></pre>
+            </p>
             <p>
-              <pre style="margin:0"><%= supplier?.companyAddress || "" %></pre>
+            <pre style="margin:0"><%= supplier?.companyAddress || "" %></pre>
             </p>
-            
-           
-            <p><pre style="margin:0"><%= supplier?.email || "-" %></pre>
+
+
+            <p>
+            <pre style="margin:0"><%= supplier?.email || "-" %></pre>
             </p>
-            <p> <pre style="margin:0"><%= supplier?.phone || "-" %></pre>
+            <p>
+            <pre style="margin:0"><%= supplier?.phone || "-" %></pre>
             </p>
-             <p><pre style="margin:0">Attn: <%= supplier?.contactPerson || supplier?.name || "-" %></pre>
+            <p>
+            <pre style="margin:0">Attn: <%= supplier?.contactPerson || supplier?.name || "-" %></pre>
             </p>
-            
+
           </div>
 
           <div class="box">
@@ -434,7 +437,8 @@
                     <td class="center">
                       <%= it?.uomText || it?.uom?.code || "-" %>
                     </td>
-                    <td class="num"><%= money(it?.unitPrice) %>
+                    <td class="num">
+                      <%= money(it?.unitPrice) %>
                     </td>
                     <!-- <td class="num">
                       <%= Number(it?.discount || 0).toFixed(2) %>
@@ -455,44 +459,63 @@
 
 
 
-        <div class="totals">
-          <div class="totals-box" style="border:1px solid #999;padding:10px">
-             <div class="totals-line"><span>Gross Amount:</span> <span>
-                <%= money(totals?.subTotalAmount + totals?.totalDiscount) %>
-              </span></div>
-              <div class="totals-line"><span>Discount:</span> <span>
-                -<%= money(totals?.totalDiscount) %>
-              </span></div>
-                <div class="totals-line"><span>Sub-Total:</span> <span>
-                <%= money(totals?.subTotalAmount) %>
-              </span></div>
-            <div class="totals-line"><span>Freight Cost:</span> <span>
-                <%= money(totals?.freightAmount) %>
-              </span></div>
-            
-          
-            <div class="totals-line"><span>
-                <%= taxPercentage %>% GST Tax:
-              </span> <span>
-                <%= money(totals?.ostTax) %>
-              </span></div>
-            <div class="totals-line grand"><span>Grand Total:</span> <span>
-                <%= money(totals?.finalAmount) %>
-              </span>
+        <% const grossAmount=(totals?.subTotalAmount || 0) - (totals?.freightAmount || 0) + (totals?.totalDiscount ||
+          0); const beforeDiscount=grossAmount + (totals?.freightAmount || 0); %>
+
+          <div class="totals">
+            <div class="totals-box" style="border:1px solid #999;padding:10px">
+
+              <div class="totals-line">
+                <span>Gross Amount:</span>
+                <span>
+                  <%= money(grossAmount) %>
+                </span>
+              </div>
+
+              <div class="totals-line">
+                <span>Freight Cost:</span>
+                <span>+ <%= money(totals?.freightAmount) %></span>
+              </div>
+
+              <div class="totals-line">
+                <span>Sub-Total:</span>
+                <span>
+                  <%= money(beforeDiscount) %>
+                </span>
+              </div>
+
+              <div class="totals-line">
+                <span>Discount:</span>
+                <span>- <%= money(totals?.totalDiscount) %></span>
+              </div>
+
+              <div class="totals-line">
+                <span>
+                  <%= taxPercentage %>% GST Tax:
+                </span>
+                <span>
+                  <%= money(totals?.ostTax) %>
+                </span>
+              </div>
+
+              <div class="totals-line grand">
+                <span>Grand Total:</span>
+                <span>
+                  <%= money(totals?.finalAmount) %>
+                </span>
+              </div>
+
             </div>
           </div>
-        </div>
 
+
+          <% if (terms) { %>
+            <div class="terms">
+              <h3>Terms and Conditions:</h3>
+              <pre><%= terms %></pre>
+            </div>
+            <% } %>
       </div>
-
-
-      <% if (terms) { %>
-        <div class="terms">
-          <h3>Terms and Conditions:</h3>
-          <pre><%= terms %></pre>
-        </div>
-        <% } %>
-    </div>
 
 
   </body>

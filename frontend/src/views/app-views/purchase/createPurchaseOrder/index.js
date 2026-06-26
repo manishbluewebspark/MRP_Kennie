@@ -110,6 +110,8 @@ const PurchaseOrderForm = () => {
 
   const freightAmount = Form.useWatch('freightAmount', form);
 
+  const discountAmou = Form.useWatch('discountAmount', form);
+
 
   /** ---------- totals as numbers ---------- */
   // const calcTotals = () => {
@@ -134,50 +136,37 @@ const PurchaseOrderForm = () => {
   // const totals = calcTotals();
 
   const calcTotals = () => {
-    // Gross Amount (without discount)
-    const grossAmount = orderItems.reduce((sum, it) => {
-      return sum + (n(it.qty) * n(it.unitPrice));
-    }, 0);
+  // Gross Amount (without discount)
+  const grossAmount = orderItems.reduce((sum, it) => {
+    return sum + (n(it.qty) * n(it.unitPrice));
+  }, 0);
 
-    // Total Discount
-    const totalDiscount = orderItems.reduce((sum, it) => {
-      const lineAmount = n(it.qty) * n(it.unitPrice);
-      const discountAmount =
-        lineAmount * (n(it.discPercentage) / 100);
+  const totalDiscount = Number(discountAmou || 0);
+  const freight = Number(freightAmount || 0);
 
-      return sum + discountAmount;
-    }, 0);
+  // ✅ Gross + Freight - Discount
+  const subTotalAmount = grossAmount + freight - totalDiscount;
 
-    // Sub Total after discount
-    const subTotalAmount = grossAmount - totalDiscount;
+  const gstPercent = Number(
+    workOrderSettings?.gstSettings?.gstPercentage || 0
+  );
 
-    const freight = Number(freightAmount || 0);
+  // GST on Sub Total
+  const ostTax = selectedSupplier?.gst
+    ? subTotalAmount * (gstPercent / 100)
+    : 0;
 
-    const gstPercent = Number(
-      workOrderSettings?.gstSettings?.gstPercentage || 0
-    );
+  const finalAmount = subTotalAmount + ostTax;
 
-    // GST on (SubTotal + Freight)
-    const taxableAmount = subTotalAmount + freight;
-
-    const ostTax = selectedSupplier?.gst
-      ? taxableAmount * (gstPercent / 100)
-      : 0;
-
-    const finalAmount =
-      subTotalAmount +
-      freight +
-      ostTax;
-
-    return {
-      grossAmount,
-      totalDiscount,
-      subTotalAmount,
-      freight,
-      ostTax,
-      finalAmount,
-    };
+  return {
+    grossAmount,
+    freight,
+    totalDiscount,
+    subTotalAmount,
+    ostTax,
+    finalAmount,
   };
+};
 
   const totals = calcTotals();
 
@@ -301,24 +290,24 @@ const PurchaseOrderForm = () => {
         />
       ),
     },
-    {
-      title: 'Disc %',
-      dataIndex: 'discPercentage',
-      key: 'discPercentage',
-      width: 100,
-      render: (text, record) => (
-        <InputNumber
-          size="small"
-          min={0}
-          max={100}
-          value={record.discPercentage}
-          onChange={(v) => handleItemChange(record.key, 'discPercentage', n(v))}
-          style={{ width: '100%' }}
-          formatter={(v) => (v === undefined || v === null ? '' : `${v}%`)}
-          parser={(v) => (v ? String(v).replace('%', '').trim() : 0)}
-        />
-      ),
-    },
+    // {
+    //   title: 'Disc %',
+    //   dataIndex: 'discPercentage',
+    //   key: 'discPercentage',
+    //   width: 100,
+    //   render: (text, record) => (
+    //     <InputNumber
+    //       size="small"
+    //       min={0}
+    //       max={100}
+    //       value={record.discPercentage}
+    //       onChange={(v) => handleItemChange(record.key, 'discPercentage', n(v))}
+    //       style={{ width: '100%' }}
+    //       formatter={(v) => (v === undefined || v === null ? '' : `${v}%`)}
+    //       parser={(v) => (v ? String(v).replace('%', '').trim() : 0)}
+    //     />
+    //   ),
+    // },
     {
       title: 'Ext. Price',
       key: 'extPrice',
@@ -411,6 +400,7 @@ const PurchaseOrderForm = () => {
         shipToAddress: po.shipToAddress,
         termsConditions: po.termsConditions,
         freightAmount: n(po?.totals?.freightAmount),
+        discountAmount:n(po?.totals?.totalDiscount)
       });
 
       const items = (po.items || []).map((it, idx) => ({
@@ -891,9 +881,25 @@ const PurchaseOrderForm = () => {
             </Title>
 
             <Row gutter={24} style={{ marginBottom: 12 }}>
-              <Col span={24}>
+              <Col span={12}>
                 <Text strong>Freight Amount:</Text>
                 <Form.Item name="freightAmount" style={{ marginBottom: 0 }}>
+                  <InputNumber
+                    min={0}
+                    size="small"
+                    style={{ width: '100%', marginTop: 4 }}
+                    formatter={(v) =>
+                      v === undefined || v === null ? '' : `$ ${v}`
+                    }
+                    parser={(v) =>
+                      v ? String(v).replace('$', '').trim() : 0
+                    }
+                  />
+                </Form.Item>
+              </Col>
+               <Col span={12}>
+                <Text strong>Discount Amount:</Text>
+                <Form.Item name="discountAmount" style={{ marginBottom: 0 }}>
                   <InputNumber
                     min={0}
                     size="small"
@@ -911,63 +917,63 @@ const PurchaseOrderForm = () => {
 
             <Divider style={{ margin: '16px 0' }} />
 
-            <Row gutter={16} style={{ marginBottom: 8 }}>
-              <Col span={12}>
-                <Text>Gross Amount:</Text>
-              </Col>
-              <Col span={12} style={{ textAlign: "right" }}>
-                ${totals.grossAmount.toFixed(2)}
-              </Col>
-            </Row>
+         <Row gutter={16} style={{ marginBottom: 8 }}>
+  <Col span={12}>
+    <Text>Gross Amount:</Text>
+  </Col>
+  <Col span={12} style={{ textAlign: "right" }}>
+    ${totals.grossAmount.toFixed(2)}
+  </Col>
+</Row>
 
-            <Row gutter={16} style={{ marginBottom: 8 }}>
-              <Col span={12}>
-                <Text>Discount:</Text>
-              </Col>
-              <Col span={12} style={{ textAlign: "right", color: "#ff4d4f" }}>
-                - ${totals.totalDiscount.toFixed(2)}
-              </Col>
-            </Row>
+<Row gutter={16} style={{ marginBottom: 8 }}>
+  <Col span={12}>
+    <Text>Freight Amount:</Text>
+  </Col>
+  <Col span={12} style={{ textAlign: "right" }}>
+    + ${totals.freight.toFixed(2)}
+  </Col>
+</Row>
 
-            <Row gutter={16} style={{ marginBottom: 8 }}>
-              <Col span={12}>
-                <Text strong>Sub Total:</Text>
-              </Col>
-              <Col span={12} style={{ textAlign: "right" }}>
-                ${totals.subTotalAmount.toFixed(2)}
-              </Col>
-            </Row>
+<Row gutter={16} style={{ marginBottom: 8 }}>
+  <Col span={12}>
+    <Text strong>Sub Total:</Text>
+  </Col>
+  <Col span={12} style={{ textAlign: "right" }}>
+    ${(
+      totals.grossAmount + totals.freight
+    ).toFixed(2)}
+  </Col>
+</Row>
 
-            <Row gutter={16} style={{ marginBottom: 8 }}>
-              <Col span={12}>
-                <Text>Freight Amount:</Text>
-              </Col>
-              <Col span={12} style={{ textAlign: "right" }}>
-                ${totals.freight.toFixed(2)}
-              </Col>
-            </Row>
+<Row gutter={16} style={{ marginBottom: 8 }}>
+  <Col span={12}>
+    <Text>Discount:</Text>
+  </Col>
+  <Col span={12} style={{ textAlign: "right", color: "#ff4d4f" }}>
+    - ${totals.totalDiscount.toFixed(2)}
+  </Col>
+</Row>
 
-            <Row gutter={16} style={{ marginBottom: 8 }}>
-              <Col span={12}>
-                <Text>
-                  GST Tax ({workOrderSettings?.gstSettings?.gstPercentage}%):
-                </Text>
-              </Col>
-              <Col span={12} style={{ textAlign: "right" }}>
-                ${totals.ostTax.toFixed(2)}
-              </Col>
-            </Row>
+<Row gutter={16} style={{ marginBottom: 8 }}>
+  <Col span={12}>
+    <Text>
+      GST Tax ({workOrderSettings?.gstSettings?.gstPercentage}%):
+    </Text>
+  </Col>
+  <Col span={12} style={{ textAlign: "right" }}>
+    ${totals.ostTax.toFixed(2)}
+  </Col>
+</Row>
 
-            <Row gutter={16} style={{ marginBottom: 8 }}>
-              <Col span={12}>
-                <Text>
-                  Final Amount
-                </Text>
-              </Col>
-              <Col span={12} style={{ textAlign: "right" }}>
-                ${totals.finalAmount.toFixed(2)}
-              </Col>
-            </Row>
+<Row gutter={16} style={{ marginBottom: 8 }}>
+  <Col span={12}>
+    <Text strong>Final Amount:</Text>
+  </Col>
+  <Col span={12} style={{ textAlign: "right", fontWeight: 600 }}>
+    ${totals.finalAmount.toFixed(2)}
+  </Col>
+</Row>
           </div>
         </Card>
 

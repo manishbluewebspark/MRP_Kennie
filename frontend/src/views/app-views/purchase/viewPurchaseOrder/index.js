@@ -106,6 +106,7 @@ const PurchaseOrderDetailsPage = () => {
   const itemsData = useMemo(() => {
     if (!po?.items) return [];
     return po.items.map((it, idx) => ({
+      idNumber: it?.idNumber,
       key: it._id || String(idx),
       description: it.description || "-",
       manufacturer: it?.manufacturer,
@@ -130,25 +131,32 @@ const PurchaseOrderDetailsPage = () => {
  const totals = useMemo(() => {
   const t = po?.totals || {};
 
-  const freight = Number(t.freightAmount || 0);
-  const sub = Number(t.subTotalAmount || 0);
-  const tax = Number(t.ostTax || 0);
 
-  const discountAmount = (po?.items || []).reduce(
-    (sum, item) =>
-      sum +
-      (Number(item.qty || 0) * Number(item.unitPrice || 0)) -
-      Number(item.extPrice || 0),
+  console.log('----totalDiscount',t?.totalDiscount)
+  const grossAmount = (po?.items || []).reduce(
+    (sum, item) => sum + (Number(item.qty || 0) * Number(item.unitPrice || 0)),
     0
   );
 
-  return {
-    freight,
-    sub,
-    tax,
-    discountAmount,
+  const freight = Number(t.freightAmount || 0);
 
-    // ALWAYS USE BACKEND VALUE
+  const discountAmount = t.totalDiscount
+
+  // Gross + Freight
+  const subTotal = grossAmount + freight;
+
+  // Backend taxable amount after discount
+  const taxableAmount = subTotal - discountAmount;
+
+  return {
+    grossAmount,
+    freight,
+    subTotal,
+    discountAmount,
+    taxableAmount,
+    tax: Number(t.ostTax || 0),
+
+    // Always backend value
     finalAmount: Number(t.finalAmount || 0),
 
     taxPercentage: Number(po?.taxPercentage || 0),
@@ -159,6 +167,12 @@ const PurchaseOrderDetailsPage = () => {
 
 
   const poItemsColumns = [
+    {
+      title: 'Item No',
+      dataIndex: 'idNumber',
+      key: 'idNumber',
+      width: 100
+    },
     {
       title: "Description ↓",
       dataIndex: "description",
@@ -178,14 +192,14 @@ const PurchaseOrderDetailsPage = () => {
       align: "right",
       render: (v) => fmtMoney(v),
     },
-    {
-      title: "Disc % ↓",
-      dataIndex: "discount",
-      key: "discount",
-      width: 100,
-      align: "center",
-      render: (v) => `${v}%`,
-    },
+    // {
+    //   title: "Disc % ↓",
+    //   dataIndex: "discount",
+    //   key: "discount",
+    //   width: 100,
+    //   align: "center",
+    //   render: (v) => `${v}%`,
+    // },
     {
       title: "Ext. Price ↓",
       dataIndex: "extendedPrice",
@@ -296,76 +310,71 @@ const PurchaseOrderDetailsPage = () => {
           style={{ marginBottom: 24 }}
         />
 
-   <div
-  style={{
-    display: "flex",
-    justifyContent: "flex-end",
-    marginTop: 20,
-  }}
->
-  <div
-    style={{
-      minWidth: 350,
-      textAlign: "right",
-      background: "#fafafa",
-      padding: 16,
-      borderRadius: 8,
-    }}
-  >
-         {/* Totals */}
-        <div style={{ marginBottom: 8 }}>
-          <Text strong>Gross Amount: </Text>
-          <Text>
-            {fmtMoney(
-              totals.sub + totals.discountAmount
-            )}
-          </Text>
-        </div>
-
-        <div style={{ marginBottom: 8 }}>
-          <Text strong>Discount: </Text>
-          <Text type="danger">
-            -{fmtMoney(totals.discountAmount)}
-          </Text>
-        </div>
-
-        <div style={{ marginBottom: 8 }}>
-          <Text strong>Sub Total: </Text>
-          <Text>{fmtMoney(totals.sub)}</Text>
-        </div>
-
-        <div style={{ marginBottom: 8 }}>
-          <Text strong>Freight: </Text>
-          <Text>{fmtMoney(totals.freight)}</Text>
-        </div>
-
-        <div style={{ marginBottom: 8 }}>
-          <Text strong>
-            GST ({totals.taxPercentage}%):
-          </Text>
-          <Text>{fmtMoney(totals.tax)}</Text>
-        </div>
-
-        <Divider style={{ margin: "12px 0" }} />
-
-        <div>
-          <Text strong style={{ fontSize: 16 }}>
-            Total Amount:
-          </Text>
-
-          <Text
-            strong
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginTop: 20,
+          }}
+        >
+          <div
             style={{
-              fontSize: 16,
-              color: "#1890ff",
-              marginLeft: 10,
+              minWidth: 350,
+              textAlign: "right",
+              background: "#fafafa",
+              padding: 16,
+              borderRadius: 8,
             }}
           >
-            {fmtMoney(totals.finalAmount)}
-          </Text>
+            <div style={{ marginBottom: 8 }}>
+  <Text strong>Gross Amount: </Text>
+  <Text>{fmtMoney(totals.grossAmount)}</Text>
+</div>
+
+<div style={{ marginBottom: 8 }}>
+  <Text strong>Freight: </Text>
+  <Text>+ {fmtMoney(totals.freight)}</Text>
+</div>
+
+<div style={{ marginBottom: 8 }}>
+  <Text strong>Sub Total: </Text>
+  <Text>{fmtMoney(totals.subTotal)}</Text>
+</div>
+
+<div style={{ marginBottom: 8 }}>
+  <Text strong>Discount: </Text>
+  <Text type="danger">
+    - {fmtMoney(totals.discountAmount)}
+  </Text>
+</div>
+
+<div style={{ marginBottom: 8 }}>
+  <Text strong>
+    GST ({totals.taxPercentage}%):
+  </Text>
+  <Text>{fmtMoney(totals.tax)}</Text>
+</div>
+
+<Divider style={{ margin: "12px 0" }} />
+
+<div>
+  <Text strong style={{ fontSize: 16 }}>
+    Total Amount:
+  </Text>
+
+  <Text
+    strong
+    style={{
+      fontSize: 16,
+      color: "#1890ff",
+      marginLeft: 10,
+    }}
+  >
+    {fmtMoney(totals.finalAmount)}
+  </Text>
+</div>
+          </div>
         </div>
-       </div>
-       </div>
       </Card>
 
       {/* Terms & Conditions */}
