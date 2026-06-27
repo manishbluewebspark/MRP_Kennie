@@ -2033,9 +2033,9 @@ export const getPurchaseShortageList = async (req, res) => {
 
       if (!costingArr?.length) continue;
 
-      const woQty = Number(
-        wo.quantity || 1
-      );
+      // const woQty = Number(
+      //   wo.quantity || 1
+      // );
 
       for (const ci of costingArr) {
         if (!ci.mpn) continue;
@@ -2073,8 +2073,30 @@ export const getPurchaseShortageList = async (req, res) => {
             "M"
           );
 
-        const totalRequiredInMeter =
-          qtyInMeter * woQty;
+        // const totalRequiredInMeter =
+        //   qtyInMeter * woQty;
+
+       const pickedProcess = wo.processHistory?.find(
+  p => p.process === "picking"
+);
+
+const pickedDetail = pickedProcess?.details?.find(
+  d => String(d.mpnId) === String(mpnId)
+);
+
+const pickedMaterialQty = Number(
+  pickedDetail?.pickedQty || 0
+);
+
+const totalRequiredInMeter =
+  qtyInMeter * Number(wo.quantity || 0);
+
+const remainingRequiredInMeter = Math.max(
+  totalRequiredInMeter - pickedMaterialQty,
+  0
+);
+
+
 
         const existing =
           mpnUsagePerMpn.get(mpnId) || {
@@ -2098,7 +2120,7 @@ export const getPurchaseShortageList = async (req, res) => {
           };
 
         existing.totalRequired +=
-          totalRequiredInMeter;
+          remainingRequiredInMeter;
 
         if (ci.supplier) {
           existing.suppliers.add(
@@ -2113,7 +2135,7 @@ export const getPurchaseShortageList = async (req, res) => {
           needDate:
             wo.needDate || null,
           requiredQty:
-            totalRequiredInMeter,
+            remainingRequiredInMeter,
         });
 
         mpnUsagePerMpn.set(
