@@ -477,6 +477,11 @@
                 <span>+ <%= money(totals?.freightAmount) %></span>
               </div>
 
+                <div class="totals-line">
+                <span>Discount:</span>
+                <span>- <%= money(totals?.totalDiscount) %></span>
+              </div>
+
               <div class="totals-line">
                 <span>Sub-Total:</span>
                 <span>
@@ -484,10 +489,7 @@
                 </span>
               </div>
 
-              <div class="totals-line">
-                <span>Discount:</span>
-                <span>- <%= money(totals?.totalDiscount) %></span>
-              </div>
+            
 
               <div class="totals-line">
                 <span>

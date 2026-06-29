@@ -937,6 +937,15 @@ const PurchaseOrderForm = () => {
 
 <Row gutter={16} style={{ marginBottom: 8 }}>
   <Col span={12}>
+    <Text>Discount:</Text>
+  </Col>
+  <Col span={12} style={{ textAlign: "right", color: "#ff4d4f" }}>
+    - ${totals.totalDiscount.toFixed(2)}
+  </Col>
+</Row>
+
+<Row gutter={16} style={{ marginBottom: 8 }}>
+  <Col span={12}>
     <Text strong>Sub Total:</Text>
   </Col>
   <Col span={12} style={{ textAlign: "right" }}>
@@ -946,14 +955,7 @@ const PurchaseOrderForm = () => {
   </Col>
 </Row>
 
-<Row gutter={16} style={{ marginBottom: 8 }}>
-  <Col span={12}>
-    <Text>Discount:</Text>
-  </Col>
-  <Col span={12} style={{ textAlign: "right", color: "#ff4d4f" }}>
-    - ${totals.totalDiscount.toFixed(2)}
-  </Col>
-</Row>
+
 
 <Row gutter={16} style={{ marginBottom: 8 }}>
   <Col span={12}>
