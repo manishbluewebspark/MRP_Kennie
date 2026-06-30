@@ -128,35 +128,32 @@ const PurchaseOrderDetailsPage = () => {
   //   return { freight, sub, tax, finalAmount };
   // }, [po]);
 
- const totals = useMemo(() => {
+const totals = useMemo(() => {
   const t = po?.totals || {};
 
-
-  console.log('----totalDiscount',t?.totalDiscount)
   const grossAmount = (po?.items || []).reduce(
-    (sum, item) => sum + (Number(item.qty || 0) * Number(item.unitPrice || 0)),
+    (sum, item) =>
+      sum +
+      (Number(item.qty || 0) * Number(item.unitPrice || 0)),
     0
   );
 
   const freight = Number(t.freightAmount || 0);
+  const discountAmount = Number(t.totalDiscount || 0);
 
-  const discountAmount = t.totalDiscount
-
-  // Gross + Freight
-  const subTotal = grossAmount + freight;
-
-  // Backend taxable amount after discount
-  const taxableAmount = subTotal - discountAmount;
+  // ✅ Gross + Freight - Discount
+  const subTotal = grossAmount + freight - discountAmount;
 
   return {
     grossAmount,
     freight,
-    subTotal,
     discountAmount,
-    taxableAmount,
+    subTotal,
+
+    // GST
     tax: Number(t.ostTax || 0),
 
-    // Always backend value
+    // Final Amount
     finalAmount: Number(t.finalAmount || 0),
 
     taxPercentage: Number(po?.taxPercentage || 0),

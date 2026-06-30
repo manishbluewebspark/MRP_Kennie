@@ -460,7 +460,7 @@
 
 
         <% const grossAmount=(totals?.subTotalAmount || 0) - (totals?.freightAmount || 0) + (totals?.totalDiscount ||
-          0); const beforeDiscount=grossAmount + (totals?.freightAmount || 0); %>
+          0); const beforeDiscount=totals?.subTotalAmount; %>
 
           <div class="totals">
             <div class="totals-box" style="border:1px solid #999;padding:10px">

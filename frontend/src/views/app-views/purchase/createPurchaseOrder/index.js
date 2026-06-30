@@ -135,17 +135,25 @@ const PurchaseOrderForm = () => {
   // };
   // const totals = calcTotals();
 
-  const calcTotals = () => {
-  // Gross Amount (without discount)
+const calcTotals = () => {
+  // Gross Amount (Qty × Unit Price)
   const grossAmount = orderItems.reduce((sum, it) => {
     return sum + (n(it.qty) * n(it.unitPrice));
   }, 0);
 
-  const totalDiscount = Number(discountAmou || 0);
   const freight = Number(freightAmount || 0);
+  const totalDiscount = Number(discountAmou || 0);
 
   // ✅ Gross + Freight - Discount
   const subTotalAmount = grossAmount + freight - totalDiscount;
+
+
+  console.log({
+  grossAmount,
+  freight,
+  totalDiscount,
+  subTotalAmount,
+});
 
   const gstPercent = Number(
     workOrderSettings?.gstSettings?.gstPercentage || 0
@@ -156,6 +164,7 @@ const PurchaseOrderForm = () => {
     ? subTotalAmount * (gstPercent / 100)
     : 0;
 
+  // Final Amount
   const finalAmount = subTotalAmount + ostTax;
 
   return {
@@ -950,7 +959,7 @@ const PurchaseOrderForm = () => {
   </Col>
   <Col span={12} style={{ textAlign: "right" }}>
     ${(
-      totals.grossAmount + totals.freight
+      totals.subTotalAmount
     ).toFixed(2)}
   </Col>
 </Row>
