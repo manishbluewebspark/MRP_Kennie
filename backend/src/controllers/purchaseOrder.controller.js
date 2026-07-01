@@ -1810,6 +1810,40 @@ export const getPurchaseOrdersSummary = async (req, res) => {
   }
 };
 
+const buildPickedMap = async () => {
+  const workOrders = await WorkOrder.find({
+    isDeleted: { $ne: true },
+  }).lean();
+
+  const pickedMap = new Map();
+
+  for (const wo of workOrders) {
+    const woId = String(wo._id);
+
+    for (const ph of wo.processHistory || []) {
+      if (ph.process !== "picking") continue;
+
+      for (const d of ph.details || []) {
+        const mpnId = String(d.mpnId || "");
+        if (!mpnId) continue;
+
+        const key = `${woId}_${mpnId}`;
+
+        const rawQty = Number(d.pickedQty || 0);
+        const fromUOM = d.uom || "M";
+
+        const qtyInMeter = convertToBaseUOM(rawQty, fromUOM, "M");
+
+        pickedMap.set(
+          key,
+          (pickedMap.get(key) || 0) + qtyInMeter
+        );
+      }
+    }
+  }
+
+  return pickedMap;
+};
 
 
 export const getPurchaseShortageList = async (req, res) => {
@@ -1865,6 +1899,8 @@ export const getPurchaseShortageList = async (req, res) => {
     // =========================================================
     // 3) FETCH COSTING ITEMS
     // =========================================================
+
+    const pickedMap = await buildPickedMap();
 
     const costingItems =
       await CostingItems.find({
@@ -2021,129 +2057,59 @@ export const getPurchaseShortageList = async (req, res) => {
     // 8) BUILD MPN REQUIREMENTS
     // =========================================================
 
-    const mpnUsagePerMpn = new Map();
+  const mpnUsagePerMpn = new Map();
 
-    for (const wo of workOrders) {
-      if (!wo.drawingId) continue;
+for (const wo of workOrders) {
+  if (!wo.drawingId) continue;
 
-      const costingArr =
-        costingByDrawing.get(
-          String(wo.drawingId)
-        );
+  const costingArr = costingByDrawing.get(String(wo.drawingId));
+  if (!costingArr?.length) continue;
 
-      if (!costingArr?.length) continue;
+  for (const ci of costingArr) {
+    if (!ci.mpn) continue;
 
-      // const woQty = Number(
-      //   wo.quantity || 1
-      // );
+    const mpnId = String(ci?.mpn?._id || ci.mpn);
 
-      for (const ci of costingArr) {
-        if (!ci.mpn) continue;
+    const lib = mpnLibMap.get(mpnId);
 
-        const mpnId = String(
-          ci?.mpn?._id || ci.mpn
-        );
+    const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code || "M";
 
-        const lib =
-          mpnLibMap.get(mpnId);
+    const qtyInMeter = convertToBaseUOM(
+      Number(ci.quantity || 0),
+      fromUOM,
+      "M"
+    );
 
-        // =====================================================
-        // INVENTORY ALWAYS IN METER
-        // =====================================================
+    const totalRequired = qtyInMeter * Number(wo.quantity || 0);
 
-        const masterUOM = "M";
+const key = `${wo._id}_${mpnId}`;
+const pickedQty = Number(pickedMap.get(key) || 0);
 
-        // =====================================================
-        // COSTING ITEM UOM
-        // =====================================================
+    console.log('-------pickedQty',pickedQty)
+const remainingRequired = Math.max(totalRequired - pickedQty, 0);
 
-        const fromUOM =
-          ci?.uom?.code ||
-          ci?.mpn?.UOM?.code ||
-          "M";
+    const existing = mpnUsagePerMpn.get(mpnId) || {
+      mpnId,
+      mpn: lib?.MPN || lib?.mpn || "",
+      description: lib?.description || ci?.description || "",
+      manufacturer: lib?.manufacturer || ci?.manufacturer || "",
+      suppliers: new Set(),
+      totalRequired: 0,
+      workOrders: [],
+    };
 
-        // =====================================================
-        // CONVERT REQUIRED QTY -> METER
-        // =====================================================
+    existing.totalRequired += remainingRequired;
 
-        const qtyInMeter =
-          convertToBaseUOM(
-            Number(ci.quantity || 0),
-            fromUOM,
-            "M"
-          );
+    existing.workOrders.push({
+      workOrderId: wo._id,
+      workOrderNo: wo.workOrderNo || "",
+      needDate: wo.needDate || null,
+      requiredQty: remainingRequired,
+    });
 
-        // const totalRequiredInMeter =
-        //   qtyInMeter * woQty;
-
-       const pickedProcess = wo.processHistory?.find(
-  p => p.process === "picking"
-);
-
-const pickedDetail = pickedProcess?.details?.find(
-  d => String(d.mpnId) === String(mpnId)
-);
-
-const pickedMaterialQty = Number(
-  pickedDetail?.pickedQty || 0
-);
-
-const totalRequiredInMeter =
-  qtyInMeter * Number(wo.quantity || 0);
-
-const remainingRequiredInMeter = Math.max(
-  totalRequiredInMeter - pickedMaterialQty,
-  0
-);
-
-
-
-        const existing =
-          mpnUsagePerMpn.get(mpnId) || {
-            mpnId,
-            mpn:
-              lib?.mpn ||
-              lib?.mpnNumber ||
-              lib?.MPN ||
-              "",
-            description:
-              ci.description ||
-              lib?.description ||
-              "",
-            manufacturer:
-              ci.manufacturer ||
-              lib?.manufacturer ||
-              "",
-            suppliers: new Set(),
-            totalRequired: 0,
-            workOrders: [],
-          };
-
-        existing.totalRequired +=
-          remainingRequiredInMeter;
-
-        if (ci.supplier) {
-          existing.suppliers.add(
-            String(ci.supplier)
-          );
-        }
-
-        existing.workOrders.push({
-          workOrderId: wo._id,
-          workOrderNo:
-            wo.workOrderNo || "",
-          needDate:
-            wo.needDate || null,
-          requiredQty:
-            remainingRequiredInMeter,
-        });
-
-        mpnUsagePerMpn.set(
-          mpnId,
-          existing
-        );
-      }
-    }
+    mpnUsagePerMpn.set(mpnId, existing);
+  }
+}
 
     // =========================================================
     // 9) FETCH SUPPLIERS
@@ -2183,215 +2149,63 @@ const remainingRequiredInMeter = Math.max(
     // 10) FINAL SHORTAGE LIST
     // =========================================================
 
-    let list = [];
+  let list = [];
 
-    for (const row of mpnUsagePerMpn.values()) {
-      // =====================================================
-      // GLOBAL STOCK IN METER
-      // =====================================================
+for (const row of mpnUsagePerMpn.values()) {
+  console.log('------row',row)
+  const mpnId = row.mpnId;
 
-      const globalStock = Number(
-        inventoryMap.get(row.mpnId) || 0
-      );
+  const globalStock = Number(inventoryMap.get(mpnId) || 0);
 
-      // =====================================================
-      // TOTAL REQUIRED IN METER
-      // =====================================================
+  const totalRequired = Number(row.totalRequired || 0);
 
-      const totalRequired = Number(
-        row.totalRequired || 0
-      );
+  const reservedPOQty = Number(poReservedMap.get(mpnId) || 0);
 
-      const reservedPOQty = Number(
-        poReservedMap.get(row.mpnId) || 0
-      );
+  // 🔥 FIXED SHORTAGE LOGIC (same as inventory API)
+  const effectiveRequired = totalRequired;
 
-      console.log('-------reservedPOQty', reservedPOQty)
+  const finalShortage = Math.max(
+    effectiveRequired - globalStock - reservedPOQty,
+    0
+  );
 
-      // =====================================================
-      // FINAL SHORTAGE
-      // =====================================================
+  if (finalShortage <= 0) continue;
 
-      const finalShortage =
-        Math.max(
-          totalRequired -
-          globalStock -
-          reservedPOQty,
-          0
-        );
+  const lib = mpnLibMap.get(mpnId);
+  const displayUOM = lib?.UOM?.code || "M";
 
-      console.log('-------finalShortage', finalShortage)
+  const shortageByWorkOrders = row.workOrders.map((wo) => ({
+    ...wo,
+    requiredQty: convertToBaseUOM(
+      Number(wo.requiredQty || 0),
+      "M",
+      displayUOM
+    ).toFixed(4),
+    shortageQty: convertToBaseUOM(
+      Math.max(Number(wo.requiredQty || 0), 0),
+      "M",
+      displayUOM
+    ).toFixed(4),
+  }));
 
-      // =====================================================
-      // NO SHORTAGE => SKIP
-      // =====================================================
+  list.push({
+    mpnId: row.mpnId,
+    mpn: row.mpn,
+    description: row.description,
+    manufacturer: row.manufacturer,
 
-      if (finalShortage <= 0) {
-        continue;
-      }
+    supplier: "", // same as your response (keep as is if already working)
+    supplierId: [],
 
-      // =====================================================
-      // SORT WORK ORDERS BY NEED DATE
-      // =====================================================
+    uom: displayUOM,
 
-      const sortedWorkOrders =
-        row.workOrders.sort((a, b) => {
-          return (
-            new Date(
-              a.needDate || 0
-            ).getTime() -
-            new Date(
-              b.needDate || 0
-            ).getTime()
-          );
-        });
+    required: convertToBaseUOM(totalRequired, "M", displayUOM).toFixed(4),
+    currentStock: convertToBaseUOM(globalStock, "M", displayUOM).toFixed(4),
+    shortage: convertToBaseUOM(finalShortage, "M", displayUOM).toFixed(4),
 
-      // =====================================================
-      // STOCK CONSUMPTION
-      // =====================================================
-
-      let remainingStock =
-        globalStock + reservedPOQty;
-
-      const shortageByWorkOrders =
-        [];
-
-      for (const wo of sortedWorkOrders) {
-        const required = Number(
-          wo.requiredQty || 0
-        );
-
-        const usedStock =
-          Math.min(
-            remainingStock,
-            required
-          );
-
-        remainingStock -= usedStock;
-
-        const shortageQty =
-          required - usedStock;
-
-        if (shortageQty > 0) {
-          shortageByWorkOrders.push({
-            workOrderId:
-              wo.workOrderId,
-
-            workOrderNo:
-              wo.workOrderNo,
-
-            needDate:
-              wo.needDate,
-
-            requiredQty:
-              required.toFixed(4),
-
-            shortageQty:
-              shortageQty.toFixed(4),
-          });
-        }
-      }
-
-      const supplierIdsArray =
-        Array.from(
-          row.suppliers || []
-        ).filter(Boolean);
-
-      const supplierNames =
-        Array.from(
-          row.suppliers || []
-        )
-          .map((id) =>
-            supplierMap.get(id)
-          )
-          .filter(Boolean);
-
-      const lib = mpnLibMap.get(row.mpnId);
-
-      // ✅ MASTER UOM OF MPN
-      const displayUOM =
-        lib?.UOM?.code ||
-        "M";
-
-      // =====================================================
-      // CONVERT VALUES FROM METER -> DISPLAY UOM
-      // =====================================================
-
-      const displayRequired =
-        convertToBaseUOM(
-          totalRequired,
-          "M",
-          displayUOM
-        );
-
-      const displayStock =
-        convertToBaseUOM(
-          globalStock,
-          "M",
-          displayUOM
-        );
-
-      const displayShortage =
-        convertToBaseUOM(
-          finalShortage,
-          "M",
-          displayUOM
-        );
-
-      console.log('-----displayShortage', displayShortage)
-
-      // =====================================================
-      // SHORTAGE BY WO
-      // =====================================================
-
-      const formattedShortageWO =
-        shortageByWorkOrders.map((wo) => ({
-          ...wo,
-
-          requiredQty:
-            convertToBaseUOM(
-              Number(wo.requiredQty || 0),
-              "M",
-              displayUOM
-            ).toFixed(4),
-
-          shortageQty:
-            convertToBaseUOM(
-              Number(wo.shortageQty || 0),
-              "M",
-              displayUOM
-            ).toFixed(4),
-        }));
-
-      list.push({
-        mpnId: row.mpnId,
-
-        mpn: row.mpn,
-
-        description: row.description,
-
-        manufacturer: row.manufacturer,
-
-        supplier: supplierNames.join(", "),
-
-        supplierId: supplierIdsArray,
-
-        // ✅ ORIGINAL MASTER UOM
-        uom: displayUOM,
-
-        required:
-          Number(displayRequired).toFixed(4),
-
-        currentStock:
-          Number(displayStock).toFixed(4),
-
-        shortage:
-          Number(displayShortage).toFixed(4),
-
-        shortageByWorkOrders:
-          formattedShortageWO,
-      });
-    }
+    shortageByWorkOrders,
+  });
+}
 
     // =========================================================
     // 11) FILTER MANUFACTURER

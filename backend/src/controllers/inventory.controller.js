@@ -16,6 +16,7 @@ import SystemSettings from "../models/SystemSettings.js";
 import mongoose from "mongoose";
 import CostingItems from "../models/CostingItem.js";
 import { convertQty, convertToBaseUOM, convertUom } from "../utils/uomController.js";
+import { round } from "../utils/currency.js";
 
 
 const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
@@ -81,16 +82,10 @@ const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
 // }
 
 async function buildDemandMap() {
-  // const workOrders = await WorkOrder.find({})
-  //   .select("_id drawingId quantity")
-  //   .lean();
-
   const workOrders = await WorkOrder.find({
     isProductionComplete: false,
   })
-    .select(
-      "_id drawingId quantity processHistory"
-    )
+    .select("_id drawingId quantity")
     .lean();
 
   if (!workOrders.length) return new Map();
@@ -103,7 +98,10 @@ async function buildDemandMap() {
     if (!dId) continue;
 
     drawingIds.add(dId);
-    woQtyByDrawing.set(dId, (woQtyByDrawing.get(dId) || 0) + Number(wo.quantity || 1));
+    woQtyByDrawing.set(
+      dId,
+      (woQtyByDrawing.get(dId) || 0) + Number(wo.quantity || 0)
+    );
   }
 
   const costingItems = await CostingItems.find({
@@ -112,11 +110,9 @@ async function buildDemandMap() {
   })
     .populate({
       path: "mpn",
-      select: "UOM",
       populate: { path: "UOM", select: "code" },
     })
     .populate("uom", "code")
-    .select("drawingId mpn quantity uom")
     .lean();
 
   const demandMap = new Map();
@@ -128,17 +124,22 @@ async function buildDemandMap() {
     if (!mpnId) continue;
 
     const woQty = woQtyByDrawing.get(dId) || 0;
-    if (woQty <= 0) continue;
+    if (!woQty) continue;
 
-    let needed = Number(ci.quantity || 0) * woQty;
-    console.log('--------uom', ci)
-    // 🔥 convert to M (inventory base UOM)
-    const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code;
-    const toUOM = ci?.mpn?.UOM?.code;
+    const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code || "M";
 
-    needed = convertToBaseUOM(needed, fromUOM, "M");
+    const qtyInM = convertToBaseUOM(
+      Number(ci.quantity || 0),
+      fromUOM,
+      "M"
+    );
 
-    demandMap.set(mpnId, (demandMap.get(mpnId) || 0) + needed);
+    const needed = Number((qtyInM * woQty).toFixed(6));
+
+    demandMap.set(
+      mpnId,
+      Number(((demandMap.get(mpnId) || 0) + needed).toFixed(6))
+    );
   }
 
   return demandMap;
@@ -151,21 +152,29 @@ const buildPickedMap = async () => {
 
   const pickedMap = new Map();
 
-  workOrders.forEach((wo) => {
-    (wo.processHistory || []).forEach((ph) => {
-      (ph.details || []).forEach((d) => {
+  for (const wo of workOrders) {
+    for (const ph of wo.processHistory || []) {
+      if (ph.process !== "picking") continue;
+
+      for (const d of ph.details || []) {
         const mpnId = String(d.mpnId || "");
-        if (!mpnId) return;
+        if (!mpnId) continue;
 
-        const pickedQty = Number(d.pickedQty || 0);
 
+        const qty = convertToBaseUOM(
+          Number(d.pickedQty || 0),
+          d.uom || "M",
+          "M"
+        );
+
+        // ✅ KEY ONLY mpnId
         pickedMap.set(
           mpnId,
-          (pickedMap.get(mpnId) || 0) + pickedQty
+          (pickedMap.get(mpnId) || 0) + qty
         );
-      });
-    });
-  });
+      }
+    }
+  }
 
   return pickedMap;
 };
@@ -404,54 +413,7 @@ export const getInventoryList = async (req, res) => {
       }
     }
 
-    // for (const po of pendingPOs) {
-    //   for (const it of po.items || []) {
-    //     const mid = String(it?.mpn?._id || it?.mpn || "");
-    //     if (!mid) continue;
 
-    //     const remainingQty = Number(it.qty || 0) - Number(it.receivedQty || 0);
-    //     if (remainingQty <= 0) continue;
-
-    //     if (!poMap.has(mid)) {
-    //       poMap.set(mid, {
-    //         totalIncomingQty: 0,
-    //         incomingPONumbers: new Set(),
-    //         earliestCommitDate: null,
-    //         purchaseData: [],
-    //       });
-    //     }
-
-    //     const entry = poMap.get(mid);
-    //     entry.totalIncomingQty += remainingQty;
-    //     entry.incomingPONumbers.add(po.poNumber);
-
-    //     if (it.commitDate) {
-    //       const cd = new Date(it.commitDate);
-    //       if (!entry.earliestCommitDate || cd < entry.earliestCommitDate) {
-    //         entry.earliestCommitDate = cd;
-    //       }
-    //     }
-
-    //     entry.purchaseData.push({
-    //       _id: po._id,
-    //       idNumber: it?.idNumber,
-    //       mpn: it.mpn,
-    //       poNumber: po.poNumber,
-    //       supplier: po.supplier || { name: "N/A" },
-    //       quantity: remainingQty,
-    //       totalQuantity: it.qty,
-    //       UOM:it.uom.code,
-    //       receivedQuantity: it.receivedQty || 0,
-    //       needDate: po.needDate ? new Date(po.needDate).toLocaleDateString() : "N/A",
-    //       committedDate: it.committedDate ? new Date(it.committedDate).toLocaleDateString() : "N/A",
-    //       status: po.status,
-    //       createdAt: po.createdAt,
-    //       updatedAt: po.updatedAt,
-    //       itemDescription: it.mpn?.Description || "N/A",
-    //       itemManufacturer: it.mpn?.Manufacturer || "N/A",
-    //     });
-    //   }
-    // }
 
     // ✅ attach PO map to each inventory item
     const inventoryWithPOData = inventoryList.map((item) => {
@@ -467,7 +429,7 @@ export const getInventoryList = async (req, res) => {
       };
     });
 
-    // ✅ transform + Demand + Shortage
+
     // ✅ transform + Demand + Shortage
     let transformedData = inventoryWithPOData.map((item) => {
       const mpnData = item.mpnId || {};
@@ -475,33 +437,24 @@ export const getInventoryList = async (req, res) => {
 
       const balanceQty = toNum(item.balanceQuantity);
       const incomingQty = toNum(item.calculatedIncomingQty);
-      // const demandQty = Number(demandMap.get(mpnIdStr) || 0);
 
-      // // ✅ raw net (for internal / analytics)
-      // const netQty = calcNetQty(balanceQty, demandQty);
 
-      const demandQty = Number(
-        demandMap.get(mpnIdStr) || 0
-      );
+    const demandQty = round(demandMap.get(mpnIdStr) || 0);
+const pickedQty = round(pickedMap.get(mpnIdStr) || 0);
 
-      const pickedQty = Number(
-        pickedMap.get(mpnIdStr) || 0
-      );
+    
 
-      // ✅ IMPORTANT
-      // demand should reduce by picked qty
-      const effectiveDemand = Math.max(
-        0,
-        demandQty - pickedQty
-      );
+      console.log('-------meter pickedQty', pickedQty)
 
-      // const netQty = calcNetQty(
-      //   balanceQty,
-      //   demandQty
-      // );
+      // reduce picked globally
+      const effectiveDemand = Math.max(demandQty - pickedQty, 0);
+
+
+
+      const availableQty = balanceQty + incomingQty;
 
       const netQty = calcNetQty(
-        balanceQty,
+        availableQty,
         effectiveDemand
       );
 
@@ -532,7 +485,7 @@ export const getInventoryList = async (req, res) => {
         IncomingQty: incomingQty,
         DemandQty: effectiveDemand,
         PickedQty: pickedQty,
-        EffectiveDemandQty: demandQty,
+        EffectiveDemandQty: effectiveDemand,
         // ✅ IMPORTANT:
         NetQty: netQty,              // raw balance+incoming-demand
         ShortageQty: shortageQty.toFixed(4),    // display/alert qty (negative or 0)

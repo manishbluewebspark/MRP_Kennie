@@ -135,47 +135,47 @@ const PurchaseOrderForm = () => {
   // };
   // const totals = calcTotals();
 
-const calcTotals = () => {
-  // Gross Amount (Qty × Unit Price)
-  const grossAmount = orderItems.reduce((sum, it) => {
-    return sum + (n(it.qty) * n(it.unitPrice));
-  }, 0);
+  const calcTotals = () => {
+    // Gross Amount (Qty × Unit Price)
+    const grossAmount = orderItems.reduce((sum, it) => {
+      return sum + (n(it.qty) * n(it.unitPrice));
+    }, 0);
 
-  const freight = Number(freightAmount || 0);
-  const totalDiscount = Number(discountAmou || 0);
+    const freight = Number(freightAmount || 0);
+    const totalDiscount = Number(discountAmou || 0);
 
-  // ✅ Gross + Freight - Discount
-  const subTotalAmount = grossAmount + freight - totalDiscount;
+    // ✅ Gross + Freight - Discount
+    const subTotalAmount = grossAmount + freight - totalDiscount;
 
 
-  console.log({
-  grossAmount,
-  freight,
-  totalDiscount,
-  subTotalAmount,
-});
+    console.log({
+      grossAmount,
+      freight,
+      totalDiscount,
+      subTotalAmount,
+    });
 
-  const gstPercent = Number(
-    workOrderSettings?.gstSettings?.gstPercentage || 0
-  );
+    const gstPercent = Number(
+      workOrderSettings?.gstSettings?.gstPercentage || 0
+    );
 
-  // GST on Sub Total
-  const ostTax = selectedSupplier?.gst
-    ? subTotalAmount * (gstPercent / 100)
-    : 0;
+    // GST on Sub Total
+    const ostTax = selectedSupplier?.gst
+      ? subTotalAmount * (gstPercent / 100)
+      : 0;
 
-  // Final Amount
-  const finalAmount = subTotalAmount + ostTax;
+    // Final Amount
+    const finalAmount = subTotalAmount + ostTax;
 
-  return {
-    grossAmount,
-    freight,
-    totalDiscount,
-    subTotalAmount,
-    ostTax,
-    finalAmount,
+    return {
+      grossAmount,
+      freight,
+      totalDiscount,
+      subTotalAmount,
+      ostTax,
+      finalAmount,
+    };
   };
-};
 
   const totals = calcTotals();
 
@@ -409,7 +409,7 @@ const calcTotals = () => {
         shipToAddress: po.shipToAddress,
         termsConditions: po.termsConditions,
         freightAmount: n(po?.totals?.freightAmount),
-        discountAmount:n(po?.totals?.totalDiscount)
+        discountAmount: n(po?.totals?.totalDiscount)
       });
 
       const items = (po.items || []).map((it, idx) => ({
@@ -425,13 +425,13 @@ const calcTotals = () => {
       }));
       setOrderItems(items.length ? items : []);
 
-        if (po.supplier?._id && suppliers?.length) {
-    const supplier = suppliers.find(
-      (s) => String(s._id) === String(po.supplier?._id)
-    );
+      if (po.supplier?._id && suppliers?.length) {
+        const supplier = suppliers.find(
+          (s) => String(s._id) === String(po.supplier?._id)
+        );
 
-    setSelectedSupplier(supplier || null);
-  }
+        setSelectedSupplier(supplier || null);
+      }
     } catch (e) {
       message.error('Failed to load purchase order');
     } finally {
@@ -684,7 +684,7 @@ const calcTotals = () => {
           freightAmount: totalsNum.freight,
           ostTax: totalsNum.ostTax,
           finalAmount: totalsNum.finalAmount,
-          totalDiscount:totalsNum?.totalDiscount
+          totalDiscount: totalsNum?.totalDiscount
         },
       };
 
@@ -906,7 +906,7 @@ const calcTotals = () => {
                   />
                 </Form.Item>
               </Col>
-               <Col span={12}>
+              <Col span={12}>
                 <Text strong>Discount Amount:</Text>
                 <Form.Item name="discountAmount" style={{ marginBottom: 0 }}>
                   <InputNumber
@@ -926,65 +926,65 @@ const calcTotals = () => {
 
             <Divider style={{ margin: '16px 0' }} />
 
-         <Row gutter={16} style={{ marginBottom: 8 }}>
-  <Col span={12}>
-    <Text>Gross Amount:</Text>
-  </Col>
-  <Col span={12} style={{ textAlign: "right" }}>
-    ${totals.grossAmount.toFixed(2)}
-  </Col>
-</Row>
+            <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Col span={12}>
+                <Text>Gross Amount:</Text>
+              </Col>
+              <Col span={12} style={{ textAlign: "right" }}>
+                ${totals.grossAmount.toFixed(2)}
+              </Col>
+            </Row>
 
-<Row gutter={16} style={{ marginBottom: 8 }}>
-  <Col span={12}>
-    <Text>Freight Amount:</Text>
-  </Col>
-  <Col span={12} style={{ textAlign: "right" }}>
-    + ${totals.freight.toFixed(2)}
-  </Col>
-</Row>
+            <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Col span={12}>
+                <Text>Freight Amount:</Text>
+              </Col>
+              <Col span={12} style={{ textAlign: "right" }}>
+                + ${totals.freight.toFixed(2)}
+              </Col>
+            </Row>
 
-<Row gutter={16} style={{ marginBottom: 8 }}>
-  <Col span={12}>
-    <Text>Discount:</Text>
-  </Col>
-  <Col span={12} style={{ textAlign: "right", color: "#ff4d4f" }}>
-    - ${totals.totalDiscount.toFixed(2)}
-  </Col>
-</Row>
+            <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Col span={12}>
+                <Text>Discount:</Text>
+              </Col>
+              <Col span={12} style={{ textAlign: "right", color: "#ff4d4f" }}>
+                - ${totals.totalDiscount.toFixed(2)}
+              </Col>
+            </Row>
 
-<Row gutter={16} style={{ marginBottom: 8 }}>
-  <Col span={12}>
-    <Text strong>Sub Total:</Text>
-  </Col>
-  <Col span={12} style={{ textAlign: "right" }}>
-    ${(
-      totals.subTotalAmount
-    ).toFixed(2)}
-  </Col>
-</Row>
+            <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Col span={12}>
+                <Text strong>Sub Total:</Text>
+              </Col>
+              <Col span={12} style={{ textAlign: "right" }}>
+                ${(
+                  totals.subTotalAmount
+                ).toFixed(2)}
+              </Col>
+            </Row>
 
 
 
-<Row gutter={16} style={{ marginBottom: 8 }}>
-  <Col span={12}>
-    <Text>
-      GST Tax ({workOrderSettings?.gstSettings?.gstPercentage}%):
-    </Text>
-  </Col>
-  <Col span={12} style={{ textAlign: "right" }}>
-    ${totals.ostTax.toFixed(2)}
-  </Col>
-</Row>
+            <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Col span={12}>
+                <Text>
+                  GST Tax ({workOrderSettings?.gstSettings?.gstPercentage}%):
+                </Text>
+              </Col>
+              <Col span={12} style={{ textAlign: "right" }}>
+                ${totals.ostTax.toFixed(2)}
+              </Col>
+            </Row>
 
-<Row gutter={16} style={{ marginBottom: 8 }}>
-  <Col span={12}>
-    <Text strong>Final Amount:</Text>
-  </Col>
-  <Col span={12} style={{ textAlign: "right", fontWeight: 600 }}>
-    ${totals.finalAmount.toFixed(2)}
-  </Col>
-</Row>
+            <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Col span={12}>
+                <Text strong>Final Amount:</Text>
+              </Col>
+              <Col span={12} style={{ textAlign: "right", fontWeight: 600 }}>
+                ${totals.finalAmount.toFixed(2)}
+              </Col>
+            </Row>
           </div>
         </Card>
 
@@ -1003,13 +1003,37 @@ const calcTotals = () => {
           >
             Cancel
           </Button>
-          <Button
+          {/* <Button
             type="primary"
             size="large"
             htmlType="submit"
             loading={loading}
           >
             {isEditMode ? 'Update Purchase Order' : 'Create Purchase Order'}
+          </Button> */}
+          <Button
+            type="primary"
+            size="large"
+            loading={loading}
+            onClick={async () => {
+              try {
+                const values = await form.validateFields();
+                handleSubmit(values);
+              } catch (err) {
+                const firstError = err?.errorFields?.[0];
+
+                if (firstError) {
+                  message.error(firstError.errors[0]);
+
+                  form.scrollToField(firstError.name, {
+                    behavior: "smooth",
+                    block: "center",
+                  });
+                }
+              }
+            }}
+          >
+            {isEditMode ? "Update Purchase Order" : "Create Purchase Order"}
           </Button>
         </div>
       </Form>
