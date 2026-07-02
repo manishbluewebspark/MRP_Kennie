@@ -224,7 +224,7 @@ export const addPurchaseOrder = async (req, res) => {
       ostTax: data?.totals?.ostTax,
       finalAmount: data?.totals?.finalAmount,
       freightAmount: data?.totals?.freightAmount,
-      totalDiscount:data?.totals?.totalDiscount,
+      totalDiscount: data?.totals?.totalDiscount,
     };
 
     // -------------------- create purchase order --------------------
@@ -235,7 +235,7 @@ export const addPurchaseOrder = async (req, res) => {
       workOrderNo: data.workOrderNo,
       needDate: data.needDate,
       etaDate: data.etaDate,
-      taxPercentage:data?.taxPercentage || 0,
+      taxPercentage: data?.taxPercentage || 0,
       supplier: data.supplier,
       shipToAddress: data.shipToAddress || "",
       termsConditions: data.termsConditions || "",
@@ -399,46 +399,46 @@ export const updatePurchaseOrder = async (req, res) => {
     // 1️⃣ SPECIAL CASE: committedDate update
     // --------------------------------------------------
 
- if (
-  !Array.isArray(data.items) &&
-  data.idNumber &&
-  data.mpn &&
-  Object.prototype.hasOwnProperty.call(data, "committedDate")
-) {
-  const po = await PurchaseOrders.findById(id);
+    if (
+      !Array.isArray(data.items) &&
+      data.idNumber &&
+      data.mpn &&
+      Object.prototype.hasOwnProperty.call(data, "committedDate")
+    ) {
+      const po = await PurchaseOrders.findById(id);
 
-  if (!po) {
-    return res.status(404).json({
-      success: false,
-      error: "Purchase order not found",
-    });
-  }
+      if (!po) {
+        return res.status(404).json({
+          success: false,
+          error: "Purchase order not found",
+        });
+      }
 
-  const idx = po.items.findIndex(
-    (it) =>
-      String(it.idNumber).trim() === String(data.idNumber).trim() &&
-      String(it.mpn) === String(data.mpn)
-  );
+      const idx = po.items.findIndex(
+        (it) =>
+          String(it.idNumber).trim() === String(data.idNumber).trim() &&
+          String(it.mpn) === String(data.mpn)
+      );
 
-  if (idx === -1) {
-    return res.status(404).json({
-      success: false,
-      error: "PO item not found for given idNumber + mpn",
-    });
-  }
+      if (idx === -1) {
+        return res.status(404).json({
+          success: false,
+          error: "PO item not found for given idNumber + mpn",
+        });
+      }
 
-  po.items[idx].committedDate = data.committedDate
-    ? new Date(data.committedDate)
-    : null;
+      po.items[idx].committedDate = data.committedDate
+        ? new Date(data.committedDate)
+        : null;
 
-  await po.save();
+      await po.save();
 
-  return res.json({
-    success: true,
-    message: "Committed date updated successfully",
-    data: po,
-  });
-}
+      return res.json({
+        success: true,
+        message: "Committed date updated successfully",
+        data: po,
+      });
+    }
 
     // --------------------------------------------------
     // 2️⃣ DEFAULT FULL UPDATE FLOW
@@ -569,16 +569,16 @@ export const updatePurchaseOrder = async (req, res) => {
     // const finalAmount = +(subTotal + freightAmount + ostTax);
 
     const freightAmount = num(
-  data.totals?.freightAmount ?? data.freightAmount
-);
+      data.totals?.freightAmount ?? data.freightAmount
+    );
 
-const subTotals = num(data.totals?.subTotalAmount);
+    const subTotals = num(data.totals?.subTotalAmount);
 
-const ostTax = num(data.totals?.ostTax);
+    const ostTax = num(data.totals?.ostTax);
 
-const finalAmount = num(data.totals?.finalAmount);
+    const finalAmount = num(data.totals?.finalAmount);
 
-const totalDiscount = num(data.totals?.totalDiscount)
+    const totalDiscount = num(data.totals?.totalDiscount)
 
     const purchaseSetting = await PurchaseSettings.findOne().lean();
 
@@ -1159,10 +1159,10 @@ export const getPurchaseOrderById = async (req, res) => {
           select: "code"   // 👈 sirf currency code
         }
       })
-   .populate({
-  path: "workOrderNo",
-  select: "workOrderNo poNumber projectNo"
-})
+      .populate({
+        path: "workOrderNo",
+        select: "workOrderNo poNumber projectNo"
+      })
       .populate({
         path: "items.mpn",   // populate each item’s MPN reference
         model: "MPNLibrary",        // make sure this matches your model name
@@ -1190,14 +1190,14 @@ export const sendPurchaseOrderMail = async (req, res) => {
   try {
     const { id } = req.params;
 
-      const purchaseOrder = await PurchaseOrders.findById(id)
-     .populate({
-    path: "supplier",
-    populate: {
-      path: "currency",
-      select: "code"
-    }
-  })
+    const purchaseOrder = await PurchaseOrders.findById(id)
+      .populate({
+        path: "supplier",
+        populate: {
+          path: "currency",
+          select: "code"
+        }
+      })
       .populate({
         path: "items.uom",
         select: "name code",
@@ -1268,8 +1268,7 @@ export const sendPurchaseOrderMail = async (req, res) => {
         
 
         <p style="margin-top:20px;">
-          Kindly arrange replacement for the rejected quantity
-          and share the expected delivery date.
+         Kindly acknowledge receipt and share the expected delivery date for any outstanding items, if any.
         </p>
 
         <div style="margin:20px 0;text-align:center;">
@@ -1385,17 +1384,18 @@ export const sendPurchaseOrderMail = async (req, res) => {
       to: receiverEmail,
       subject,
       html,
-    };
-
-    if (!isPartialReceived) {
-      mailOptions.attachments = [
+      attachments: [
         {
           filename: `PO_${purchaseOrder.poNumber}.pdf`,
           content: pdfBuffer,
           contentType: "application/pdf",
         },
-      ];
-    }
+      ],
+    };
+
+    // if (!isPartialReceived) {
+
+    // }
 
     await sendMailWithAttachment(mailOptions);
 
@@ -1563,13 +1563,13 @@ export const exportPurchaseOrderPDF = async (req, res) => {
     const { id } = req.params;
 
     const purchaseOrder = await PurchaseOrders.findById(id)
-     .populate({
-    path: "supplier",
-    populate: {
-      path: "currency",
-      select: "code"
-    }
-  })
+      .populate({
+        path: "supplier",
+        populate: {
+          path: "currency",
+          select: "code"
+        }
+      })
       .populate({
         path: "items.uom",
         select: "name code",
@@ -1587,7 +1587,7 @@ export const exportPurchaseOrderPDF = async (req, res) => {
       });
     }
 
-    
+
 
     // ✅ Generate PDF buffer
     const pdfBuffer = await generatePurchaseOrderPDFBuffer(purchaseOrder);
@@ -2057,59 +2057,59 @@ export const getPurchaseShortageList = async (req, res) => {
     // 8) BUILD MPN REQUIREMENTS
     // =========================================================
 
-  const mpnUsagePerMpn = new Map();
+    const mpnUsagePerMpn = new Map();
 
-for (const wo of workOrders) {
-  if (!wo.drawingId) continue;
+    for (const wo of workOrders) {
+      if (!wo.drawingId) continue;
 
-  const costingArr = costingByDrawing.get(String(wo.drawingId));
-  if (!costingArr?.length) continue;
+      const costingArr = costingByDrawing.get(String(wo.drawingId));
+      if (!costingArr?.length) continue;
 
-  for (const ci of costingArr) {
-    if (!ci.mpn) continue;
+      for (const ci of costingArr) {
+        if (!ci.mpn) continue;
 
-    const mpnId = String(ci?.mpn?._id || ci.mpn);
+        const mpnId = String(ci?.mpn?._id || ci.mpn);
 
-    const lib = mpnLibMap.get(mpnId);
+        const lib = mpnLibMap.get(mpnId);
 
-    const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code || "M";
+        const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code || "M";
 
-    const qtyInMeter = convertToBaseUOM(
-      Number(ci.quantity || 0),
-      fromUOM,
-      "M"
-    );
+        const qtyInMeter = convertToBaseUOM(
+          Number(ci.quantity || 0),
+          fromUOM,
+          "M"
+        );
 
-    const totalRequired = qtyInMeter * Number(wo.quantity || 0);
+        const totalRequired = qtyInMeter * Number(wo.quantity || 0);
 
-const key = `${wo._id}_${mpnId}`;
-const pickedQty = Number(pickedMap.get(key) || 0);
+        const key = `${wo._id}_${mpnId}`;
+        const pickedQty = Number(pickedMap.get(key) || 0);
 
-    console.log('-------pickedQty',pickedQty)
-const remainingRequired = Math.max(totalRequired - pickedQty, 0);
+        console.log('-------pickedQty', pickedQty)
+        const remainingRequired = Math.max(totalRequired - pickedQty, 0);
 
-    const existing = mpnUsagePerMpn.get(mpnId) || {
-      mpnId,
-      mpn: lib?.MPN || lib?.mpn || "",
-      description: lib?.description || ci?.description || "",
-      manufacturer: lib?.manufacturer || ci?.manufacturer || "",
-      suppliers: new Set(),
-      totalRequired: 0,
-      workOrders: [],
-    };
+        const existing = mpnUsagePerMpn.get(mpnId) || {
+          mpnId,
+          mpn: lib?.MPN || lib?.mpn || "",
+          description: lib?.description || ci?.description || "",
+          manufacturer: lib?.manufacturer || ci?.manufacturer || "",
+          suppliers: new Set(),
+          totalRequired: 0,
+          workOrders: [],
+        };
 
-    existing.totalRequired += remainingRequired;
+        existing.totalRequired += remainingRequired;
 
-    existing.workOrders.push({
-      workOrderId: wo._id,
-      workOrderNo: wo.workOrderNo || "",
-      needDate: wo.needDate || null,
-      requiredQty: remainingRequired,
-    });
+        existing.workOrders.push({
+          workOrderId: wo._id,
+          workOrderNo: wo.workOrderNo || "",
+          needDate: wo.needDate || null,
+          requiredQty: remainingRequired,
+        });
 
-    mpnUsagePerMpn.set(mpnId, existing);
-  }
-}
+        mpnUsagePerMpn.set(mpnId, existing);
+      }
+    }
 
     // =========================================================
     // 9) FETCH SUPPLIERS
@@ -2149,63 +2149,63 @@ const remainingRequired = Math.max(totalRequired - pickedQty, 0);
     // 10) FINAL SHORTAGE LIST
     // =========================================================
 
-  let list = [];
+    let list = [];
 
-for (const row of mpnUsagePerMpn.values()) {
-  console.log('------row',row)
-  const mpnId = row.mpnId;
+    for (const row of mpnUsagePerMpn.values()) {
+      console.log('------row', row)
+      const mpnId = row.mpnId;
 
-  const globalStock = Number(inventoryMap.get(mpnId) || 0);
+      const globalStock = Number(inventoryMap.get(mpnId) || 0);
 
-  const totalRequired = Number(row.totalRequired || 0);
+      const totalRequired = Number(row.totalRequired || 0);
 
-  const reservedPOQty = Number(poReservedMap.get(mpnId) || 0);
+      const reservedPOQty = Number(poReservedMap.get(mpnId) || 0);
 
-  // 🔥 FIXED SHORTAGE LOGIC (same as inventory API)
-  const effectiveRequired = totalRequired;
+      // 🔥 FIXED SHORTAGE LOGIC (same as inventory API)
+      const effectiveRequired = totalRequired;
 
-  const finalShortage = Math.max(
-    effectiveRequired - globalStock - reservedPOQty,
-    0
-  );
+      const finalShortage = Math.max(
+        effectiveRequired - globalStock - reservedPOQty,
+        0
+      );
 
-  if (finalShortage <= 0) continue;
+      if (finalShortage <= 0) continue;
 
-  const lib = mpnLibMap.get(mpnId);
-  const displayUOM = lib?.UOM?.code || "M";
+      const lib = mpnLibMap.get(mpnId);
+      const displayUOM = lib?.UOM?.code || "M";
 
-  const shortageByWorkOrders = row.workOrders.map((wo) => ({
-    ...wo,
-    requiredQty: convertToBaseUOM(
-      Number(wo.requiredQty || 0),
-      "M",
-      displayUOM
-    ).toFixed(4),
-    shortageQty: convertToBaseUOM(
-      Math.max(Number(wo.requiredQty || 0), 0),
-      "M",
-      displayUOM
-    ).toFixed(4),
-  }));
+      const shortageByWorkOrders = row.workOrders.map((wo) => ({
+        ...wo,
+        requiredQty: convertToBaseUOM(
+          Number(wo.requiredQty || 0),
+          "M",
+          displayUOM
+        ).toFixed(4),
+        shortageQty: convertToBaseUOM(
+          Math.max(Number(wo.requiredQty || 0), 0),
+          "M",
+          displayUOM
+        ).toFixed(4),
+      }));
 
-  list.push({
-    mpnId: row.mpnId,
-    mpn: row.mpn,
-    description: row.description,
-    manufacturer: row.manufacturer,
+      list.push({
+        mpnId: row.mpnId,
+        mpn: row.mpn,
+        description: row.description,
+        manufacturer: row.manufacturer,
 
-    supplier: "", // same as your response (keep as is if already working)
-    supplierId: [],
+        supplier: "", // same as your response (keep as is if already working)
+        supplierId: [],
 
-    uom: displayUOM,
+        uom: displayUOM,
 
-    required: convertToBaseUOM(totalRequired, "M", displayUOM).toFixed(4),
-    currentStock: convertToBaseUOM(globalStock, "M", displayUOM).toFixed(4),
-    shortage: convertToBaseUOM(finalShortage, "M", displayUOM).toFixed(4),
+        required: convertToBaseUOM(totalRequired, "M", displayUOM).toFixed(4),
+        currentStock: convertToBaseUOM(globalStock, "M", displayUOM).toFixed(4),
+        shortage: convertToBaseUOM(finalShortage, "M", displayUOM).toFixed(4),
 
-    shortageByWorkOrders,
-  });
-}
+        shortageByWorkOrders,
+      });
+    }
 
     // =========================================================
     // 11) FILTER MANUFACTURER
