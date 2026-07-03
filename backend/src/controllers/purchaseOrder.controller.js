@@ -761,6 +761,247 @@ export const updatePurchaseOrderStatus = async (req, res) => {
   }
 };
 
+function sortObject(obj) {
+  if (Array.isArray(obj)) {
+    return obj.map(sortObject);
+  }
+
+  if (obj && typeof obj === "object") {
+    return Object.keys(obj)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = sortObject(obj[key]);
+        return acc;
+      }, {});
+  }
+
+  return obj;
+}
+
+export const revisedPurchaseOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const payload = req.body;
+
+    const purchaseOrder = await PurchaseOrders.findById(id);
+
+    if (!purchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase Order not found",
+      });
+    }
+
+    if (purchaseOrder.status !== "Acknowledged") {
+      return res.status(400).json({
+        success: false,
+        message: "Only acknowledged Purchase Orders can be revised.",
+      });
+    }
+
+
+    // ----------------------------------------------------
+    // Check if anything has changed
+    // ----------------------------------------------------
+
+    const oldData = {
+      supplier: String(purchaseOrder.supplier || ""),
+      referenceNo: purchaseOrder.referenceNo || "",
+      poDate: purchaseOrder.poDate
+        ? new Date(purchaseOrder.poDate).toISOString().slice(0, 10)
+        : "",
+      needDate: purchaseOrder.needDate
+        ? new Date(purchaseOrder.needDate).toISOString().slice(0, 10)
+        : "",
+      etaDate: purchaseOrder.etaDate
+        ? new Date(purchaseOrder.etaDate).toISOString().slice(0, 10)
+        : "",
+      workOrderNo: String(purchaseOrder.workOrderNo || ""),
+      shipToAddress: purchaseOrder.shipToAddress || "",
+      termsConditions: purchaseOrder.termsConditions || "",
+      taxPercentage: Number(purchaseOrder.taxPercentage || 0),
+      totals: purchaseOrder.totals,
+      items: purchaseOrder.items.map((i) => ({
+        idNumber: i.idNumber,
+        description: i.description,
+        mpn: String(i.mpn),
+        manufacturer: i.manufacturer,
+        uom: String(i.uom),
+        qty: Number(i.qty),
+        unitPrice: Number(i.unitPrice),
+        discount: Number(i.discount || 0),
+      })),
+    };
+
+    const newData = {
+      supplier: String(payload.supplier || ""),
+      referenceNo: payload.referenceNo || "",
+      poDate: payload.poDate || "",
+      needDate: payload.needDate || "",
+      etaDate: payload.etaDate || "",
+      workOrderNo: String(payload.workOrderNo || ""),
+      shipToAddress: payload.shipToAddress || "",
+      termsConditions: payload.termsConditions || "",
+      taxPercentage: Number(payload.taxPercentage || 0),
+      totals: payload.totals,
+      items: (payload.items || []).map((i) => ({
+        idNumber: i.idNumber,
+        description: i.description,
+        mpn: String(i.mpn),
+        manufacturer: i.manufacturer,
+        uom: String(i.uom),
+        qty: Number(i.qty),
+        unitPrice: Number(i.unitPrice),
+        discount: Number(i.discPercentage || i.discount || 0),
+      })),
+    };
+
+    const oldString = JSON.stringify(sortObject(oldData));
+    const newString = JSON.stringify(sortObject(newData));
+
+    console.log(oldString === newString);
+
+    if (oldString === newString) {
+      return res.status(400).json({
+        success: false,
+        message: "No changes detected. Purchase Order revision cannot be created.",
+      });
+    }
+    // ----------------------------------------------------
+    // Generate Next Revision Number
+    // ----------------------------------------------------
+
+    const basePoNumber = purchaseOrder.poNumber.replace(/R\d+$/, "");
+
+    const currentRevision = purchaseOrder.revisionNo || 0;
+    const nextRevision = currentRevision + 1;
+
+    const newPoNumber = `${basePoNumber}R${nextRevision}`;
+
+    // ----------------------------------------------------
+    // Save current PO into Revision History
+    // ----------------------------------------------------
+
+    if (!purchaseOrder.revisionHistory) {
+      purchaseOrder.revisionHistory = [];
+    }
+
+    purchaseOrder.revisionHistory.push({
+      revisionNo: currentRevision,
+      poNumber: purchaseOrder.poNumber,
+      revisedAt: new Date(),
+      snapshot: purchaseOrder.toObject(),
+    });
+
+    // ----------------------------------------------------
+    // Update Header
+    // ----------------------------------------------------
+
+    purchaseOrder.poNumber = newPoNumber;
+    purchaseOrder.revisionNo = nextRevision;
+    purchaseOrder.isRevision = true;
+
+    purchaseOrder.status = "Pending";
+
+    purchaseOrder.supplier = payload.supplier;
+    purchaseOrder.referenceNo = payload.referenceNo;
+    purchaseOrder.poDate = payload.poDate;
+    purchaseOrder.needDate = payload.needDate;
+    purchaseOrder.etaDate = payload.etaDate;
+    purchaseOrder.workOrderNo = payload.workOrderNo;
+    purchaseOrder.shipToAddress = payload.shipToAddress;
+    purchaseOrder.termsConditions = payload.termsConditions;
+    purchaseOrder.taxPercentage = payload.taxPercentage;
+
+    // ----------------------------------------------------
+    // Totals
+    // ----------------------------------------------------
+
+    purchaseOrder.totals = payload.totals;
+
+    // ----------------------------------------------------
+    // Reset Items
+    // ----------------------------------------------------
+
+    purchaseOrder.items = (payload.items || []).map((item) => ({
+      idNumber: item.idNumber,
+      description: item.description,
+      mpn: item.mpn,
+      manufacturer: item.manufacturer,
+      uom: item.uom,
+      qty: Number(item.qty || 0),
+      unitPrice: Number(item.unitPrice || 0),
+      discount: Number(item.discPercentage || item.discount || 0),
+      extPrice: Number(item.extPrice || 0),
+
+      // reset receiving
+      receivedQtyTotal: 0,
+      rejectedQtyTotal: 0,
+      pendingQty: Number(item.qty || 0),
+      committedDate: null,
+      remarks: "",
+      acceptedAt: null,
+      status: "Pending",
+    }));
+
+    // ----------------------------------------------------
+    // Reset Approval
+    // ----------------------------------------------------
+
+    purchaseOrder.priceOverrideDetected = false;
+    purchaseOrder.requiresSecondLevelApproval = false;
+    purchaseOrder.secondLevelApprovalStatus = "Pending";
+    purchaseOrder.secondLevelApprovedBy = null;
+    purchaseOrder.secondLevelApprovedAt = null;
+    purchaseOrder.secondLevelRejectionReason = "";
+    purchaseOrder.secondLevelRequestReason = "";
+
+    // ----------------------------------------------------
+    // Reset Over Purchase
+    // ----------------------------------------------------
+
+    purchaseOrder.overPurchaseDetected = false;
+
+    purchaseOrder.overPurchaseDetails = {
+      totalRequiredQty: 0,
+      totalBalanceQty: 0,
+      totalIncomingQty: 0,
+      totalMaxPurchaseQty: 0,
+      totalOrderedQty: 0,
+    };
+
+    // ----------------------------------------------------
+    // Reset Close Info
+    // ----------------------------------------------------
+
+    purchaseOrder.closedAt = null;
+    purchaseOrder.closedBy = null;
+    purchaseOrder.closeRemarks = "";
+
+    purchaseOrder.isLocked = false;
+
+    // ----------------------------------------------------
+    // Save
+    // ----------------------------------------------------
+
+    await purchaseOrder.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Purchase Order revised successfully.",
+      data: purchaseOrder,
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 // export const updatePurchaseOrder = async (req, res) => {
 //   try {
 //     const { id } = req.params;
@@ -1145,41 +1386,169 @@ export const getAllPurchaseOrders = async (req, res) => {
   }
 };
 
-/**
- * Get Purchase Order by ID
- */
+
 export const getPurchaseOrderById = async (req, res) => {
   try {
     const { id } = req.params;
+
     const purchaseOrder = await PurchaseOrders.findById(id)
       .populate({
         path: "supplier",
         populate: {
           path: "currency",
-          select: "code"   // 👈 sirf currency code
-        }
+          select: "code",
+        },
       })
       .populate({
         path: "workOrderNo",
-        select: "workOrderNo poNumber projectNo"
+        select: "workOrderNo poNumber projectNo",
       })
       .populate({
-        path: "items.mpn",   // populate each item’s MPN reference
-        model: "MPNLibrary",        // make sure this matches your model name
+        path: "items.mpn",
+        model: "MPNLibrary",
       })
       .populate({
-        path: "items.uom",   // populate each item’s UOM reference
-        model: "UOM",        // must match your model name
+        path: "items.uom",
+        model: "UOM",
       });
+
     if (!purchaseOrder) {
-      return res.status(404).json({ success: false, error: "Purchase Order not found" });
+      return res.status(404).json({
+        success: false,
+        error: "Purchase Order not found",
+      });
     }
-    res.json({ success: true, data: purchaseOrder });
+
+    // ==================================================
+    // REVISION HISTORY
+    // ==================================================
+
+    const originalId =
+      purchaseOrder.parentPurchaseOrder || purchaseOrder._id;
+
+    const revisionHistory = await PurchaseOrders.find({
+      $or: [
+        { _id: originalId },
+        { parentPurchaseOrder: originalId },
+      ],
+    })
+
+
+
+    return res.json({
+      success: true,
+      data: {
+        ...purchaseOrder.toObject(),
+        revisionHistory: purchaseOrder.revisionHistory || [],
+
+        latestVersion: purchaseOrder.poNumber,
+
+        isLatestVersion: true,
+      },
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, error: error.message });
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 };
+
+export const getRevisePurchaseOrderById = async (req, res) => {
+  try {
+    const { id } = req.params; // revisionHistory._id
+
+    const purchaseOrder = await PurchaseOrders.findOne({
+      "revisionHistory._id": id,
+    });
+
+    if (!purchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Revision not found",
+      });
+    }
+
+   const revision = purchaseOrder.revisionHistory.id(id);
+
+const snapshotDoc = PurchaseOrders.hydrate(revision.snapshot);
+
+await snapshotDoc.populate([
+  {
+    path: "supplier",
+    populate: {
+      path: "currency",
+      select: "code",
+    },
+  },
+  {
+    path: "workOrderNo",
+    select: "workOrderNo poNumber projectNo",
+  },
+  {
+    path: "items.mpn",
+    model: "MPNLibrary",
+  },
+  {
+    path: "items.uom",
+    model: "UOM",
+  },
+]);
+
+return res.status(200).json({
+  success: true,
+  data: {
+    ...snapshotDoc.toObject(),
+    revisionNo: revision.revisionNo,
+    revisedAt: revision.revisedAt,
+  },
+});
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+/**
+ * Get Purchase Order by ID
+ */
+// export const getPurchaseOrderById = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const purchaseOrder = await PurchaseOrders.findById(id)
+//       .populate({
+//         path: "supplier",
+//         populate: {
+//           path: "currency",
+//           select: "code"   // 👈 sirf currency code
+//         }
+//       })
+//       .populate({
+//         path: "workOrderNo",
+//         select: "workOrderNo poNumber projectNo"
+//       })
+//       .populate({
+//         path: "items.mpn",   // populate each item’s MPN reference
+//         model: "MPNLibrary",        // make sure this matches your model name
+//       })
+//       .populate({
+//         path: "items.uom",   // populate each item’s UOM reference
+//         model: "UOM",        // must match your model name
+//       });
+//     if (!purchaseOrder) {
+//       return res.status(404).json({ success: false, error: "Purchase Order not found" });
+//     }
+//     res.json({ success: true, data: purchaseOrder });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ success: false, error: error.message });
+//   }
+// };
 
 /**
  * Send Purchase Order by Email
@@ -1216,6 +1585,7 @@ export const sendPurchaseOrderMail = async (req, res) => {
       });
     }
 
+    const isRevision = purchaseOrder.isRevision;
     const receiverEmail = purchaseOrder?.supplier?.email;
 
     if (!receiverEmail) {
@@ -1268,7 +1638,9 @@ export const sendPurchaseOrderMail = async (req, res) => {
         
 
         <p style="margin-top:20px;">
-         Kindly acknowledge receipt and share the expected delivery date for any outstanding items, if any.
+   <strong>
+    Kindly acknowledge receipt and share the expected delivery date for any outstanding items, if any.
+  </strong>
         </p>
 
         <div style="margin:20px 0;text-align:center;">
@@ -1295,10 +1667,80 @@ export const sendPurchaseOrderMail = async (req, res) => {
       </div>
       `;
     }
+    else if (isRevision) {
 
-    // =====================================================
-    // NORMAL PO MAIL
-    // =====================================================
+      subject = `Revised Purchase Order - ${purchaseOrder.poNumber}`;
+
+      html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111;line-height:1.6;">
+
+    <p>Hello ${purchaseOrder?.supplier?.name || "Team"},</p>
+
+    <p>
+      Please find attached the
+      <b>Revised Purchase Order ${purchaseOrder.poNumber}</b>.
+    </p>
+
+    <p>
+    <strong>
+      This revised Purchase Order supersedes the previously issued version.
+      Kindly use this latest revision for all future deliveries and disregard any earlier version.
+       </strong>
+    </p>
+
+    <div
+      style="
+        margin:14px 0;
+        padding:12px;
+        background:#f6faff;
+        border:1px solid #d6e4ff;
+        border-radius:8px;">
+
+      <div><b>Revised PO No:</b> ${purchaseOrder.poNumber}</div>
+
+      ${purchaseOrder.referenceNo
+          ? `<div><b>Reference No:</b> ${purchaseOrder.referenceNo}</div>`
+          : ""
+        }
+
+      ${purchaseOrder.needDate
+          ? `<div><b>Need Date:</b> ${new Date(
+            purchaseOrder.needDate
+          ).toLocaleDateString("en-GB")}</div>`
+          : ""
+        }
+
+    </div>
+
+    <p>
+ <strong>
+      Kindly acknowledge receipt and confirm the committed delivery date.
+       </strong>
+    </p>
+
+    <div style="margin:20px 0;text-align:center;">
+      <a
+        href="${ackUrl}"
+        style="
+          display:inline-block;
+          padding:12px 28px;
+          background:#16a34a;
+          color:#fff;
+          text-decoration:none;
+          border-radius:6px;
+          font-weight:bold;">
+          ✔ Acknowledge Revised Purchase Order
+      </a>
+    </div>
+
+    <p>
+      Regards,<br/>
+      <b>Exxel Technology Pte Ltd</b>
+    </p>
+
+  </div>
+  `;
+    }
 
     else {
       subject = `Purchase Order - ${purchaseOrder.poNumber}`;
@@ -4766,9 +5208,122 @@ export const acceptPurchaseOrder = async (req, res) => {
     // Already Acknowledged
     if (po.status === "Acknowledged") {
       return res.send(`
-        <h3>✅ Purchase Order already accepted</h3>
-        <p>PO Number: ${po.poNumber}</p>
-      `);
+  <!DOCTYPE html>
+  <html>
+  <head>
+  <meta charset="UTF-8" />
+  <title>Purchase Order Already Accepted</title>
+  <style>
+      body{
+          margin:0;
+          padding:0;
+          background:#f4f6f9;
+          font-family:Arial,Helvetica,sans-serif;
+          display:flex;
+          justify-content:center;
+          align-items:center;
+          height:100vh;
+      }
+
+      .card{
+          background:#fff;
+          width:500px;
+          max-width:90%;
+          border-radius:12px;
+          padding:40px;
+          text-align:center;
+          box-shadow:0 10px 30px rgba(0,0,0,.12);
+      }
+
+      .icon{
+          width:80px;
+          height:80px;
+          margin:auto;
+          border-radius:50%;
+          background:#f59e0b;
+          color:#fff;
+          font-size:42px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          margin-bottom:20px;
+      }
+
+      h1{
+          margin:0;
+          color:#d97706;
+          font-size:28px;
+      }
+
+      .status{
+          display:inline-block;
+          margin-top:15px;
+          background:#fef3c7;
+          color:#92400e;
+          padding:8px 18px;
+          border-radius:20px;
+          font-weight:bold;
+          font-size:14px;
+      }
+
+      .po{
+          margin-top:25px;
+          font-size:18px;
+          color:#333;
+      }
+
+      .po strong{
+          color:#111827;
+      }
+
+      p{
+          color:#6b7280;
+          line-height:1.7;
+          margin-top:20px;
+      }
+
+      .footer{
+          margin-top:30px;
+          font-size:13px;
+          color:#9ca3af;
+      }
+  </style>
+  </head>
+
+  <body>
+
+      <div class="card">
+
+          <div class="icon">
+              ✓
+          </div>
+
+          <h1>Already Accepted</h1>
+
+          <div class="status">
+              Acknowledged
+          </div>
+
+          <div class="po">
+              Purchase Order
+              <br/>
+              <strong>${po.poNumber}</strong>
+          </div>
+
+          <p>
+              This Purchase Order has already been acknowledged previously.
+              No further action is required.
+          </p>
+
+          <div class="footer">
+              You may now safely close this window.
+          </div>
+
+      </div>
+
+  </body>
+  </html>
+  `);
     }
 
     // ✅ Special case: Partially Received → Closed
@@ -4784,12 +5339,123 @@ export const acceptPurchaseOrder = async (req, res) => {
     await po.save();
 
     return res.send(`
-      <div style="font-family:Arial;padding:20px">
-        <h2>✅ Thank you!</h2>
-        <p>Purchase Order <b>${po.poNumber}</b> has been <b>${po.status.toUpperCase()}</b> successfully.</p>
-        <p>You may now close this window.</p>
-      </div>
-    `);
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Purchase Order Accepted</title>
+<style>
+    body{
+        margin:0;
+        padding:0;
+        background:#f4f6f9;
+        font-family:Arial,Helvetica,sans-serif;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        height:100vh;
+    }
+
+    .card{
+        background:#fff;
+        width:500px;
+        max-width:90%;
+        border-radius:12px;
+        padding:40px;
+        text-align:center;
+        box-shadow:0 10px 30px rgba(0,0,0,.12);
+    }
+
+    .icon{
+        width:80px;
+        height:80px;
+        margin:auto;
+        border-radius:50%;
+        background:#22c55e;
+        color:#fff;
+        font-size:42px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        margin-bottom:20px;
+    }
+
+    h1{
+        margin:0;
+        color:#16a34a;
+        font-size:30px;
+    }
+
+    .status{
+        display:inline-block;
+        margin-top:15px;
+        background:#dcfce7;
+        color:#166534;
+        padding:8px 18px;
+        border-radius:20px;
+        font-weight:bold;
+        font-size:14px;
+    }
+
+    .po{
+        margin-top:25px;
+        font-size:18px;
+        color:#333;
+    }
+
+    .po strong{
+        color:#111827;
+    }
+
+    p{
+        color:#6b7280;
+        line-height:1.7;
+        margin-top:20px;
+    }
+
+    .footer{
+        margin-top:30px;
+        font-size:13px;
+        color:#9ca3af;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+    <div class="icon">
+        ✓
+    </div>
+
+    <h1>Thank You!</h1>
+
+    <div class="status">
+        ${po.status}
+    </div>
+
+    <div class="po">
+        Purchase Order
+        <br/>
+        <strong>${po.poNumber}</strong>
+    </div>
+
+    <p>
+        Your acknowledgement has been received successfully.
+        The Purchase Order has been marked as
+        <strong>${po.status}</strong>.
+    </p>
+
+    <div class="footer">
+        You may now safely close this window.
+    </div>
+
+</div>
+
+</body>
+</html>
+`);
 
   } catch (error) {
     console.error("ACCEPT ERROR:", error);

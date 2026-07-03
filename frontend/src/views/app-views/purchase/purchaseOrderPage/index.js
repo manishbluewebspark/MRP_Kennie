@@ -53,11 +53,11 @@ const PurchaseOrderPage = () => {
     const [selectedRows, setSelectedRows] = useState([]);
     const { suppliers } = useSelector(state => state.suppliers);
 
-const [pagination, setPagination] = useState({
-  page: 1,
-  limit: 10,
-  total: 0,
-});
+    const [pagination, setPagination] = useState({
+        page: 1,
+        limit: 10,
+        total: 0,
+    });
 
     // ---- API CALLS ----
 
@@ -79,13 +79,13 @@ const [pagination, setPagination] = useState({
             //             : undefined;
 
             const statusFilter =
-  tab === "opening_orders"
-    ? ["Pending", "Emailed", "Acknowledged", "Rejected"]
-    : tab === "closed_orders"
-      ? ["Closed"]
-      : tab === "partial_completion"
-        ? ["Partially Received"]
-        : undefined;
+                tab === "opening_orders"
+                    ? ["Pending", "Emailed", "Acknowledged", "Rejected"]
+                    : tab === "closed_orders"
+                        ? ["Closed"]
+                        : tab === "partial_completion"
+                            ? ["Partially Received"]
+                            : undefined;
 
             const res = await PurchaseOrderService.getAllPurchaseOrders({
                 page: p,
@@ -96,11 +96,11 @@ const [pagination, setPagination] = useState({
 
             setData(res?.data || []);
 
-           setPagination({
-  page: res.page || 1,
-  limit: res.limit || 10,
-  total: res.total || 0,
-});
+            setPagination({
+                page: res.page || 1,
+                limit: res.limit || 10,
+                total: res.total || 0,
+            });
 
         } catch (e) {
             console.error(e);
@@ -137,14 +137,14 @@ const [pagination, setPagination] = useState({
     // }, [activeTab]);
 
     useEffect(() => {
-  fetchWorkOrders({
-    page: pagination.page,
-    limit: pagination.limit,
-    search,
-    activeTab,
-  });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [activeTab, pagination.page, pagination.limit, search]);
+        fetchWorkOrders({
+            page: pagination.page,
+            limit: pagination.limit,
+            search,
+            activeTab,
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, pagination.page, pagination.limit, search]);
 
     useEffect(() => {
         getPurchaseShortageData();
@@ -215,170 +215,190 @@ const [pagination, setPagination] = useState({
         }
     };
 
+    const handleRevisedPO = (poId) => {
+        Modal.confirm({
+            title: "Revise Purchase Order",
+            content:
+                "A new revision (R1/R2...) will be created. Do you want to continue?",
+            okText: "Yes",
+            cancelText: "No",
+            async onOk() {
+                  navigate(`/app/purchase/edit-purchase-order/${poId}`, {
+        state: {
+            isRevision: true,
+        },
+    });
+            },
+        });
+    };
 
-    const handleSendMail = async(poId)=>{
-         const res = await PurchaseOrderService.sendPurchaseOrderMail(poId);
-            if (res.success) {
-       
-        message.success('Purchase Order sent successfully via email with PDF attachment!');
-          fetchWorkOrders();
-      } else {
-        message.error('Failed to send Purchase Order: ' + res.error);
-      }
+
+    const handleSendMail = async (poId) => {
+        const res = await PurchaseOrderService.sendPurchaseOrderMail(poId);
+        if (res.success) {
+
+            message.success('Purchase Order sent successfully via email with PDF attachment!');
+            fetchWorkOrders();
+        } else {
+            message.error('Failed to send Purchase Order: ' + res.error);
+        }
 
     }
 
     // ---- COLUMNS ----
 
-   const openingOrderColumns = [
-  {
-    title: "",
-    key: "orderCard",
-    width: "100%",
-    render: (_, record) => (
-      <div
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "10px 12px",
-          borderRadius: 10,
-          background: "#F9FAFB",
-          border: "1px solid #E5E7EB",
-        }}
-      >
-        {/* LEFT – DETAILS */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              color: "#111827",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {record?.poNumber || "P25-00010"}
-          </div>
+    const openingOrderColumns = [
+        {
+            title: "",
+            key: "orderCard",
+            width: "100%",
+            render: (_, record) => (
+                <div
+                    style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "#F9FAFB",
+                        border: "1px solid #E5E7EB",
+                    }}
+                >
+                    {/* LEFT – DETAILS */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                            style={{
+                                fontSize: 15,
+                                fontWeight: 700,
+                                color: "#111827",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                            }}
+                        >
+                            {record?.poNumber || "P25-00010"}
+                        </div>
 
-          <div
-            style={{
-              fontSize: 13,
-              color: "#6B7280",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            Supplier: {record?.supplier?.companyName || "ABC Pte Ltd"}
-          </div>
+                        <div
+                            style={{
+                                fontSize: 13,
+                                color: "#6B7280",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                            }}
+                        >
+                            Supplier: {record?.supplier?.companyName || "ABC Pte Ltd"}
+                        </div>
 
-          <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-            Created:{" "}
-            {record?.createdAt
-              ? new Date(record.createdAt).toLocaleDateString("en-GB")
-              : "-"}
-          </div>
-        </div>
+                        <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                            Created:{" "}
+                            {record?.createdAt
+                                ? new Date(record.createdAt).toLocaleDateString("en-GB")
+                                : "-"}
+                        </div>
+                    </div>
 
-        {/* AMOUNT */}
-        <span
-          style={{
-            padding: "4px 10px",
-            borderRadius: 14,
-            fontSize: 12,
-            fontWeight: 700,
-            background: "#EEF2FF",
-            color: "#3730A3",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {formatMoney(record?.totals?.finalAmount, record.currency || "USD")}
-        </span>
+                    {/* AMOUNT */}
+                    <span
+                        style={{
+                            padding: "4px 10px",
+                            borderRadius: 14,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: "#EEF2FF",
+                            color: "#3730A3",
+                            whiteSpace: "nowrap",
+                        }}
+                    >
+                        {formatMoney(record?.totals?.finalAmount, record.currency || "USD")}
+                    </span>
 
-        {/* STATUS */}
-        <span
-          style={{
-            padding: "4px 10px",
-            borderRadius: 14,
-            fontSize: 12,
-            fontWeight: 700,
-            whiteSpace: "nowrap",
-            background:
-              record?.status === "Approved"
-                ? "#22C55E"
-                : record?.status === "Pending"
-                ? "#FB923C"
-                : "#6B7280",
-            color: "#fff",
-          }}
-        >
-          {record?.status || "Pending"}
-        </span>
+                    {/* STATUS */}
+                    <span
+                        style={{
+                            padding: "4px 10px",
+                            borderRadius: 14,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                            background:
+                                record?.status === "Approved"
+                                    ? "#22C55E"
+                                    : record?.status === "Pending"
+                                        ? "#FB923C"
+                                        : "#6B7280",
+                            color: "#fff",
+                        }}
+                    >
+                        {record?.status || "Pending"}
+                    </span>
 
-        {/* ACTIONS */}
-        <div style={{ display: "flex", gap: 6 }}>
-          <ActionButtons
-            onEdit={() => handleEdit(record?._id)}
-            onDelete={() => handleDelete(record?._id)}
-            onInfo={() =>
-              navigate(`/app/purchase/view-purchase-order/${record?._id}`)
-            }
-            onMail={() => handleSendMail(record?._id)}
-            onCross={() => confirmClose(record?._id)}
-            showEdit
-            showInfo
-            showDelete
-            showCross
-            showMail={record?.status === "Pending"}
-            iconOnly
-          />
-        </div>
-      </div>
-    ),
-  },
-];
+                    {/* ACTIONS */}
+                    <div style={{ display: "flex", gap: 6 }}>
+                        <ActionButtons
+                            onEdit={() => handleEdit(record?._id)}
+                            onDelete={() => handleDelete(record?._id)}
+                            onInfo={() =>
+                                navigate(`/app/purchase/view-purchase-order/${record?._id}`)
+                            }
+                            onMail={() => handleSendMail(record?._id)}
+                            onCross={() => confirmClose(record?._id)}
+                            showEdit={record?.status !== "Acknowledged"}
+                            showInfo
+                            showDelete={record?.status !== "Acknowledged"}
+                            showCross={record?.status !== "Acknowledged"}
+                            showMail={record?.status === "Pending"}
+                            iconOnly
+                            showReset={record?.status === "Acknowledged"}
+                            onReset={() => handleRevisedPO(record?._id)}
+                            resetTitle="Revised PO"
+                        />
+                    </div>
+                </div>
+            ),
+        },
+    ];
 
 
     // Dummy partial completion data (if you want real, replace with API)
     const partialCompletionData = (data || []).map((po) => {
-  const ordered =
-    po?.items?.reduce((sum, item) => sum + Number(item.qty || 0), 0) || 0;
+        const ordered =
+            po?.items?.reduce((sum, item) => sum + Number(item.qty || 0), 0) || 0;
 
-  const received =
-    po?.items?.reduce(
-      (sum, item) => sum + Number(item.receivedQtyTotal || 0),
-      0
-    ) || 0;
+        const received =
+            po?.items?.reduce(
+                (sum, item) => sum + Number(item.receivedQtyTotal || 0),
+                0
+            ) || 0;
 
-     const rejected =
-    po?.items?.reduce(
-      (sum, item) => sum + Number(item.rejectedQtyTotal || 0),
-      0
-    ) || 0;
+        const rejected =
+            po?.items?.reduce(
+                (sum, item) => sum + Number(item.rejectedQtyTotal || 0),
+                0
+            ) || 0;
 
-  const pending = Math.max(0, ordered - received);
+        const pending = Math.max(0, ordered - received);
 
-  return {
-    key: po._id,
-    _id:po?._id,
-    // ====== COLUMN KEYS ======
-    poNumber: po.poNumber,
+        return {
+            key: po._id,
+            _id: po?._id,
+            // ====== COLUMN KEYS ======
+            poNumber: po.poNumber,
 
-    supplier: po?.supplier?.companyName || po?.supplier || "N/A",
+            supplier: po?.supplier?.companyName || po?.supplier || "N/A",
 
-    createdDate: po.createdAt,
+            createdDate: po.createdAt,
 
-    amount: po?.totals?.finalAmount || 0,
-    status:po?.status,
-    ordered,
-    received,
-    rejected,
-    pending,
-  };
-});
+            amount: po?.totals?.finalAmount || 0,
+            status: po?.status,
+            ordered,
+            received,
+            rejected,
+            pending,
+        };
+    });
 
     const partialCompletionColumns = [
         {
@@ -468,7 +488,7 @@ const [pagination, setPagination] = useState({
                                     {record?.received ?? 0}
                                 </strong>
                             </div>
-                             <div>
+                            <div>
                                 Rejected:{" "}
                                 <strong style={{ color: "#111827" }}>
                                     {record?.rejected ?? 0}
@@ -509,26 +529,26 @@ const [pagination, setPagination] = useState({
                         </button>
                     </div> */}
                     <div style={{ display: "flex", gap: 6 }}>
-          <ActionButtons
-            onEdit={() => handleEdit(record?._id)}
-            // onDelete={() => handleDelete(record?._id)}
-            // onInfo={() =>
-            //   navigate(`/app/purchase/view-purchase-order/${record?._id}`)
-            // }
-            onMail={() => handleSendMail(record?._id)}
-            // onCross={() => confirmClose(record?._id)}
-            showEdit
-            // showInfo
-            // showDelete
-            // showCross
-            showMail={record?.status === "Partially Received"}
-            iconOnly
-          />
-        </div>
+                        <ActionButtons
+                            onEdit={() => handleEdit(record?._id)}
+                            // onDelete={() => handleDelete(record?._id)}
+                            // onInfo={() =>
+                            //   navigate(`/app/purchase/view-purchase-order/${record?._id}`)
+                            // }
+                            onMail={() => handleSendMail(record?._id)}
+                            // onCross={() => confirmClose(record?._id)}
+                            showEdit
+                            // showInfo
+                            // showDelete
+                            // showCross
+                            showMail={record?.status === "Partially Received"}
+                            iconOnly
+                        />
+                    </div>
                 </div>
             ),
         },
-        
+
     ];
 
     const closedOrderColumns = [
@@ -635,193 +655,193 @@ const [pagination, setPagination] = useState({
 
 
 
-const fmtDate = (d) => {
-  if (!d) return "-";
-  const dt = new Date(d);
-  if (Number.isNaN(dt.getTime())) return "-";
-  return dt.toLocaleDateString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  });
-};
+    const fmtDate = (d) => {
+        if (!d) return "-";
+        const dt = new Date(d);
+        if (Number.isNaN(dt.getTime())) return "-";
+        return dt.toLocaleDateString("en-US", {
+            month: "short",
+            day: "2-digit",
+            year: "numeric",
+        });
+    };
 
-const PurchaseShortageCard = ({ record }) => {
-  const [open, setOpen] = useState(false);
+    const PurchaseShortageCard = ({ record }) => {
+        const [open, setOpen] = useState(false);
 
-  const shortList = Array.isArray(record.shortageByWorkOrders)
-    ? record.shortageByWorkOrders
-    : [];
+        const shortList = Array.isArray(record.shortageByWorkOrders)
+            ? record.shortageByWorkOrders
+            : [];
 
-  return (
-    <div
-      style={{
-        width: "100%",
-        borderRadius: 8,
-        padding: "6px 10px",
-        background: "#FFF7F7",
-        border: "1px solid #F5D0D0",
-        boxSizing: "border-box",
-      }}
-    >
-      {/* 🔹 ROW 1 : Compact Header */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr auto auto",
-          gap: 10,
-          alignItems: "center",
-        }}
-      >
-        {/* Icon */}
-        <div
-          style={{
-            width: 26,
-            height: 26,
-            borderRadius: 6,
-            background: "#FDE8E8",
-            display: "grid",
-            placeItems: "center",
-            color: "#DC2626",
-          }}
-        >
-          <ExclamationCircleFilled />
-        </div>
-
-        {/* MPN + Desc */}
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-            title={record.mpn}
-          >
-            {record.mpn}
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: "#6B7280",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-            title={record.description}
-          >
-            {record.description}
-          </div>
-        </div>
-
-        {/* Shortage badge */}
-        <span
-          style={{
-            background: "#EF4444",
-            color: "white",
-            padding: "2px 8px",
-            borderRadius: 12,
-            fontSize: 11,
-            fontWeight: 700,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Short {record.shortage} {record?.uom ? record?.uom : ""}
-        </span>
-
-        {/* Expand toggle */}
-        <span
-          onClick={() => setOpen(!open)}
-          style={{
-            cursor: "pointer",
-            color: "#DC2626",
-            fontSize: 14,
-          }}
-        >
-          {open ? <CaretDownOutlined /> : <CaretRightOutlined />}
-        </span>
-      </div>
-
-      {/* 🔹 ROW 2 : Meta line */}
-      <div
-        style={{
-          marginTop: 4,
-          fontSize: 12,
-          color: "#374151",
-          display: "flex",
-          gap: 14,
-          flexWrap: "wrap",
-        }}
-      >
-        <span><b>Mfg:</b> {record.manufacturer || "-"}</span>
-        <span><b>Supplier:</b> {record.supplier || "-"}</span>
-        <span><b>Stock:</b> {record.currentStock ?? 0}</span>
-        <span style={{ color: "green", fontWeight: 700 }}>
-          Demand Qty: {record.required ?? 0} {record?.uom ? record?.uom : ""}
-        </span>
-      </div>
-
-      {/* 🔹 EXPANDABLE DETAILS */}
-      {open && shortList.length > 0 && (
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          {shortList.map((s, idx) => (
+        return (
             <div
-              key={idx}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 8,
-                background: "#FFF",
-                border: "1px dashed #F5D0D0",
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-              }}
+                style={{
+                    width: "100%",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    background: "#FFF7F7",
+                    border: "1px solid #F5D0D0",
+                    boxSizing: "border-box",
+                }}
             >
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 800, color: "#DC2626" }}>
-                  {s.label || `Short#${idx + 1}`}
-                </div>
-                <div style={{ fontSize: 10, color: "#6B7280" }}>
-                  {fmtDate(s.needDate)}
-                </div>
-              </div>
+                {/* 🔹 ROW 1 : Compact Header */}
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: "auto 1fr auto auto",
+                        gap: 10,
+                        alignItems: "center",
+                    }}
+                >
+                    {/* Icon */}
+                    <div
+                        style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 6,
+                            background: "#FDE8E8",
+                            display: "grid",
+                            placeItems: "center",
+                            color: "#DC2626",
+                        }}
+                    >
+                        <ExclamationCircleFilled />
+                    </div>
 
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 800,
-                  color: "#DC2626",
-                }}
-              >
-                {s.shortageQty}
-              </div>
+                    {/* MPN + Desc */}
+                    <div style={{ minWidth: 0 }}>
+                        <div
+                            style={{
+                                fontSize: 14,
+                                fontWeight: 700,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                            }}
+                            title={record.mpn}
+                        >
+                            {record.mpn}
+                        </div>
+                        <div
+                            style={{
+                                fontSize: 12,
+                                color: "#6B7280",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                            }}
+                            title={record.description}
+                        >
+                            {record.description}
+                        </div>
+                    </div>
 
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  whiteSpace: "nowrap",
-                }}
-                title={s.workOrderNo}
-              >
-                {s.workOrderNo}
-              </div>
+                    {/* Shortage badge */}
+                    <span
+                        style={{
+                            background: "#EF4444",
+                            color: "white",
+                            padding: "2px 8px",
+                            borderRadius: 12,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                        }}
+                    >
+                        Short {record.shortage} {record?.uom ? record?.uom : ""}
+                    </span>
+
+                    {/* Expand toggle */}
+                    <span
+                        onClick={() => setOpen(!open)}
+                        style={{
+                            cursor: "pointer",
+                            color: "#DC2626",
+                            fontSize: 14,
+                        }}
+                    >
+                        {open ? <CaretDownOutlined /> : <CaretRightOutlined />}
+                    </span>
+                </div>
+
+                {/* 🔹 ROW 2 : Meta line */}
+                <div
+                    style={{
+                        marginTop: 4,
+                        fontSize: 12,
+                        color: "#374151",
+                        display: "flex",
+                        gap: 14,
+                        flexWrap: "wrap",
+                    }}
+                >
+                    <span><b>Mfg:</b> {record.manufacturer || "-"}</span>
+                    <span><b>Supplier:</b> {record.supplier || "-"}</span>
+                    <span><b>Stock:</b> {record.currentStock ?? 0}</span>
+                    <span style={{ color: "green", fontWeight: 700 }}>
+                        Demand Qty: {record.required ?? 0} {record?.uom ? record?.uom : ""}
+                    </span>
+                </div>
+
+                {/* 🔹 EXPANDABLE DETAILS */}
+                {open && shortList.length > 0 && (
+                    <div
+                        style={{
+                            marginTop: 8,
+                            display: "flex",
+                            gap: 10,
+                            flexWrap: "wrap",
+                        }}
+                    >
+                        {shortList.map((s, idx) => (
+                            <div
+                                key={idx}
+                                style={{
+                                    padding: "6px 10px",
+                                    borderRadius: 8,
+                                    background: "#FFF",
+                                    border: "1px dashed #F5D0D0",
+                                    display: "flex",
+                                    gap: 10,
+                                    alignItems: "center",
+                                }}
+                            >
+                                <div>
+                                    <div style={{ fontSize: 11, fontWeight: 800, color: "#DC2626" }}>
+                                        {s.label || `Short#${idx + 1}`}
+                                    </div>
+                                    <div style={{ fontSize: 10, color: "#6B7280" }}>
+                                        {fmtDate(s.needDate)}
+                                    </div>
+                                </div>
+
+                                <div
+                                    style={{
+                                        fontSize: 12,
+                                        fontWeight: 800,
+                                        color: "#DC2626",
+                                    }}
+                                >
+                                    {s.shortageQty}
+                                </div>
+
+                                <div
+                                    style={{
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        whiteSpace: "nowrap",
+                                    }}
+                                    title={s.workOrderNo}
+                                >
+                                    {s.workOrderNo}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+        );
+    };
 
 
 
@@ -955,18 +975,18 @@ const PurchaseShortageCard = ({ record }) => {
     //     );
     // };
 
-  const mpnShortageColumns = [
-  {
-    title: "",
-    key: "shortageCard",
-    width: "100%",              // ✅ IMPORTANT
-    render: (_, record) => (
-      <div style={{ width: "100%" }}>
-        <PurchaseShortageCard record={record} />
-      </div>
-    ),
-  },
-];
+    const mpnShortageColumns = [
+        {
+            title: "",
+            key: "shortageCard",
+            width: "100%",              // ✅ IMPORTANT
+            render: (_, record) => (
+                <div style={{ width: "100%" }}>
+                    <PurchaseShortageCard record={record} />
+                </div>
+            ),
+        },
+    ];
 
     // ---- CURRENT COLUMNS/DATA ----
 
@@ -1049,9 +1069,9 @@ const PurchaseShortageCard = ({ record }) => {
         }
 
         // ---- SUPPLIER VALIDATION ----
-      const supplierList = selectedItems
-    .flatMap((item) => item?.supplierId || [])
-    .filter(Boolean);
+        const supplierList = selectedItems
+            .flatMap((item) => item?.supplierId || [])
+            .filter(Boolean);
 
         const uniqueSuppliers = [...new Set(supplierList)];
 
@@ -1076,7 +1096,7 @@ const PurchaseShortageCard = ({ record }) => {
             manufacturer: item.manufacturer,
             supplierName: item.supplier,
             workOrders: item.requireByWorkOrders || [],
-            shortageByWorkOrders:item?.shortageByWorkOrders
+            shortageByWorkOrders: item?.shortageByWorkOrders
         }));
 
         // ---- Navigate with data ----
@@ -1123,6 +1143,8 @@ const PurchaseShortageCard = ({ record }) => {
     const handleEdit = (id) => {
         navigate(`/app/purchase/edit-purchase-order/${id}`);
     };
+
+   
 
     const handleDelete = async (id) => {
         try {
@@ -1366,42 +1388,42 @@ const PurchaseShortageCard = ({ record }) => {
                     }
                 /> */}
 
-         <Table
-  rowKey={activeTab === "mpn_shortage" ? "mpnId" : "_id"}
-  columns={getCurrentColumns()}
-  dataSource={getCurrentData()}
-  loading={loading}
-  scroll={{ x: 1000 }}
-  pagination={
-    activeTab === "mpn_shortage"
-      ? false
-      : {
-          current: pagination.page,
-          pageSize: pagination.limit,
-          total: pagination.total,
-          showSizeChanger: true,
-          pageSizeOptions: ["10", "25", "50", "100"],
-          showTotal: (total, range) =>
-            `${range[0]}-${range[1]} of ${total} items`,
-          onChange: (page, pageSize) => {
-            setPagination((prev) => ({
-              ...prev,
-              page,
-              limit: pageSize,
-            }));
-          },
-        }
-  }
-  rowSelection={
-    activeTab === "mpn_shortage"
-      ? {
-          type: "checkbox",
-          selectedRowKeys: selectedRows,
-          onChange: (selectedKeys) => setSelectedRows(selectedKeys),
-        }
-      : null
-  }
-/>
+                <Table
+                    rowKey={activeTab === "mpn_shortage" ? "mpnId" : "_id"}
+                    columns={getCurrentColumns()}
+                    dataSource={getCurrentData()}
+                    loading={loading}
+                    scroll={{ x: 1000 }}
+                    pagination={
+                        activeTab === "mpn_shortage"
+                            ? false
+                            : {
+                                current: pagination.page,
+                                pageSize: pagination.limit,
+                                total: pagination.total,
+                                showSizeChanger: true,
+                                pageSizeOptions: ["10", "25", "50", "100"],
+                                showTotal: (total, range) =>
+                                    `${range[0]}-${range[1]} of ${total} items`,
+                                onChange: (page, pageSize) => {
+                                    setPagination((prev) => ({
+                                        ...prev,
+                                        page,
+                                        limit: pageSize,
+                                    }));
+                                },
+                            }
+                    }
+                    rowSelection={
+                        activeTab === "mpn_shortage"
+                            ? {
+                                type: "checkbox",
+                                selectedRowKeys: selectedRows,
+                                onChange: (selectedKeys) => setSelectedRows(selectedKeys),
+                            }
+                            : null
+                    }
+                />
             </Card>
 
             <GlobalFilterModal

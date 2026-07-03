@@ -1,6 +1,6 @@
 // components/ActionButtons.js
 import React, { useState } from "react";
-import { Button, Space, Popconfirm, Modal, Spin } from "antd";
+import { Button, Space, Popconfirm, Modal, Spin, Tooltip } from "antd";
 import { InfoCircleFilled, EditFilled, DeleteFilled, PlusOutlined, ZoomInOutlined, ZoomOutOutlined, ReloadOutlined, MailFilled, CloseOutlined } from "@ant-design/icons";
 
 const ActionButtons = ({
@@ -21,7 +21,9 @@ const ActionButtons = ({
   onCross,
   onMail,
   showUpdate = false,
-  onUpdate
+  onUpdate,
+  resetTitle="Reset PO",
+  crossTitle="Close PO"
 }) => {
 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -88,7 +90,7 @@ const ActionButtons = ({
 
       {/* Reset Button */}
       {showReset && (
-
+<Tooltip title={resetTitle}>
         <Button
           icon={<ReloadOutlined style={{ color: "#1890ff" }} />}
           style={{
@@ -102,6 +104,7 @@ const ActionButtons = ({
           }}
           onClick={onReset}
         />
+        </Tooltip>
 
       )}
 
@@ -137,6 +140,7 @@ const ActionButtons = ({
 
       {/* Edit Button */}
       {showCross && (
+        <Tooltip title={crossTitle}>
         <Button
           icon={<CloseOutlined style={{ color: "#FF4D4F" }} />}
           style={{
@@ -148,6 +152,7 @@ const ActionButtons = ({
           }}
           onClick={onCross}
         />
+        </Tooltip>
       )}
 
       {/* Delete Button */}

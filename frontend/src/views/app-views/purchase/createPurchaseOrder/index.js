@@ -75,7 +75,8 @@ const generatePOItemNumber = (existingNumbers = []) => {
 
 const PurchaseOrderForm = () => {
   const location = useLocation();
-
+  const isRevisionMode = location.state?.isRevision || false;
+  console.log('------isRevisionMode', isRevisionMode)
   // 🔹 Shortage → PO flags & data
   const fromShortage = location.state?.fromShortage || false;
   const shortageItems = location.state?.shortageItems || [];
@@ -688,12 +689,23 @@ const PurchaseOrderForm = () => {
         },
       };
 
-      if (isEditMode) {
+      if (isRevisionMode) {
+
+        await PurchaseOrderService.revisePurchaseOrder(id, payload);
+
+        message.success("Purchase order revised successfully");
+
+      } else if (isEditMode) {
+
         await PurchaseOrderService.updatePurchaseOrder(id, payload);
-        message.success('Purchase order updated successfully');
+
+        message.success("Purchase order updated successfully");
+
       } else {
+
         await PurchaseOrderService.addPurchaseOrder(payload);
-        message.success('Purchase order created successfully');
+
+        message.success("Purchase order created successfully");
       }
       navigate('/app/purchase/purchase-order');
     } catch (e) {
@@ -710,7 +722,13 @@ const PurchaseOrderForm = () => {
         <Card style={{ marginBottom: 24 }} loading={loading}>
           <div style={{ marginBottom: 16 }}>
             <Title level={2} style={{ margin: 0, fontSize: 24 }}>
-              {isEditMode ? 'Edit Purchase Order' : 'Create Purchase Order'}
+              {
+                isRevisionMode
+                  ? "Revise Purchase Order"
+                  : isEditMode
+                    ? "Edit Purchase Order"
+                    : "Create Purchase Order"
+              }
             </Title>
             <Text type="secondary">
               Purchase order details and supplier information
@@ -1033,7 +1051,13 @@ const PurchaseOrderForm = () => {
               }
             }}
           >
-            {isEditMode ? "Update Purchase Order" : "Create Purchase Order"}
+            {
+              isRevisionMode
+                ? "Revise Purchase Order"
+                : isEditMode
+                  ? "Update Purchase Order"
+                  : "Create Purchase Order"
+            }
           </Button>
         </div>
       </Form>

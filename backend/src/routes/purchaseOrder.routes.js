@@ -14,6 +14,8 @@ import {
   exportExcel,
   exportPurchaseOrderPDF,
   acceptPurchaseOrder,
+  revisedPurchaseOrder,
+  getRevisePurchaseOrderById,
 } from "../controllers/purchaseOrder.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 
@@ -50,10 +52,15 @@ router.post("/:id/send-mail", authenticate, sendPurchaseOrderMail);
 router.get("/:id/export-pdf", authenticate, exportPurchaseOrderPDF);
 router.put("/updateStatus/:id", authenticate, updatePurchaseOrderStatus);
 
+router.put(
+  "/:id/revise",authenticate,
+  revisedPurchaseOrder
+);
 /**
  * Generic :id Route (KEEP LAST)
  */
 router.get("/:id", authenticate, getPurchaseOrderById);
+router.get("/revise/:id", authenticate, getRevisePurchaseOrderById);
 router.put("/:id", authenticate, updatePurchaseOrder);
 router.delete("/:id", authenticate, deletePurchaseOrder);
 

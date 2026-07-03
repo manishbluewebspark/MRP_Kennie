@@ -33,7 +33,7 @@ const getCurrencyCode = (supplier) => {
 };
 
 
-const PurchaseOrderDetailsPage = () => {
+const PurchaseReviseOrderDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -45,7 +45,7 @@ const PurchaseOrderDetailsPage = () => {
     (async () => {
       setLoading(true);
       try {
-        const res = await PurchaseOrderService.getPurchaseOrderById(id);
+        const res = await PurchaseOrderService.getRevisedPurchaseOrderById(id);
         const data = res?.data || res;
         setPo(data?.data || data);
       } catch (e) {
@@ -131,37 +131,37 @@ const PurchaseOrderDetailsPage = () => {
   //   return { freight, sub, tax, finalAmount };
   // }, [po]);
 
-  const totals = useMemo(() => {
-    const t = po?.totals || {};
+const totals = useMemo(() => {
+  const t = po?.totals || {};
 
-    const grossAmount = (po?.items || []).reduce(
-      (sum, item) =>
-        sum +
-        (Number(item.qty || 0) * Number(item.unitPrice || 0)),
-      0
-    );
+  const grossAmount = (po?.items || []).reduce(
+    (sum, item) =>
+      sum +
+      (Number(item.qty || 0) * Number(item.unitPrice || 0)),
+    0
+  );
 
-    const freight = Number(t.freightAmount || 0);
-    const discountAmount = Number(t.totalDiscount || 0);
+  const freight = Number(t.freightAmount || 0);
+  const discountAmount = Number(t.totalDiscount || 0);
 
-    // ✅ Gross + Freight - Discount
-    const subTotal = grossAmount + freight - discountAmount;
+  // ✅ Gross + Freight - Discount
+  const subTotal = grossAmount + freight - discountAmount;
 
-    return {
-      grossAmount,
-      freight,
-      discountAmount,
-      subTotal,
+  return {
+    grossAmount,
+    freight,
+    discountAmount,
+    subTotal,
 
-      // GST
-      tax: Number(t.ostTax || 0),
+    // GST
+    tax: Number(t.ostTax || 0),
 
-      // Final Amount
-      finalAmount: Number(t.finalAmount || 0),
+    // Final Amount
+    finalAmount: Number(t.finalAmount || 0),
 
-      taxPercentage: Number(po?.taxPercentage || 0),
-    };
-  }, [po]);
+    taxPercentage: Number(po?.taxPercentage || 0),
+  };
+}, [po]);
 
 
 
@@ -218,91 +218,91 @@ const PurchaseOrderDetailsPage = () => {
     );
   }
 
-  const revisionColumns = [
-    {
-      title: "Revision",
-      dataIndex: "revisionNo",
-      key: "revisionNo",
-      render: (text, record) => (
-        <div>
-          <Text strong>R{text}</Text>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            {record.poNumber}
-          </div>
+const revisionColumns = [
+  {
+    title: "Revision",
+    dataIndex: "revisionNo",
+    key: "revisionNo",
+    render: (text, record) => (
+      <div>
+        <Text strong>R{text}</Text>
+        <div style={{ fontSize: '12px', color: '#666' }}>
+          {record.poNumber}
         </div>
-      ),
+      </div>
+    ),
+  },
+  {
+    title: "PO Number",
+    dataIndex: "poNumber",
+    key: "poNumber",
+    render: (text) => <Text copyable>{text}</Text>,
+  },
+  {
+    title: "Status",
+    key: "status",
+    render: (_, record) => {
+      const status = record.snapshot?.status || "Pending";
+      const colors = {
+        Acknowledged: "green",
+        Pending: "orange",
+        Emailed: "blue",
+        Cancelled: "red",
+        Closed: "purple",
+        Draft: "default"
+      };
+      return <Tag color={colors[status] || "default"}>{status}</Tag>;
     },
-    {
-      title: "PO Number",
-      dataIndex: "poNumber",
-      key: "poNumber",
-      render: (text) => <Text copyable>{text}</Text>,
+  },
+  {
+    title: "Items",
+    key: "items",
+    render: (_, record) => {
+      const items = record.snapshot?.items || [];
+      return (
+        <div>
+          {items.map((item, idx) => (
+            <div key={idx} style={{ fontSize: '12px' }}>
+              {item.description} × {item.qty} {item.uom}
+            </div>
+          ))}
+        </div>
+      );
     },
-    {
-      title: "Status",
-      key: "status",
-      render: (_, record) => {
-        const status = record.snapshot?.status || "Pending";
-        const colors = {
-          Acknowledged: "green",
-          Pending: "orange",
-          Emailed: "blue",
-          Cancelled: "red",
-          Closed: "purple",
-          Draft: "default"
-        };
-        return <Tag color={colors[status] || "default"}>{status}</Tag>;
-      },
+  },
+  {
+    title: "Qty",
+    key: "qty",
+    render: (_, record) => {
+      const items = record.snapshot?.items || [];
+      const totalQty = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+      return <Text strong>{totalQty}</Text>;
     },
-    // {
-    //   title: "Items",
-    //   key: "items",
-    //   render: (_, record) => {
-    //     const items = record.snapshot?.items || [];
-    //     return (
-    //       <div>
-    //         {items.map((item, idx) => (
-    //           <div key={idx} style={{ fontSize: '12px' }}>
-    //             {item.description} × {item.qty} {item.uom}
-    //           </div>
-    //         ))}
-    //       </div>
-    //     );
-    //   },
-    // },
-    {
-      title: "Qty",
-      key: "qty",
-      render: (_, record) => {
-        const items = record.snapshot?.items || [];
-        const totalQty = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-        return <Text strong>{totalQty}</Text>;
-      },
+  },
+  {
+    title: "Total Amount",
+    key: "amount",
+    render: (_, record) => {
+      const finalAmount = record.snapshot?.totals?.finalAmount || 0;
+      return <Text strong>${finalAmount.toFixed(2)}</Text>;
     },
-    {
-      title: "Total Amount",
-      key: "amount",
-      render: (_, record) => {
-        const finalAmount = record.snapshot?.totals?.finalAmount || 0;
-        return <Text strong>${finalAmount.toFixed(2)}</Text>;
-      },
-    },
-    {
-      title: "Revised On",
-      dataIndex: "revisedAt",
-      key: "revisedAt",
-      render: (date) => fmtDate(date),
-    },
-    {
-      title: "Action",
-      key: "action",
-      render: (_, record) => (
-        <ActionButtons showInfo onInfo={() =>
-          navigate(`/app/purchase/view-purchase-order/revise/${record?._id}`)
-        } />
-      ),
-    }
-  ];
+  },
+  {
+    title: "Revised On",
+    dataIndex: "revisedAt",
+    key: "revisedAt",
+    render: (date) => fmtDate(date),
+  },
+  {
+    title: "Action",
+    key: "action",
+    render: (_, record) => (
+           <ActionButtons showInfo  onInfo={() =>
+                                navigate(`/app/purchase/view-purchase-order/revised${record?._id}`)
+                            }/>
+    ),
+  }
+];
 
 
 
@@ -380,21 +380,7 @@ const PurchaseOrderDetailsPage = () => {
 
       <Divider />
 
-      <Card style={{ marginBottom: 24 }}>
-        <Title level={2} style={{ marginBottom: 20 }}>
-          Revision History
-        </Title>
-
-        <Table
-          columns={revisionColumns}
-          dataSource={po?.revisionHistory || []}
-          rowKey={(record) => record.revisionNo}
-          pagination={false}
-        />
-      </Card>
-
-
-      <Divider />
+    <Divider />
       {/* Items */}
       <Card style={{ marginBottom: 24 }} bodyStyle={{ padding: 24 }}>
         <div style={{ marginBottom: 20 }}>
@@ -432,54 +418,54 @@ const PurchaseOrderDetailsPage = () => {
             }}
           >
             <div style={{ marginBottom: 8 }}>
-              <Text strong>Gross Amount: </Text>
-              <Text>{fmtMoney(totals.grossAmount)}</Text>
-            </div>
+  <Text strong>Gross Amount: </Text>
+  <Text>{fmtMoney(totals.grossAmount)}</Text>
+</div>
 
-            <div style={{ marginBottom: 8 }}>
-              <Text strong>Freight: </Text>
-              <Text>+ {fmtMoney(totals.freight)}</Text>
-            </div>
+<div style={{ marginBottom: 8 }}>
+  <Text strong>Freight: </Text>
+  <Text>+ {fmtMoney(totals.freight)}</Text>
+</div>
 
-            <div style={{ marginBottom: 8 }}>
-              <Text strong>Discount: </Text>
-              <Text type="danger">
-                - {fmtMoney(totals.discountAmount)}
-              </Text>
-            </div>
+<div style={{ marginBottom: 8 }}>
+  <Text strong>Discount: </Text>
+  <Text type="danger">
+    - {fmtMoney(totals.discountAmount)}
+  </Text>
+</div>
 
-            <div style={{ marginBottom: 8 }}>
-              <Text strong>Sub Total: </Text>
-              <Text>{fmtMoney(totals.subTotal)}</Text>
-            </div>
+<div style={{ marginBottom: 8 }}>
+  <Text strong>Sub Total: </Text>
+  <Text>{fmtMoney(totals.subTotal)}</Text>
+</div>
 
 
 
-            <div style={{ marginBottom: 8 }}>
-              <Text strong>
-                GST ({totals.taxPercentage}%):
-              </Text>
-              <Text>{fmtMoney(totals.tax)}</Text>
-            </div>
+<div style={{ marginBottom: 8 }}>
+  <Text strong>
+    GST ({totals.taxPercentage}%):
+  </Text>
+  <Text>{fmtMoney(totals.tax)}</Text>
+</div>
 
-            <Divider style={{ margin: "12px 0" }} />
+<Divider style={{ margin: "12px 0" }} />
 
-            <div>
-              <Text strong style={{ fontSize: 16 }}>
-                Total Amount:
-              </Text>
+<div>
+  <Text strong style={{ fontSize: 16 }}>
+    Total Amount:
+  </Text>
 
-              <Text
-                strong
-                style={{
-                  fontSize: 16,
-                  color: "#1890ff",
-                  marginLeft: 10,
-                }}
-              >
-                {fmtMoney(totals.finalAmount)}
-              </Text>
-            </div>
+  <Text
+    strong
+    style={{
+      fontSize: 16,
+      color: "#1890ff",
+      marginLeft: 10,
+    }}
+  >
+    {fmtMoney(totals.finalAmount)}
+  </Text>
+</div>
           </div>
         </div>
       </Card>
@@ -539,4 +525,4 @@ const PurchaseOrderDetailsPage = () => {
   );
 };
 
-export default PurchaseOrderDetailsPage;
+export default PurchaseReviseOrderDetailsPage;

@@ -194,7 +194,7 @@ const PickingDetailModal = ({
     const dataSource = childParts.map((p, index) => {
         const intoQty = Number(p.quantity || 0);
         const totalRequired = intoQty * workQty;
-         const totalRequiredss = intoQty;
+        const totalRequiredss = intoQty;
 
         // Get ALL previous entries for this mpnId
         const allPreviousEntries = processStageData?.details?.filter(
@@ -217,7 +217,7 @@ const PickingDetailModal = ({
             maxQty: totalRequired,
             alreadyPicked: alreadyPicked,
             remainingToPick: remainingToPick > 0 ? remainingToPick : 0,
-            totalQtyperD:totalRequiredss
+            totalQtyperD: totalRequiredss
         };
     });
 
@@ -341,7 +341,7 @@ const PickingDetailModal = ({
         }
     };
 
-        const handleSave = () => {
+    const handleSave = () => {
         form.validateFields().then((values) => {
             const additionalQty = Number(stageQty || 0);
             const hasShortage = Object.keys(shortageChecked).some(key => shortageChecked[key] === true);
@@ -350,7 +350,7 @@ const PickingDetailModal = ({
             // Existing Picking Process
 
 
-           // Calculate possible products
+            // Calculate possible products
 
 
             // 🔥 FIX: Always send materials data, even if empty
@@ -379,79 +379,99 @@ const PickingDetailModal = ({
                 };
             });
 
-           const existingPicking =
-    wo?.processHistory?.find(p => p.process === "picking");
-
-let possibleProducts = 0;
-
-// Agar current save me picking ho rahi hai
-if (formattedMaterials.length > 0) {
-    possibleProducts = workQty;
-
-    formattedMaterials.forEach(item => {
-        const requiredPerProduct = Number(item.quantity || 1);
-
-        // Existing picked
-        const oldItem = existingPicking?.details?.find(
-            d => String(d.mpnId) === String(item.mpnId)
-        );
-
-        const oldPicked = Number(oldItem?.pickedQty || 0);
-        const newPicked = Number(item.pickedQty || 0);
-
-        const totalPicked = oldPicked + newPicked;
-
-        const canMake = Math.floor(totalPicked / requiredPerProduct);
-
-        possibleProducts = Math.min(possibleProducts, canMake);
-    });
-}
-// Agar pehle se picking saved hai
-else if (existingPicking?.details?.length) {
-    possibleProducts = workQty;
-
-    existingPicking.details.forEach(item => {
-        const requiredPerProduct = Number(item.quantity || 1);
-        const picked = Number(item.pickedQty || 0);
-
-        const canMake = Math.floor(picked / requiredPerProduct);
-
-        possibleProducts = Math.min(possibleProducts, canMake);
-    });
-}
-
-// ❌ No picked material
-if (possibleProducts === 0 && additionalQty > 0) {
-    message.error(
-        "No picked materials available. Please complete Picking first."
-    );
-    return;
-}
-
-// Validation
-const totalAfterSave = alreadyCompletedQty + additionalQty;
-
-if (totalAfterSave > possibleProducts) {
-    message.error(
-        `Only ${possibleProducts} product(s) can be produced with available picked materials`
-    );
-    return;
-}
-
-if (!additionalQty || additionalQty <= 0) {
-    message.warning("Please enter Produce Quantity");
-    return;
-}
-
-if (additionalQty > remainingAllowed) {
-    message.error(`Max allowed: ${remainingAllowed}`);
-    return;
-}
-
-            // 🔥 Filter out items with no pickedQty and no shortage
             const materialsToSend = formattedMaterials.filter(
                 m => m.pickedQty > 0 || m.shortage === true
             );
+
+            const existingPicking =
+                wo?.processHistory?.find(p => p.process === "picking");
+
+            let possibleProducts = 0;
+
+            // Agar current save me picking ho rahi hai
+            if (formattedMaterials.length > 0) {
+                possibleProducts = workQty;
+
+                formattedMaterials.forEach(item => {
+                    const requiredPerProduct = Number(item.quantity || 1);
+
+                    // Existing picked
+                    const oldItem = existingPicking?.details?.find(
+                        d => String(d.mpnId) === String(item.mpnId)
+                    );
+
+                    const oldPicked = Number(oldItem?.pickedQty || 0);
+                    const newPicked = Number(item.pickedQty || 0);
+
+                    const totalPicked = oldPicked + newPicked;
+
+                    const canMake = Math.floor(totalPicked / requiredPerProduct);
+
+                    possibleProducts = Math.min(possibleProducts, canMake);
+                });
+            }
+            // Agar pehle se picking saved hai
+            else if (existingPicking?.details?.length) {
+                possibleProducts = workQty;
+
+                existingPicking.details.forEach(item => {
+                    const requiredPerProduct = Number(item.quantity || 1);
+                    const picked = Number(item.pickedQty || 0);
+
+                    const canMake = Math.floor(picked / requiredPerProduct);
+
+                    possibleProducts = Math.min(possibleProducts, canMake);
+                });
+            }
+
+            // 🔥 Allow saving Picking/Shortage without production
+            if (additionalQty <= 0 && materialsToSend.length > 0) {
+                const payload = {
+                    stage,
+                    comments: values.comments || "",
+                    stageQty: 0,
+                    materials: materialsToSend,
+                    workOrderId: wo.workOrderId,
+                };
+
+                console.log("Saving Picking Progress:", payload);
+
+                onSave?.(payload);
+                return;
+            }
+
+            // ❌ No picked material
+            if (possibleProducts === 0 && additionalQty > 0) {
+                message.error(
+                    "No picked materials available. Please complete Picking first."
+                );
+                return;
+            }
+
+            // Validation
+            const totalAfterSave = alreadyCompletedQty + additionalQty;
+
+            if (totalAfterSave > possibleProducts) {
+                message.error(
+                    `Only ${possibleProducts} product(s) can be produced with available picked materials`
+                );
+                return;
+            }
+
+            if (!additionalQty || additionalQty <= 0) {
+                message.warning("Please enter Produce Quantity");
+                return;
+            }
+
+            if (additionalQty > remainingAllowed) {
+                message.error(`Max allowed: ${remainingAllowed}`);
+                return;
+            }
+
+            // 🔥 Filter out items with no pickedQty and no shortage
+            // const materialsToSend = formattedMaterials.filter(
+            //     m => m.pickedQty > 0 || m.shortage === true
+            // );
 
             const payload = {
                 stage,

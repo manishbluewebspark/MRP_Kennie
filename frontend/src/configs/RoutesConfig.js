@@ -140,6 +140,11 @@ export const protectedRoutes = [
         path: `${APP_PREFIX_PATH}/purchase/view-purchase-order/:id`,
         component: React.lazy(() => import('views/app-views/purchase/viewPurchaseOrder/index')),
     },
+      {
+        key: 'view-revise-purchase-order',
+        path: `${APP_PREFIX_PATH}/purchase/view-purchase-order/revise/:id`,
+        component: React.lazy(() => import('views/app-views/purchase/viewPurchaseOrder/viewRevisedPurchaseOrder')),
+    },
     {
         key: 'purchase-history',
         path: `${APP_PREFIX_PATH}/purchase/purchase-history`,
