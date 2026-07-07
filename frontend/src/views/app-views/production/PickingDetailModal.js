@@ -82,19 +82,32 @@ const PickingDetailModal = ({
                 const restoredChecked = {};
                 const restoredInputs = {};
 
+                // savedDetails.forEach((savedItem) => {
+                //     const hasShortage = savedItem.shortage === true || Number(savedItem.shortageQty || 0) > 0;
+
+                //     if (hasShortage) {
+                //         // Find matching part by mpnId
+                //         const matchedPart = parts.find(
+                //             (p) =>
+                //                 String(p.itemNumber) === String(savedItem.itemNumber)
+                //         );
+                //         if (matchedPart) {
+                //             // Use mpnId as key for consistent matching
+                //             const key = String(matchedPart.mpnId);
+                //             restoredChecked[key] = true;
+                //             restoredInputs[key] = savedItem.shortageQty || 1;
+                //             console.log(`✅ Restored shortage for ${matchedPart.mpn}: Qty=${restoredInputs[key]}`);
+                //         }
+                //     }
+                // });
                 savedDetails.forEach((savedItem) => {
-                    const hasShortage = savedItem.shortage === true || Number(savedItem.shortageQty || 0) > 0;
+                    const hasShortage =
+                        savedItem.shortage === true ||
+                        Number(savedItem.shortageQty || 0) > 0;
 
                     if (hasShortage) {
-                        // Find matching part by mpnId
-                        const matchedPart = parts.find(p => String(p.mpnId) === String(savedItem.mpnId));
-                        if (matchedPart) {
-                            // Use mpnId as key for consistent matching
-                            const key = String(matchedPart.mpnId);
-                            restoredChecked[key] = true;
-                            restoredInputs[key] = savedItem.shortageQty || 1;
-                            console.log(`✅ Restored shortage for ${matchedPart.mpn}: Qty=${restoredInputs[key]}`);
-                        }
+                        restoredChecked[savedItem.key] = true;
+                        restoredInputs[savedItem.key] = savedItem.shortageQty || 1;
                     }
                 });
 
@@ -197,9 +210,10 @@ const PickingDetailModal = ({
         const totalRequiredss = intoQty;
 
         // Get ALL previous entries for this mpnId
-        const allPreviousEntries = processStageData?.details?.filter(
-            d => String(d.mpnId) === String(p.mpnId)
-        ) || [];
+        const allPreviousEntries =
+            processStageData?.details?.filter(
+                d => String(d.key) === String(p.itemNumber)
+            ) || [];
 
         const alreadyPicked = allPreviousEntries.reduce(
             (sum, entry) => sum + Number(entry.pickedQty || 0), 0
@@ -208,7 +222,8 @@ const PickingDetailModal = ({
         const remainingToPick = totalRequired - alreadyPicked;
 
         // 🔥 Use mpnId as key for consistent matching with shortage state
-        const uniqueKey = String(p.mpnId);
+        // const uniqueKey = String(p.mpnId);
+        const uniqueKey = p.itemNumber;
 
         return {
             ...p,
@@ -263,7 +278,7 @@ const PickingDetailModal = ({
         width: 160,
         render: (_, record) => {
             // Use mpnId as key for checking shortage
-            const recordKey = String(record.mpnId);
+            const recordKey = record.key;
             const isChecked = shortageChecked[recordKey] || false;
             const shortageValue = shortageInputs[recordKey] || 0;
 
@@ -312,7 +327,7 @@ const PickingDetailModal = ({
 
     const handleShortageSave = async (record, workOrder) => {
         try {
-            const recordKey = String(record.mpnId);
+            const recordKey = record.key;
             const shortageQty = Number(shortageInputs[recordKey] || 0);
             if (shortageQty <= 0) {
                 message.warning("Shortage quantity must be greater than 0");
@@ -357,7 +372,7 @@ const PickingDetailModal = ({
             // But when stageQty > 0, we need to clear shortages
             const formattedMaterials = dataSource.map((item) => {
                 const currentPickedQty = Number(pickedQuantities[item.key] || 0);
-                const recordKey = String(item.mpnId);
+                const recordKey = item.key;
                 let isShortage = shortageChecked[recordKey] === true;
                 let shortageQty = isShortage ? Number(shortageInputs[recordKey] || 0) : 0;
 
@@ -368,6 +383,8 @@ const PickingDetailModal = ({
                 }
 
                 return {
+                    key: item.key,
+                    itemNumber: item.itemNumber,
                     mpnId: item.mpnId,
                     mpn: item.mpn,
                     pickedQty: currentPickedQty,
@@ -397,7 +414,7 @@ const PickingDetailModal = ({
 
                     // Existing picked
                     const oldItem = existingPicking?.details?.find(
-                        d => String(d.mpnId) === String(item.mpnId)
+                        d => String(d.key) === String(item.key)
                     );
 
                     const oldPicked = Number(oldItem?.pickedQty || 0);
@@ -422,6 +439,32 @@ const PickingDetailModal = ({
 
                     possibleProducts = Math.min(possibleProducts, canMake);
                 });
+            }
+
+            const allMaterialsPicked = formattedMaterials.length > 0 &&
+                formattedMaterials.every(item => {
+
+                    const oldItem = existingPicking?.details?.find(
+                        d => String(d.key) === String(item.key)
+                    );
+
+                    const oldPicked = Number(oldItem?.pickedQty || 0);
+                    const newPicked = Number(item.pickedQty || 0);
+
+                    const totalPicked = oldPicked + newPicked;
+
+                    const requiredTotal =
+                        Number(item.quantity || 0) * Number(workQty || 0);
+
+                    return totalPicked >= requiredTotal;
+                });
+
+
+            if (additionalQty <= 0 && allMaterialsPicked) {
+                message.warning(
+                    "All required materials have been picked. Please enter Produce Quantity."
+                );
+                return;
             }
 
             // 🔥 Allow saving Picking/Shortage without production

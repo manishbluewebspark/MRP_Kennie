@@ -181,7 +181,7 @@ const totals = useMemo(() => {
       render: (text) => <Text strong>{text}</Text>,
     },
     { title: "MPN ↓", dataIndex: "mpn", key: "mpn", width: 150 },
-    { title: "manufacturer", dataIndex: "manufacturer", key: "manufacturer", width: 150 },
+    { title: "Manufacturer", dataIndex: "manufacturer", key: "manufacturer", width: 150 },
     { title: "UOM ↓", dataIndex: "uom", key: "uom", width: 90, align: "center" },
     { title: "Qty ↓", dataIndex: "quantity", key: "quantity", width: 90, align: "center" },
     {

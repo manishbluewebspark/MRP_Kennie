@@ -160,6 +160,7 @@ const buildPickedMap = async () => {
         const mpnId = String(d.mpnId || "");
         if (!mpnId) continue;
 
+        
 
         const qty = convertToBaseUOM(
           Number(d.pickedQty || 0),
@@ -386,9 +387,7 @@ export const getInventoryList = async (req, res) => {
             it.receivedQty || 0,
 
           needDate: po.needDate
-            ? new Date(
-              po.needDate
-            ).toLocaleDateString()
+            ? new Date(po.needDate).toLocaleDateString("en-GB")
             : "N/A",
 
           committedDate:
@@ -439,15 +438,16 @@ export const getInventoryList = async (req, res) => {
       const incomingQty = toNum(item.calculatedIncomingQty);
 
 
-    const demandQty = round(demandMap.get(mpnIdStr) || 0);
-const pickedQty = round(pickedMap.get(mpnIdStr) || 0);
+      const demandQty = demandMap.get(mpnIdStr) || 0;
+      const pickedQty = pickedMap.get(mpnIdStr) || 0;
 
-    
 
-      console.log('-------meter pickedQty', pickedQty)
-
+      console.log('------mpnIdStr',mpnIdStr)
+      console.log('-------meter pickedMap', pickedMap)
+      console.log('-------meter demandMap', demandMap)
       // reduce picked globally
-      const effectiveDemand = Math.max(demandQty - pickedQty, 0);
+     const effectiveDemand = Math.max(demandQty - pickedQty, 0);
+      console.log('------effectiveDemand',effectiveDemand)
 
 
 

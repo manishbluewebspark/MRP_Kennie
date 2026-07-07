@@ -8982,9 +8982,9 @@ export const saveWorkOrderStage = async (req, res) => {
         const currentPickedQty = Number(material.pickedQty || 0);
         if (currentPickedQty <= 0) continue;
 
-        const previousEntries = existingProcess?.details?.filter(
-          (d) => String(d.mpnId) === String(material.mpnId)
-        ) || [];
+    const previousEntries = existingProcess?.details?.filter(
+  (d) => String(d.key) === String(material.key)
+) || [];
 
         const totalAlreadyPicked = previousEntries.reduce(
           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
@@ -9101,35 +9101,62 @@ export const saveWorkOrderStage = async (req, res) => {
         const stageDetailsMap = {};
 
         for (const detail of (existing.details || [])) {
-          const mpnId = String(detail.mpnId);
-          stageDetailsMap[mpnId] = {
-            ...detail,
-            pickedQty: Number(detail.pickedQty || 0),
-          };
+          // const mpnId = String(detail.mpnId);
+          // stageDetailsMap[mpnId] = {
+          //   ...detail,
+          //   pickedQty: Number(detail.pickedQty || 0),
+          // };
+          const rowKey = String(detail.key);
+
+stageDetailsMap[rowKey] = {
+  ...detail,
+  pickedQty: Number(detail.pickedQty || 0),
+};
         }
 
         for (const material of materials) {
-          const mpnId = String(material.mpnId);
+          // const mpnId = String(material.mpnId);
+          const rowKey = String(material.key);
           const currentPickedQty = Number(material.pickedQty || 0);
 
-          if (stageDetailsMap[mpnId]) {
-            stageDetailsMap[mpnId].pickedQty += currentPickedQty;
-            stageDetailsMap[mpnId].shortage = material.shortage;
-            stageDetailsMap[mpnId].shortageQty = material.shortageQty || 0;
-            stageDetailsMap[mpnId].pickedAt = new Date();
-          } else {
-            stageDetailsMap[mpnId] = {
-              mpnId: material.mpnId,
-              mpn: material.mpn,
-              pickedQty: currentPickedQty,
-              shortage: material.shortage || false,
-              shortageQty: material.shortageQty || 0,
-              quantity: material.quantity,
-              uomId: material.uomId,
-              uom: material.uom,
-              pickedAt: new Date(),
-            };
-          }
+          if (stageDetailsMap[rowKey]) {
+  stageDetailsMap[rowKey].pickedQty += currentPickedQty;
+  stageDetailsMap[rowKey].shortage = material.shortage;
+  stageDetailsMap[rowKey].shortageQty = material.shortageQty || 0;
+  stageDetailsMap[rowKey].pickedAt = new Date();
+} else {
+  stageDetailsMap[rowKey] = {
+    key: material.key,
+    itemNumber: material.itemNumber,
+    mpnId: material.mpnId,
+    mpn: material.mpn,
+    pickedQty: currentPickedQty,
+    shortage: material.shortage || false,
+    shortageQty: material.shortageQty || 0,
+    quantity: material.quantity,
+    uomId: material.uomId,
+    uom: material.uom,
+    pickedAt: new Date(),
+  };
+}
+          // if (stageDetailsMap[mpnId]) {
+          //   stageDetailsMap[mpnId].pickedQty += currentPickedQty;
+          //   stageDetailsMap[mpnId].shortage = material.shortage;
+          //   stageDetailsMap[mpnId].shortageQty = material.shortageQty || 0;
+          //   stageDetailsMap[mpnId].pickedAt = new Date();
+          // } else {
+          //   stageDetailsMap[mpnId] = {
+          //     mpnId: material.mpnId,
+          //     mpn: material.mpn,
+          //     pickedQty: currentPickedQty,
+          //     shortage: material.shortage || false,
+          //     shortageQty: material.shortageQty || 0,
+          //     quantity: material.quantity,
+          //     uomId: material.uomId,
+          //     uom: material.uom,
+          //     pickedAt: new Date(),
+          //   };
+          // }
         }
 
         existing.details = Object.values(stageDetailsMap);
@@ -9138,6 +9165,8 @@ export const saveWorkOrderStage = async (req, res) => {
     else {
       // New stage
       const materialsWithDetails = materials.map((m) => ({
+          key: m.key,
+    itemNumber: m.itemNumber,
         mpnId: m.mpnId,
         mpn: m.mpn,
         pickedQty: Number(m.pickedQty || 0),
