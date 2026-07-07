@@ -408,7 +408,7 @@ const CableAssemblyCard = ({
         <Divider style={{ margin: "8px 0" }} />
 
         {/* Production Workflow */}
-        <div>
+        {/* <div>
           <h3
             style={{
               fontSize: 13,
@@ -568,6 +568,167 @@ const CableAssemblyCard = ({
               );
             })}
 
+          </div>
+        </div> */}
+
+        {/* Production Workflow */}
+        <div>
+          <h3
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#000",
+              marginBottom: 6,
+            }}
+          >
+            Production Workflow{" "}
+            <span
+              style={{
+                color: "#888",
+                fontWeight: "normal",
+                fontSize: 11,
+              }}
+            >
+              (Picking & Assembly can run concurrently)
+            </span>
+          </h3>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "nowrap",
+              gap: 8,
+              width: "100%", // Ensure full width
+            }}
+          >
+            {stages.map((stage, index) => {
+              const isActive = stage.key === activeKey;
+              const { status } = stage;
+
+              // 🎨 Base colours
+              let bg = "#f5f5f5";
+              let textColor = "#555";
+              let borderColor = 'white';
+              let boxShadow = ''
+
+              const sequenceAllowed = index === 0 || stages.slice(0, index).every(s => s.status === "completed");
+              const permissionAllowed = hasPermission(
+                stage.permission
+              );
+
+              const canClick = permissionAllowed;
+
+              // Completed = solid green (no blink)
+              if (status === "completed") {
+                bg = "#2e7d32";       // dark green
+                textColor = "#fff";
+              }
+
+              // Active stage (new / in_progress) = green + blink
+              if (isActive && status !== "completed") {
+                bg = "#DBEAFE";       // bright green
+                textColor = "black";
+                borderColor = '#93c5fd'
+                boxShadow = 'rgba(59, 130, 246, 0.8) 0px 0px 9.97317px 0px'
+              }
+
+              if (status === "in_progress") {
+                bg = "#f59e0b";       // bright green
+                textColor = "white";
+                borderColor = '#f59e0b'
+                boxShadow = 'rgba(185, 125, 53, 0.8) 0px 0px 9.97317px 0px'
+              }
+
+              // Calculate dynamic width based on number of stages
+              const stageWidth = `${100 / stages.length}%`;
+
+              return (
+                <Tooltip
+                  key={stage.key}
+                  title={
+                    !permissionAllowed
+                      ? "You do not have permission for this stage"
+                      : `${stage.label}: ${stage.doneQty}/${record.quantity}`
+                  }
+                >
+                  <div
+                    onClick={() => {
+                      if (!canClick) return;
+                      setModalVisible(true);
+                      setSelectWorkOrderData(record);
+                      setActiveStage({
+                        name: stage.label,
+                        status: stage.status,
+                      });
+                    }}
+                    style={{
+                      width: stageWidth, // Dynamic width based on number of stages
+                      height: "60px", // Reduced height
+                      borderRadius: 8,
+                      border: `2px solid ${borderColor}`,
+                      background: bg,
+                      color: textColor,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: canClick ? "pointer" : "not-allowed",
+                      boxShadow:
+                        status === "completed"
+                          ? "0 2px 4px rgba(0,0,0,0.18)"
+                          : "0 1px 3px rgba(0,0,0,0.12)",
+                      transform:
+                        isActive && status !== "completed"
+                          ? "translateY(-2px)"
+                          : "none",
+                      animation:
+                        isActive && status !== "completed" && status !== "in_progress"
+                          ? "blinkStage 1.1s infinite"
+                          : "none",
+                      transition: "all 0.2s ease-out",
+                      padding: "4px 6px",
+                      minWidth: "60px", // Minimum width to prevent too small
+                      flexShrink: 1, // Allow shrinking
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        marginBottom: 2,
+                      }}
+                    >
+                      <span style={{
+                        fontSize: window.innerWidth < 768 ? 14 : 16 // Responsive icon size
+                      }}>
+                        {stage.icon}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: window.innerWidth < 768 ? 11 : 12, // Responsive font size
+                          fontWeight: 600,
+                          color: textColor,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {stage.label}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 11,
+                        opacity: 0.9,
+                      }}
+                    >
+                      {stage.doneQty} Done,&nbsp;
+                      {stage.outstandingQty} Outstanding
+                    </div>
+                  </div>
+                </Tooltip>
+              );
+            })}
           </div>
         </div>
 
