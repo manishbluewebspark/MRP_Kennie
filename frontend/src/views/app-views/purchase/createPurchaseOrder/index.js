@@ -741,7 +741,7 @@ const PurchaseOrderForm = () => {
                 PO Number
               </Title>
               <Form.Item name="poNumber" rules={[{ required: true }]}>
-                <Input placeholder="Enter number" size="large" />
+                <Input maxLength={12} placeholder="Enter number" size="large" />
               </Form.Item>
             </Col>
             <Col span={8}>

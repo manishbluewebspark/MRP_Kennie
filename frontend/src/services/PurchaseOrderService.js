@@ -124,6 +124,14 @@ PurchaseOrderService.exportPurchaseOrderPDF = function (purchaseOrderId) {
   });
 };
 
+PurchaseOrderService.exportRevisedPurchaseOrderPDF = function (purchaseOrderId) {
+  return fetch({
+    url: `/purchase-orders/revised/${purchaseOrderId}/export-pdf`,
+    method: "get",
+    responseType: "arraybuffer", // 🔑 for PDF download
+  });
+};
+
 
 
 export default PurchaseOrderService;

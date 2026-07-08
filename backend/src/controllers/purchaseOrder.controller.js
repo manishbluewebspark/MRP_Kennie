@@ -2054,6 +2054,68 @@ export const exportPurchaseOrderPDF = async (req, res) => {
 };
 
 
+export const exportRevisedPurchaseOrderPDF = async (req, res) => {
+  try {
+    const { id } = req.params; // revisionHistory._id
+
+    const purchaseOrder = await PurchaseOrders.findOne({
+      "revisionHistory._id": id,
+    });
+
+    if (!purchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Revision not found",
+      });
+    }
+
+    const revision = purchaseOrder.revisionHistory.id(id);
+
+    const snapshotDoc = PurchaseOrders.hydrate(revision.snapshot);
+
+    await snapshotDoc.populate([
+      {
+        path: "supplier",
+        populate: {
+          path: "currency",
+          select: "code",
+        },
+      },
+      {
+        path: "workOrderNo",
+        select: "workOrderNo poNumber projectNo",
+      },
+      {
+        path: "items.uom",
+        select: "name code",
+      },
+      {
+        path: "items.mpn",
+        select: "MPN Description",
+      },
+    ]);
+
+    // PDF from revision snapshot
+    const pdfBuffer = await generatePurchaseOrderPDFBuffer(
+      snapshotDoc.toObject()
+    );
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=PO_${snapshotDoc.poNumber}_Rev-${revision.revisionNo}.pdf`
+    );
+
+    return res.send(pdfBuffer);
+  } catch (error) {
+    console.error("❌ exportRevisedPurchaseOrderPDF error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 export const getPurchaseOrdersHistory = async (req, res) => {
   try {
