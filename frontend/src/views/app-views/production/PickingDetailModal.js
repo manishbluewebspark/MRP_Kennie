@@ -243,9 +243,18 @@ const PickingDetailModal = ({
         { title: "MPN", dataIndex: "mpn", key: "mpn", width: 100 },
         { title: "UOM", dataIndex: "uom", key: "uom", width: 80 },
         { title: `Qty`, key: "totalQty", width: 120, render: (_, record) => record.totalQtyperD },
-        { title: "Already Picked", dataIndex: "alreadyPicked", key: "alreadyPicked", width: 100 },
+        // { title: "Already Picked", dataIndex: "alreadyPicked", key: "alreadyPicked", width: 100 },
         { title: "Location", dataIndex: "storageLocation", key: "storageLocation", width: 110 },
     ];
+
+    const alreadyPickedColumn = stageConfig.showPickedColumn
+        ? [{
+            title: "Already Picked",
+            dataIndex: "alreadyPicked",
+            key: "alreadyPicked",
+            width: 120,
+        }]
+        : [];
 
     // Picked Qty column - only for picking stage
     const pickedColumn = stageConfig.showPickedColumn ? [{
@@ -400,8 +409,52 @@ const PickingDetailModal = ({
                 m => m.pickedQty > 0 || m.shortage === true
             );
 
-            const existingPicking =
-                wo?.processHistory?.find(p => p.process === "picking");
+            const existingPicking = wo?.processHistory?.find(
+                p => p.process?.toLowerCase() === "picking"
+            );
+
+
+            console.log("existingPicking", existingPicking);
+            console.log("processHistory", wo?.processHistory);
+
+            const invalidMaterials = formattedMaterials.filter((item) => {
+                const oldItem = existingPicking?.details?.find(
+                    d => String(d.key) === String(item.key)
+                );
+
+                const oldPicked = Number(oldItem?.pickedQty || 0);
+                const newPicked = Number(item.pickedQty || 0);
+                const totalPicked = oldPicked + newPicked;
+
+                const requiredQty = Number(item.quantity || 0) * Number(workQty || 0);
+
+                // Already saved shortage
+                const oldShortage =
+                    oldItem?.shortage === true ||
+                    Number(oldItem?.shortageQty || 0) > 0;
+
+                // Current modal shortage
+                const currentShortage =
+                    item.shortage === true ||
+                    Number(item.shortageQty || 0) > 0;
+
+                return (
+                    totalPicked < requiredQty &&
+                    !oldShortage &&
+                    !currentShortage
+                );
+            });
+
+            console.log("Invalid Materials", invalidMaterials);
+
+
+            if (invalidMaterials.length > 0) {
+                message.error(
+                    `Please complete picking or mark shortage for remaining material(s).`
+                );
+                return;
+            }
+
 
             let possibleProducts = 0;
 
@@ -670,7 +723,12 @@ const PickingDetailModal = ({
 
             <Card title={`Materials for ${stage}`} size="small">
                 <Table
-                    columns={[...baseColumns, ...pickedColumn, ...shortageColumn]}
+                    columns={[
+                        ...baseColumns,
+                        ...alreadyPickedColumn,
+                        ...pickedColumn,
+                        ...shortageColumn,
+                    ]}
                     dataSource={dataSource}
                     pagination={false}
                     size="small"
