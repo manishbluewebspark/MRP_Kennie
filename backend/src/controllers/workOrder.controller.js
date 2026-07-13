@@ -3024,7 +3024,7 @@ export const exportDeliveryWorkOrdersXlsx = async (req, res) => {
 
     // ✅ fetch selected workorders
     const workOrders = await WorkOrder.find({ _id: { $in: ids } })
-      .select("_id drawingId workOrderNo doNumber projectId posNo quantity targetDeliveryDate completeDate poNumber")
+      .select("_id drawingId workOrderNo doNumber projectId posNo quantity targetDeliveryDate delivered status completeDate poNumber")
       .populate("projectId", "projectName")
       .populate("drawingId", "drawingNo description")
       .lean();
@@ -3126,7 +3126,7 @@ export const exportDeliveryWorkOrdersPDF = async (req, res) => {
 
     // ✅ fetch selected workorders (only fields needed)
     const workOrders = await WorkOrder.find({ _id: { $in: ids } })
-      .select("_id drawingId workOrderNo doNumber projectId posNo quantity completeDate poNumber")
+      .select("_id drawingId workOrderNo doNumber projectId posNo quantity delivered status completeDate poNumber")
       .populate("projectId", "projectName")
       .populate("drawingId", "drawingNo description")
       .lean();
@@ -3309,7 +3309,7 @@ export const exportDeliveryWorkOrdersWord = async (req, res) => {
 
     // ✅ fetch selected workorders
     const workOrders = await WorkOrder.find({ _id: { $in: ids } })
-      .select("_id drawingId workOrderNo doNumber projectId posNo quantity completeDate poNumber")
+      .select("_id drawingId workOrderNo doNumber projectId posNo delivered status quantity completeDate poNumber")
       .populate("projectId", "projectName")
       .populate("drawingId", "drawingNo description")
       .lean();
@@ -5391,7 +5391,7 @@ export const getDeliveryOrders = async (req, res) => {
         $addFields: {
           displayPONumber: { $ifNull: ["$poNumber", "$posNumber"] },
           displayCompletedDate: { $ifNull: ["$completeDate", null] },
-          displayTargetDelivery: { $ifNull: ["$targetDeliveryDate", "$commitDate"] },
+          displayTargetDelivery: { $ifNull: ["$targetDeliveryDate", null] },
           drawingName: {
             $ifNull: [
               "$drawingDoc.drawingName",

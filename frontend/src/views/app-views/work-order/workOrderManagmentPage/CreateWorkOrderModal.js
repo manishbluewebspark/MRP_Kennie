@@ -81,7 +81,7 @@ const CreateWorkOrderModal = ({
   }, [projectData]);
 
   const generateWorkOrderNumber = (lastWorkOrderNoInput) => {
-    console.log('-----lastWorkOrderNoInput',lastWorkOrderNoInput)
+    console.log('-----lastWorkOrderNoInput', lastWorkOrderNoInput)
     const now = new Date();
     const year = now.getFullYear().toString().slice(-2);
     const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -89,8 +89,8 @@ const CreateWorkOrderModal = ({
     const arr = Array.isArray(lastWorkOrderNoInput)
       ? lastWorkOrderNoInput
       : lastWorkOrderNoInput
-      ? [lastWorkOrderNoInput]
-      : [];
+        ? [lastWorkOrderNoInput]
+        : [];
 
     const currentMonthNumbers = arr
       .filter((num) => String(num).startsWith(`WO${year}${month}`))
@@ -105,7 +105,7 @@ const CreateWorkOrderModal = ({
   const fetchDrawings = async (params = {}) => {
     setLoading(true);
     try {
-      const response = await DrawingService.getAllDrawings({...params,showOnlyQuoted:true});
+      const response = await DrawingService.getAllDrawings({ ...params, showOnlyQuoted: true });
       if (!response?.success) {
         message.error("Failed to fetch drawings");
         setAllRows([]);
@@ -116,8 +116,8 @@ const CreateWorkOrderModal = ({
         const drawingId = drawing._id ? String(drawing._id) : String(index);
 
         const qty = Number(drawing.qty || 0);
-        const unitPriceNum = Number(drawing?.totalPrice ?? 0);
-        const totalPriceNum = qty * drawing?.totalPrice;
+        const unitPriceNum = Number(drawing?.totalPriceWithMarkup ?? 0);
+        const totalPriceNum = qty * drawing?.totalPriceWithMarkup;
 
         return {
           key: drawingId,
@@ -128,8 +128,8 @@ const CreateWorkOrderModal = ({
           customer: drawing.customerId?.companyName || drawing.customerName || "-",
           qty,
           unitPriceNum,
-          unitPrice: `${drawing?.currency?.symbol} ${unitPriceNum.toFixed(2)}`,
-          totalPrice: `${drawing?.currency?.symbol}  ${totalPriceNum.toFixed(2)}`,
+          unitPrice: `${drawing?.currency?.symbol} ${unitPriceNum}`,
+          totalPrice: `${drawing?.currency?.symbol}  ${totalPriceNum}`,
           quotedDate: drawing.quotedDate ? dayjs(drawing.quotedDate).format("DD/MM/YYYY") : "-",
           // editable fields
           posNo: drawing.posNumber || "",
@@ -188,7 +188,7 @@ const CreateWorkOrderModal = ({
         title: "Drawing No",
         dataIndex: "drawingNo",
         key: "drawingNo",
-        width:200,
+        width: 200,
         render: (text) => <strong>{text}</strong>,
       },
       {
@@ -201,11 +201,11 @@ const CreateWorkOrderModal = ({
         title: "Customer",
         dataIndex: "customer",
         key: "customer",
-             width:200,
+        width: 200,
       },
       { title: "Qty", dataIndex: "qty", key: "qty" },
-      { title: "Unit Price", dataIndex: "unitPrice", key: "unitPrice",width:100 },
-      { title: "Total Price", dataIndex: "totalPrice", key: "totalPrice",width:100 },
+      { title: "Unit Price", dataIndex: "unitPrice", key: "unitPrice", width: 100 },
+      { title: "Total Price", dataIndex: "totalPrice", key: "totalPrice", width: 100 },
       { title: "Quoted Date", dataIndex: "quotedDate", key: "quotedDate" },
       {
         title: "Status",
@@ -231,31 +231,31 @@ const CreateWorkOrderModal = ({
       //   ),
       // },
       {
-  title: (
-    <span>
-      POS No <span style={{ color: "red" }}>*</span>
-    </span>
-  ),
-  dataIndex: "posNo",
-  key: "posNo",
-  render: (_, record) => (
-    <Input
-      value={record.posNo}
-      placeholder="Enter POS No"
-      // status={
-      //   selectedDrawingIds.includes(String(record.drawingId)) &&
-      //   (!record?.posNo || record?.posNo?.trim() === "")
-      //     ? "error"
-      //     : ""
-      // }
-      onChange={(e) =>
-        handleRowChange(record.drawingId, "posNo", e.target.value)
+        title: (
+          <span>
+            POS No <span style={{ color: "red" }}>*</span>
+          </span>
+        ),
+        dataIndex: "posNo",
+        key: "posNo",
+        render: (_, record) => (
+          <Input
+            value={record.posNo}
+            placeholder="Enter POS No"
+            // status={
+            //   selectedDrawingIds.includes(String(record.drawingId)) &&
+            //   (!record?.posNo || record?.posNo?.trim() === "")
+            //     ? "error"
+            //     : ""
+            // }
+            onChange={(e) =>
+              handleRowChange(record.drawingId, "posNo", e.target.value)
+            }
+            disabled={isEditMode}
+          />
+        ),
       }
-      disabled={isEditMode}
-    />
-  ),
-}
-,
+      ,
       {
         title: "Work Order Qty",
         dataIndex: "workOrderQty",
@@ -352,39 +352,39 @@ const CreateWorkOrderModal = ({
   // }, [visible, isEditMode, editDrawingId, editingWorkOrder, form]);
 
   useEffect(() => {
-  if (!visible) return;
-  if (!isEditMode || !editingWorkOrder) return;
-  if (!allRows.length) return; // 🔥 WAIT for data
+    if (!visible) return;
+    if (!isEditMode || !editingWorkOrder) return;
+    if (!allRows.length) return; // 🔥 WAIT for data
 
-  if (editDrawingId) {
-    setSelectedDrawingIds([editDrawingId]);
+    if (editDrawingId) {
+      setSelectedDrawingIds([editDrawingId]);
 
-         form.setFieldsValue({
+      form.setFieldsValue({
         workOrderNo: editingWorkOrder.workOrderNo,
         poNumber: editingWorkOrder.poNumber,
-        projectNo : editingWorkOrder.projectNo,
+        projectNo: editingWorkOrder.projectNo,
         needDate: editingWorkOrder.needDate ? dayjs(editingWorkOrder.needDate) : null,
         commitDate: editingWorkOrder.commitDate ? dayjs(editingWorkOrder.commitDate) : null,
       });
 
-    setAllRows((prev) =>
-      prev.map((r) => {
-        if (String(r.drawingId) !== String(editDrawingId)) return r;
+      setAllRows((prev) =>
+        prev.map((r) => {
+          if (String(r.drawingId) !== String(editDrawingId)) return r;
 
-        return {
-          ...r,
-          posNo: editingWorkOrder.posNo ?? "",
-          workOrderQty:
-            typeof editingWorkOrder.quantity === "number"
-              ? editingWorkOrder.quantity
-              : r.workOrderQty,
-          uom: editingWorkOrder.uom || r.uom || "PCS",
-          remarks: editingWorkOrder.remarks ?? r.remarks ?? "",
-        };
-      })
-    );
-  }
-}, [visible, isEditMode, editDrawingId, editingWorkOrder, allRows]);
+          return {
+            ...r,
+            posNo: editingWorkOrder.posNo ?? "",
+            workOrderQty:
+              typeof editingWorkOrder.quantity === "number"
+                ? editingWorkOrder.quantity
+                : r.workOrderQty,
+            uom: editingWorkOrder.uom || r.uom || "PCS",
+            remarks: editingWorkOrder.remarks ?? r.remarks ?? "",
+          };
+        })
+      );
+    }
+  }, [visible, isEditMode, editDrawingId, editingWorkOrder, allRows]);
 
   const handleCreateOrder = async (values) => {
     try {
@@ -394,13 +394,13 @@ const CreateWorkOrderModal = ({
       }
 
       const invalidRow = selectedDrawingIds
-      .map((id) => allRows.find((r) => String(r.drawingId) === String(id)))
-      .find((row) => !row?.posNo || row.posNo.trim() === "");
+        .map((id) => allRows.find((r) => String(r.drawingId) === String(id)))
+        .find((row) => !row?.posNo || row.posNo.trim() === "");
 
-    if (invalidRow) {
-      message.error("POS No is mandatory for all selected drawings");
-      return;
-    }
+      if (invalidRow) {
+        message.error("POS No is mandatory for all selected drawings");
+        return;
+      }
 
       const items = selectedDrawingIds
         .map((drawingId) => allRows.find((r) => String(r.drawingId) === String(drawingId)))
@@ -431,7 +431,7 @@ const CreateWorkOrderModal = ({
       };
 
       await onCreate(workOrderData);
-       resetAll();
+      resetAll();
     } catch (err) {
       console.error(err);
       message.error("Failed to create/update work order");
@@ -524,7 +524,7 @@ const CreateWorkOrderModal = ({
               </Form.Item>
             </Col>
 
-             <Col xs={24} md={8}>
+            <Col xs={24} md={8}>
               <Form.Item name="projectNo" label="Project No" rules={[{ required: true }]}>
                 <Input />
               </Form.Item>
