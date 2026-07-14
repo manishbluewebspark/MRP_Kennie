@@ -280,22 +280,33 @@ export const getAllWorkOrders = async (req, res) => {
       query.isProductionComplete = false
     }
 
-    if (search && String(search).trim()) {
-      const s = String(search).trim();
+if (search && String(search).trim()) {
+  const s = String(search).trim();
 
-      const orConditions = [
-        { workOrderNo: { $regex: s, $options: "i" } },
-        { poNumber: { $regex: s, $options: "i" } },
-        { projectNo: { $regex: s, $options: "i" } },
-      ];
+  const orConditions = [
+    { workOrderNo: { $regex: s, $options: "i" } },
+    { poNumber: { $regex: s, $options: "i" } },
+    { projectNo: { $regex: s, $options: "i" } },
+  ];
 
-      // ✅ only add posNo when search is numeric
-      if (!isNaN(s)) {
-        orConditions.push({ posNo: Number(s) });
-      }
+  // Search POS No
+  if (!isNaN(s)) {
+    orConditions.push({ posNo: Number(s) });
+  }
 
-      query.$or = orConditions;
-    }
+  // Search by Drawing No
+  const drawingIds = await Drawing.find({
+    drawingNo: { $regex: s, $options: "i" },
+  }).distinct("_id");
+
+  if (drawingIds.length) {
+    orConditions.push({
+      drawingId: { $in: drawingIds },
+    });
+  }
+
+  query.$or = orConditions;
+}
 
 
     // ✅ Sort
@@ -3079,6 +3090,7 @@ export const exportDeliveryWorkOrdersXlsx = async (req, res) => {
       Customer: r.customerName || deliverTo.customer || "",
       Qty: r.quantity ?? r.qty ?? 0,
       "PO Number": r.poNumber || "",
+      "POS Number": r.posNo || "",
       Completed: r.completeDate ? new Date(r.completeDate).toLocaleDateString("en-GB") : "",
       "Target Delivery": r.targetDeliveryDate ? new Date(r.targetDeliveryDate).toLocaleDateString("en-GB") : "",
       Status: r.status || "",
@@ -8982,9 +8994,9 @@ export const saveWorkOrderStage = async (req, res) => {
         const currentPickedQty = Number(material.pickedQty || 0);
         if (currentPickedQty <= 0) continue;
 
-    const previousEntries = existingProcess?.details?.filter(
-  (d) => String(d.key) === String(material.key)
-) || [];
+        const previousEntries = existingProcess?.details?.filter(
+          (d) => String(d.key) === String(material.key)
+        ) || [];
 
         const totalAlreadyPicked = previousEntries.reduce(
           (sum, entry) => sum + Number(entry.pickedQty || 0), 0
@@ -9014,9 +9026,9 @@ export const saveWorkOrderStage = async (req, res) => {
         //   toUom: inventory.mpnId.UOM,
         // });
 
-        const baseQty = await convertToMeter({qty:currentPickedQty,fromUom: material.uomId,})
+        const baseQty = await convertToMeter({ qty: currentPickedQty, fromUom: material.uomId, })
 
-        console.log('--------baseQty',inventory.balanceQuantity,baseQty)
+        console.log('--------baseQty', inventory.balanceQuantity, baseQty)
 
         if (inventory.balanceQuantity < baseQty) {
           return res.status(400).json({
@@ -9108,10 +9120,10 @@ export const saveWorkOrderStage = async (req, res) => {
           // };
           const rowKey = String(detail.key);
 
-stageDetailsMap[rowKey] = {
-  ...detail,
-  pickedQty: Number(detail.pickedQty || 0),
-};
+          stageDetailsMap[rowKey] = {
+            ...detail,
+            pickedQty: Number(detail.pickedQty || 0),
+          };
         }
 
         for (const material of materials) {
@@ -9120,25 +9132,25 @@ stageDetailsMap[rowKey] = {
           const currentPickedQty = Number(material.pickedQty || 0);
 
           if (stageDetailsMap[rowKey]) {
-  stageDetailsMap[rowKey].pickedQty += currentPickedQty;
-  stageDetailsMap[rowKey].shortage = material.shortage;
-  stageDetailsMap[rowKey].shortageQty = material.shortageQty || 0;
-  stageDetailsMap[rowKey].pickedAt = new Date();
-} else {
-  stageDetailsMap[rowKey] = {
-    key: material.key,
-    itemNumber: material.itemNumber,
-    mpnId: material.mpnId,
-    mpn: material.mpn,
-    pickedQty: currentPickedQty,
-    shortage: material.shortage || false,
-    shortageQty: material.shortageQty || 0,
-    quantity: material.quantity,
-    uomId: material.uomId,
-    uom: material.uom,
-    pickedAt: new Date(),
-  };
-}
+            stageDetailsMap[rowKey].pickedQty += currentPickedQty;
+            stageDetailsMap[rowKey].shortage = material.shortage;
+            stageDetailsMap[rowKey].shortageQty = material.shortageQty || 0;
+            stageDetailsMap[rowKey].pickedAt = new Date();
+          } else {
+            stageDetailsMap[rowKey] = {
+              key: material.key,
+              itemNumber: material.itemNumber,
+              mpnId: material.mpnId,
+              mpn: material.mpn,
+              pickedQty: currentPickedQty,
+              shortage: material.shortage || false,
+              shortageQty: material.shortageQty || 0,
+              quantity: material.quantity,
+              uomId: material.uomId,
+              uom: material.uom,
+              pickedAt: new Date(),
+            };
+          }
           // if (stageDetailsMap[mpnId]) {
           //   stageDetailsMap[mpnId].pickedQty += currentPickedQty;
           //   stageDetailsMap[mpnId].shortage = material.shortage;
@@ -9165,8 +9177,8 @@ stageDetailsMap[rowKey] = {
     else {
       // New stage
       const materialsWithDetails = materials.map((m) => ({
-          key: m.key,
-    itemNumber: m.itemNumber,
+        key: m.key,
+        itemNumber: m.itemNumber,
         mpnId: m.mpnId,
         mpn: m.mpn,
         pickedQty: Number(m.pickedQty || 0),

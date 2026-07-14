@@ -254,12 +254,12 @@ export const getAllDrawings = async (req, res) => {
     // ---- base filters (NO numeric range here) ----
     const matchStage = {};
 
-    if (search?.trim()) {
-      matchStage.$or = [
-        { drawingNo: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
-    }
+    // if (search?.trim()) {
+    //   matchStage.$or = [
+    //     { drawingNo: { $regex: search, $options: "i" } },
+    //     { description: { $regex: search, $options: "i" } },
+    //   ];
+    // }
     if (showOnlyQuoted) {
       matchStage.quotedDate = { $ne: null };
     }
@@ -366,9 +366,63 @@ export const getAllDrawings = async (req, res) => {
       rangeStage.push({ $match: { __numSuffix: r } });
     }
 
+    const searchStage = [];
+
+if (search?.trim()) {
+  searchStage.push({
+    $match: {
+      $or: [
+        {
+          drawingNo: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          description: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          "projectId.projectName": {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          "projectId.code": {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          "customerId.companyName": {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          "customerId.contactPerson": {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          "customerId.name": {
+            $regex: search,
+            $options: "i",
+          },
+        },
+      ],
+    },
+  });
+}
+
     const pipeline = [
       ...baseStages,
       ...rangeStage,
+      
       { $sort: sortOptions },
       { $skip: (page - 1) * limit },
       { $limit: limit },
@@ -417,7 +471,7 @@ export const getAllDrawings = async (req, res) => {
         },
       },
       { $unwind: { path: "$currency", preserveNullAndEmptyArrays: true } },
-
+...searchStage,
       { $project: { __numSuffix: 0 } }, // hide helper
     ];
 

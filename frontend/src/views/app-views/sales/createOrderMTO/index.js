@@ -180,7 +180,7 @@ const MTOList = () => {
       title: "Customer",
       dataIndex: "customer",
       key: "customer",
-      render: (_, record) => record.customerId?.contactPerson
+      render: (_, record) => record.customerId?.companyName
     },
     {
       title: "Currency",
@@ -192,13 +192,29 @@ const MTOList = () => {
       title: "Unit Price",
       dataIndex: "costingSummary",
       key: "costingSummary",
-      render: (costingSummary, record) => `${record.currency?.code} ${record?.totalPriceWithMarkup}`
+      align: "right",
+      render: (_, record) =>
+        `${record.currency?.symbol} ${Number(record.totalPriceWithMarkup).toLocaleString(
+          "en-US",
+          {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }
+        )}`
     },
     {
       title: "Total Price",
       dataIndex: "costingSummary",
       key: "costingSummary",
-      render: (costingSummary, record) => `${record.currency?.code} ${record?.totalPriceWithMarkup * record.qty}`
+      align: "right",
+      render: (_, record) =>
+        `${record.currency?.symbol} ${(record.totalPriceWithMarkup * record.qty).toLocaleString(
+          "en-US",
+          {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }
+        )}`
     },
     {
       title: "Lead Time",
@@ -218,7 +234,7 @@ const MTOList = () => {
       key: "quoteStatus",
       render: renderStatusBadge
     },
-      {
+    {
       title: "Quote Type",
       dataIndex: "quoteType",
       key: "quoteType",
@@ -466,7 +482,7 @@ const MTOList = () => {
           <Row gutter={8} align="middle">
             <Col>
               <Input
-                placeholder="Search drawings..."
+                placeholder="Search..."
                 prefix={<SearchOutlined />}
                 style={{ width: 260 }}
                 onChange={(e) => doSearch(e.target.value)}
@@ -491,17 +507,17 @@ const MTOList = () => {
         dataSource={filteredData}
         rowKey={(record) => record.key || record._id}
         loading={loading}
-         pagination={{
-                    current: page,
-                    pageSize: limit,
-                    total: pagination?.totalItems || 0,
-                    onChange: (p, l) => {
-                        setPage(p);
-                        setLimit(l);
-                        fetchData({ page: p, limit: l });
-                    }
-                }}
-        scroll={{ x: 1100 }}
+        pagination={{
+          current: page,
+          pageSize: limit,
+          total: pagination?.totalItems || 0,
+          onChange: (p, l) => {
+            setPage(p);
+            setLimit(l);
+            fetchData({ page: p, limit: l });
+          }
+        }}
+        scroll={{ x: "max-content" }}
       />
 
       <QuoteTypeModal

@@ -698,7 +698,7 @@ const DeliveryOrderPage = () => {
 
     useEffect(() => {
         loadData();
-    }, [page, limit, activeTab, search]);
+    }, [page, limit, activeTab]);
 
     const loadData = async () => {
         await fetchWorkOrders({

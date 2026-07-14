@@ -60,7 +60,7 @@ const ContactCard = ({ record }) => {
               marginBottom: 6,
             }}
           >
-            {record.companyName} – {record.contactPerson}
+            {record.companyName}
           </div>
 
           <div

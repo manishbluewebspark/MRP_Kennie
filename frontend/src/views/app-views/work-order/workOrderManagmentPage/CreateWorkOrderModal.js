@@ -462,7 +462,7 @@ const CreateWorkOrderModal = ({
             <Row gutter={8} align="middle">
               <Col flex="auto">
                 <Input
-                  placeholder="Search by Customer or Drawing No"
+                  placeholder="Search..."
                   prefix={<SearchOutlined />}
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
