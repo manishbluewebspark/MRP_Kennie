@@ -128,6 +128,8 @@ const CreateWorkOrderModal = ({
           customer: drawing.customerId?.companyName || drawing.customerName || "-",
           qty,
           unitPriceNum,
+          totalPriceNum,
+          currency: drawing?.currency?.symbol,
           unitPrice: `${drawing?.currency?.symbol} ${unitPriceNum}`,
           totalPrice: `${drawing?.currency?.symbol}  ${totalPriceNum}`,
           quotedDate: drawing.quotedDate ? dayjs(drawing.quotedDate).format("DD/MM/YYYY") : "-",
@@ -168,7 +170,7 @@ const CreateWorkOrderModal = ({
       {
         title: "",
         key: "selection",
-        width: 50,
+        // width: 10,
         render: (_, record) => (
           <Checkbox
             checked={selectedDrawingIds.includes(String(record.drawingId))}
@@ -188,7 +190,7 @@ const CreateWorkOrderModal = ({
         title: "Drawing No",
         dataIndex: "drawingNo",
         key: "drawingNo",
-        width: 200,
+        width: 180,
         render: (text) => <strong>{text}</strong>,
       },
       {
@@ -204,8 +206,36 @@ const CreateWorkOrderModal = ({
         width: 200,
       },
       { title: "Qty", dataIndex: "qty", key: "qty" },
-      { title: "Unit Price", dataIndex: "unitPrice", key: "unitPrice", width: 100 },
-      { title: "Total Price", dataIndex: "totalPrice", key: "totalPrice", width: 100 },
+      {
+        title: "Unit Price",
+        dataIndex: "unitPrice",
+        key: "unitPrice",
+        align: "right",
+        width: 110,
+        render: (_, record) =>
+          `${record.currency || ""} ${Number(record.unitPriceNum).toLocaleString(
+            "en-US",
+            {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }
+          )}`,
+      },
+      {
+        title: "Total Price",
+        dataIndex: "totalPrice",
+        key: "totalPrice",
+        align: "right",
+        width: 120,
+        render: (_, record) =>
+          `${record.currency || ""} ${Number(record.totalPriceNum).toLocaleString(
+            "en-US",
+            {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }
+          )}`,
+      },
       { title: "Quoted Date", dataIndex: "quotedDate", key: "quotedDate" },
       {
         title: "Status",
