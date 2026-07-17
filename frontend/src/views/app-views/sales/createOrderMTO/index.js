@@ -266,21 +266,7 @@ const MTOList = () => {
 
   // search (debounced)
   const doSearch = useDebounce(async (val) => {
-    setSearchText(val);
-
-    try {
-      const response = await DrawingService.getAllDrawings({ search: val });
-
-      const fetchedData = response.data || [];
-      setFilteredData(fetchedData);
-      if (response.payload) {
-        const filtered = response.payload.data.map(d => ({ ...d, key: d._id || d.key }));
-        setFilteredData(filtered);
-      }
-    } catch (err) {
-      console.error("Error fetching drawings:", err);
-      setFilteredData([]);
-    }
+    fetchData({search:val})
   }, 400);
 
   // Modal flows

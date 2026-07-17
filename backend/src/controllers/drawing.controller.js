@@ -420,69 +420,98 @@ if (search?.trim()) {
 }
 
     const pipeline = [
-      ...baseStages,
-      ...rangeStage,
-      
-      { $sort: sortOptions },
-      { $skip: (page - 1) * limit },
-      { $limit: limit },
+  ...baseStages,
+  ...rangeStage,
 
-      // populate-like lookups you had before
-      {
-        $lookup: {
-          from: "projects",
-          localField: "projectId",
-          foreignField: "_id",
-          as: "projectId",
-          pipeline: [{ $project: { projectName: 1, code: 1 } }],
-        },
-      },
-      { $unwind: { path: "$projectId", preserveNullAndEmptyArrays: true } },
+  // lookups first
+  {
+    $lookup: {
+      from: "projects",
+      localField: "projectId",
+      foreignField: "_id",
+      as: "projectId",
+      pipeline: [{ $project: { projectName: 1, code: 1 } }],
+    },
+  },
+  { $unwind: { path: "$projectId", preserveNullAndEmptyArrays: true } },
 
-      {
-        $lookup: {
-          from: "customers",
-          localField: "customerId",
-          foreignField: "_id",
-          as: "customerId",
-          pipeline: [{ $project: { name: 1, contactPerson: 1, companyName: 1 } }],
-        },
-      },
-      { $unwind: { path: "$customerId", preserveNullAndEmptyArrays: true } },
+  {
+    $lookup: {
+      from: "customers",
+      localField: "customerId",
+      foreignField: "_id",
+      as: "customerId",
+      pipeline: [{ $project: { name: 1, contactPerson: 1, companyName: 1 } }],
+    },
+  },
+  { $unwind: { path: "$customerId", preserveNullAndEmptyArrays: true } },
 
-      {
-        $lookup: {
-          from: "users",
-          localField: "lastEditedBy",
-          foreignField: "_id",
-          as: "lastEditedBy",
-          pipeline: [{ $project: { name: 1, email: 1 } }],
-        },
-      },
-      { $unwind: { path: "$lastEditedBy", preserveNullAndEmptyArrays: true } },
+  {
+    $lookup: {
+      from: "users",
+      localField: "lastEditedBy",
+      foreignField: "_id",
+      as: "lastEditedBy",
+      pipeline: [{ $project: { name: 1, email: 1 } }],
+    },
+  },
+  { $unwind: { path: "$lastEditedBy", preserveNullAndEmptyArrays: true } },
 
-      {
-        $lookup: {
-          from: "currencies",
-          localField: "currency",
-          foreignField: "_id",
-          as: "currency",
-          pipeline: [{ $project: { code: 1, symbol: 1 } }],
-        },
-      },
-      { $unwind: { path: "$currency", preserveNullAndEmptyArrays: true } },
-...searchStage,
-      { $project: { __numSuffix: 0 } }, // hide helper
-    ];
+  {
+    $lookup: {
+      from: "currencies",
+      localField: "currency",
+      foreignField: "_id",
+      as: "currency",
+      pipeline: [{ $project: { code: 1, symbol: 1 } }],
+    },
+  },
+  { $unwind: { path: "$currency", preserveNullAndEmptyArrays: true } },
+
+  // search BEFORE pagination
+  ...searchStage,
+
+  { $sort: sortOptions },
+  { $skip: (page - 1) * limit },
+  { $limit: limit },
+
+  { $project: { __numSuffix: 0 } },
+];
 
     const drawings = await Drawing.aggregate(pipeline);
 
     // ---------- TOTAL COUNT (same filters, no sort/skip/limit) ----------
-    const countPipeline = [
-      ...baseStages,
-      ...rangeStage,
-      { $count: "total" },
-    ];
+const countPipeline = [
+  ...baseStages,
+  ...rangeStage,
+
+  // lookups required because search is on project/customer fields
+  {
+    $lookup: {
+      from: "projects",
+      localField: "projectId",
+      foreignField: "_id",
+      as: "projectId",
+      pipeline: [{ $project: { projectName: 1, code: 1 } }],
+    },
+  },
+  { $unwind: { path: "$projectId", preserveNullAndEmptyArrays: true } },
+
+  {
+    $lookup: {
+      from: "customers",
+      localField: "customerId",
+      foreignField: "_id",
+      as: "customerId",
+      pipeline: [{ $project: { name: 1, contactPerson: 1, companyName: 1 } }],
+    },
+  },
+  { $unwind: { path: "$customerId", preserveNullAndEmptyArrays: true } },
+
+  ...searchStage,
+
+  { $count: "total" },
+];
     const totalArr = await Drawing.aggregate(countPipeline);
     const total = totalArr?.[0]?.total || 0;
 
