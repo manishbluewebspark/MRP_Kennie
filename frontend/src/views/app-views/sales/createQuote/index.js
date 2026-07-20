@@ -184,76 +184,91 @@ const CreateQuote = () => {
 
   // Dummy data for quotes table
   const columns = [
-{
-  title: "Select All",
-  key: "projectDetails",
-  render: (_, record) => {
-    const totalQty = record.totalQuantity ?? 0;
-    const totalDrawings = record.totalDrawings ?? 0;
+    {
+      title: "Select All",
+      key: "projectDetails",
+      render: (_, record) => {
+        const totalQty = record.totalQuantity ?? 0;
+        const totalDrawings = record.totalDrawings ?? 0;
 
-    return (
-      <div style={{ display: "flex", alignItems: "flex-start", padding: "4px 0" }}>
-        <Space direction="vertical" style={{ width: "100%" }} size={2}>
+        return (
+          <div style={{ display: "flex", alignItems: "flex-start", padding: "4px 0" }}>
+            <Space direction="vertical" style={{ width: "100%" }} size={2}>
 
-          {/* Quote Number + Date Row */}
-          <Space size={12} align="center">
-            <Text strong style={{ fontSize: 13 }}>
-              <NumberOutlined style={{ marginRight: 6, color: "#0369A1" }} />
-              {record.quoteNumber || "Q--"}
-            </Text>
+              {/* Quote Number + Date Row */}
+              <Space size={12} align="center">
+                <Text strong style={{ fontSize: 13 }}>
+                  <NumberOutlined style={{ marginRight: 6, color: "#0369A1" }} />
+                  {record.quoteNumber || "Q--"}
+                </Text>
 
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              <CalendarOutlined style={{ marginRight: 6, color: "#16A34A" }} />
-              {record?.quoteDate
-                ? new Date(record.quoteDate).toLocaleDateString("en-GB")
-                : "No date"}
-            </Text>
-          </Space>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  <CalendarOutlined style={{ marginRight: 6, color: "#16A34A" }} />
+                  {record?.quoteDate
+                    ? new Date(record.quoteDate).toLocaleDateString("en-GB")
+                    : "No date"}
+                </Text>
+              </Space>
 
-          {/* Customer Name */}
-          <Title
-            level={4}
-            style={{
-              margin: 0,
-              fontSize: "16px",
-              fontWeight: 600,
-              lineHeight: "20px",
-            }}
-          >
-            <UserSwitchOutlined style={{ marginRight: 6, color: "#0F172A" }} />
-            {record.customerId?.name || record.customerName || "Customer Name"}
-          </Title>
+              {/* Customer Name */}
+              <Title
+                level={4}
+                style={{
+                  margin: 0,
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  lineHeight: "20px",
+                }}
+              >
+                <UserSwitchOutlined style={{ marginRight: 6, color: "#0F172A" }} />
+                {record.customerId?.name || record.customerName || "Customer Name"}
+              </Title>
 
-          {/* Company Name */}
-          <Text type="secondary" style={{ fontSize: 14 }}>
-            <FileDoneOutlined style={{ marginRight: 6, color: "#475569" }} />
-            {record.customerCompany || record.customerId?.companyName || "Company"}
-          </Text>
+              {/* Company Name */}
+              <Text type="secondary" style={{ fontSize: 14 }}>
+                <FileDoneOutlined style={{ marginRight: 6, color: "#475569" }} />
+                {record.customerCompany || record.customerId?.companyName || "Company"}
+              </Text>
 
-          {/* Totals Row */}
-          <Space size="large" style={{ marginTop: 4 }} align="center">
-            <Text strong style={{ fontSize: 14 }}>
-              <DollarOutlined style={{ marginRight: 6, color: "#16A34A" }} />
-              Total: {record?.currency?.symbol}{record.totalQuoteValue.toFixed(2)} {record?.currency?.code}
-            </Text>
+              {/* Drawing Names */}
+              {record.items?.length > 0 && (
+                <Text
+                  // type="secondary"
+                  style={{
+                    fontSize: 13,
+                    display: "block",
+                    marginTop: 4,
+                  }}
+                >
+                  <b>Drawings:</b>{" "}
+                  {record.items.map((item) => item.drawingNumber).join(", ")}
+                </Text>
+              )}
 
-            <Text type="secondary" style={{ fontSize: 13 }}>
-              <FileDoneOutlined
-               style={{ marginRight: 6, color: "#2563EB" }} />
-              Drawings: <Text strong>{totalDrawings}</Text>
-            </Text>
+              {/* Totals Row */}
+              <Space size="large" style={{ marginTop: 4 }} align="center">
+                <Text strong style={{ fontSize: 14 }}>
+                  <DollarOutlined style={{ marginRight: 6, color: "#16A34A" }} />
+                  Total: {record?.currency?.symbol}{record.totalQuoteValue.toFixed(2)} {record?.currency?.code}
+                </Text>
 
-            <Text type="secondary" style={{ fontSize: 13 }}>
-              <NumberOutlined style={{ marginRight: 6, color: "#7C3AED" }} />
-              Total Qty: <Text strong>{totalQty}</Text>
-            </Text>
-          </Space>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  <FileDoneOutlined
+                    style={{ marginRight: 6, color: "#2563EB" }} />
+                  Drawings: <Text strong>{totalDrawings}</Text>
+                </Text>
 
-        </Space>
-      </div>
-    );
-  },
-},
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  <NumberOutlined style={{ marginRight: 6, color: "#7C3AED" }} />
+                  Total Qty: <Text strong>{totalQty}</Text>
+                </Text>
+              </Space>
+
+            </Space>
+          </div>
+        );
+      },
+    },
     {
       title: "",
       key: "status",
@@ -382,17 +397,25 @@ const CreateQuote = () => {
     } catch (err) { console.error(err); }
   };
 
-  const fetchQuotes = async (params = {}) => {
-    const { page = 1, limit = 10, ...filters } = params;
+  const fetchQuotes = async ({
+    page = 1,
+    limit = 10,
+    search = "",
+  } = {}) => {
     try {
-      const res = await QuoteService.getAllQuotes({ page, limit, ...filters });
-      // console.log('=====', res)
-      if (res.success) {
-        setQuotesData(res.data)
-        setPagination(res?.pagination)
+      const res = await QuoteService.getAllQuotes({
+        page,
+        limit,
+        search,
+      });
 
+      if (res.success) {
+        setQuotesData(res.data || []);
+        setPagination(res.pagination || {});
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const fetchProjects = async (params = {}) => {
@@ -407,9 +430,17 @@ const CreateQuote = () => {
   };
 
 
+
+  useEffect(() => {
+    fetchQuotes({
+      page,
+      limit,
+      search: searchText,
+    });
+  }, [page, limit, searchText]);
+
   useEffect(() => {
     fetchCustomers();
-    fetchQuotes();
     fetchProjects();
   }, []);
 
@@ -529,19 +560,9 @@ const CreateQuote = () => {
     // console.log('-------filter', data)
   }
 
-  const doSearch = useDebounce(async (val) => {
+  const doSearch = useDebounce((val) => {
+    setPage(1);
     setSearchText(val);
-
-    try {
-      const response = await QuoteService.getAllQuotes({ search: val });
-
-      const fetchedData = response.data || [];
-      setQuotesData(fetchedData);
-
-    } catch (err) {
-      console.error("Error fetching drawings:", err);
-      setQuotesData([]);
-    }
   }, 400);
 
   const handleEdit = async (record) => {
@@ -665,7 +686,7 @@ const CreateQuote = () => {
           pagination={{
             current: page,
             pageSize: limit,
-            total: pagination?.totalItems || 0,
+            total: pagination?.totalQuotes || 0,
             onChange: (p, l) => {
               setPage(p);
               setLimit(l);

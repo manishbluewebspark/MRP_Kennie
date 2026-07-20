@@ -153,12 +153,12 @@ const MTOList = () => {
   };
   // columns
   const columns = [
-    {
-      title: "#",
-      key: "index",
-      width: 60,
-      render: (_, __, index) => index + 1
-    },
+   {
+  title: "#",
+  key: "index",
+  width: 60,
+  render: (_, __, index) => ((page - 1) * limit) + index + 1,
+},
     {
       title: "Drawing No",
       dataIndex: "drawingNo",

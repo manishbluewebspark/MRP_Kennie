@@ -215,7 +215,7 @@
 //   // };
 
 //     const handleFilterSubmit = async (filterData) => {
-   
+
 //     try {
 //       setFilterVisible(false);
 //       console.log("-------filter", filterData);
@@ -473,7 +473,7 @@ const QuoteModal = ({
         baseQty: safeNumber(d.qty, 1),
         unitPriceDefault: unitFromDrawing(d), // default price shown/used
         raw: d,
-        currency:d.currency?.code
+        currency: d.currency?.code
       }))
       .filter((d) => !!d.id);
   }, [drawingList]);
@@ -589,26 +589,26 @@ const QuoteModal = ({
   }, [open, isEditMode, editingQuote]);
 
   // Search + filtering (within current drawingList only)
-const filtered = useMemo(() => {
-  const s = (searchText || '').toLowerCase();
+  const filtered = useMemo(() => {
+    const s = (searchText || '').toLowerCase();
 
-  // 🔹 Base list
-  let base = normalizedDrawings;
+    // 🔹 Base list
+    let base = normalizedDrawings;
 
-  // 🔥 EDIT MODE: sirf selected hi dikhayenge
-  if (isEditMode) {
-    base = base.filter(d => selectedIds.includes(d.id));
-  }
+    // 🔥 EDIT MODE: sirf selected hi dikhayenge
+    if (isEditMode) {
+      base = base.filter(d => selectedIds.includes(d.id));
+    }
 
-  // 🔍 Search apply karo
-  if (!s) return base;
+    // 🔍 Search apply karo
+    if (!s) return base;
 
-  return base.filter(
-    (d) =>
-      d.drawingNumber.toLowerCase().includes(s) ||
-      d.tool.toLowerCase().includes(s)
-  );
-}, [normalizedDrawings, searchText, isEditMode, selectedIds]);
+    return base.filter(
+      (d) =>
+        d.drawingNumber.toLowerCase().includes(s) ||
+        d.tool.toLowerCase().includes(s)
+    );
+  }, [normalizedDrawings, searchText, isEditMode, selectedIds]);
 
 
   // Select single
@@ -719,7 +719,7 @@ const filtered = useMemo(() => {
       if (filterData.drawingName)
         queryParams.drawingName = filterData.drawingName;
       if (filterData.project) queryParams.projectId = filterData.project;
-      if (filterData.customer) queryParams.customerId = filterData.customer;
+      queryParams.customerId = customer?._id;
       if (filterData.quoteStatus)
         queryParams.quoteStatus = filterData.quoteStatus;
       if (filterData.lastEditedBy)
@@ -765,13 +765,13 @@ const filtered = useMemo(() => {
   useEffect(() => {
     const run = async () => {
       try {
-        const r = await ProjectService.getAllProjects();
+        const r = await ProjectService.getAllProjects({ customerId: customer?._id });
         const body = r?.data ?? r;
         const list = Array.isArray(body?.data)
           ? body.data
           : Array.isArray(body)
-          ? body
-          : [];
+            ? body
+            : [];
         setProjectData(list);
       } catch (e) {
         console.error(e);
