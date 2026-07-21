@@ -12,13 +12,15 @@ import {
 import NavItem from './NavItem';
 import Flex from 'components/shared-components/Flex';
 import AlertService from 'services/AlertService';
+import { useSelector } from 'react-redux';
+import { hasPermission } from 'utils/auth';
 
 // Priority → Icon mapping
 const getPriorityIcon = (priority, module) => {
 
-     if (module === "purchase_order" || module === "receiving") {
-    return <ClockCircleOutlined />;
-  }
+    if (module === "purchase_order" || module === "receiving") {
+        return <ClockCircleOutlined />;
+    }
 
     switch ((priority || '').toLowerCase()) {
         case 'warning':
@@ -64,8 +66,7 @@ const getPriorityConfig = (priority = "info") =>
 export const NavNotification = ({ mode }) => {
     const [alerts, setAlerts] = useState([]);
     const [loading, setLoading] = useState(false);
-
-    const unreadCount = alerts.filter(a => !a.isRead).length;
+   
 
     const fetchAlerts = async () => {
         try {
@@ -87,6 +88,26 @@ export const NavNotification = ({ mode }) => {
     useEffect(() => {
         fetchAlerts();
     }, []);
+
+
+    const filteredAlerts = alerts.filter((alert) => {
+  switch (alert.module) {
+    case "purchase_order":
+      return hasPermission("purchase.purchase_order:view");
+
+    case "work_order":
+      return hasPermission("work_order.work_order_managment:view");
+
+    case "receiving":
+      return hasPermission("inventory.recieve_material:view");
+
+    default:
+      return true;
+  }
+});
+
+const unreadCount = filteredAlerts.filter(a => !a.isRead).length;
+
 
     const handleMarkRead = async (alertId) => {
         try {
@@ -125,7 +146,7 @@ export const NavNotification = ({ mode }) => {
             <List
                 size="small"
                 itemLayout="horizontal"
-                dataSource={alerts}
+                dataSource={filteredAlerts}
                 renderItem={(item) => {
                     const { color, tagColor } = getPriorityConfig(item.priority);
 
@@ -199,14 +220,14 @@ export const NavNotification = ({ mode }) => {
                                                 : ""}
                                         </small>
 
-                                       
+
                                     </div>
                                 </div>
-                                 {!item.isRead && (
-                                            <Tag color="gold" style={{ fontSize: 10 }}>
-                                                Unread
-                                            </Tag>
-                                        )}
+                                {!item.isRead && (
+                                    <Tag color="gold" style={{ fontSize: 10 }}>
+                                        Unread
+                                    </Tag>
+                                )}
 
                                 {/* Time */}
 
@@ -242,16 +263,23 @@ export const NavNotification = ({ mode }) => {
                     </Button>
                 )}
             </div>
-            <div className="nav-notification-body">
+            <div
+                className="nav-notification-body"
+                style={{
+                    maxHeight: "450px",
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                }}
+            >
                 {getNotificationBody()}
             </div>
-            {alerts.length > 0 && (
+            {/* {alerts.length > 0 && (
                 <div className="px-3 py-2 border-top text-center">
                     <a className="d-block" href="#/">
                         View all
                     </a>
                 </div>
-            )}
+            )} */}
         </div>
     );
 
@@ -263,7 +291,7 @@ export const NavNotification = ({ mode }) => {
             trigger="click"
             overlayClassName="nav-notification"
             overlayInnerStyle={{ padding: 0 }}
-               autoAdjustOverflow={false} 
+            autoAdjustOverflow={false}
         >
             <NavItem mode={mode}>
                 <Badge count={unreadCount}>

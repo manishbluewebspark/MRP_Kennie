@@ -108,7 +108,7 @@ export const HeaderNav = props => {
 					</NavEdge>
 					<NavEdge right>
 						{/* <NavNotification mode={navMode} /> */}
-						<NavSystemStatus mode={navMode} />
+						{/* <NavSystemStatus mode={navMode} /> */}
 						<NavAlert mode={navMode}/>
 						{/* <NavLanguage mode={navMode} /> */}
 						{/* <NavPanel direction={direction} mode={navMode} /> */}

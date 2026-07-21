@@ -401,12 +401,14 @@ const CreateQuote = () => {
     page = 1,
     limit = 10,
     search = "",
+    status = activeTab,
   } = {}) => {
     try {
       const res = await QuoteService.getAllQuotes({
         page,
         limit,
         search,
+        status
       });
 
       if (res.success) {
@@ -436,8 +438,9 @@ const CreateQuote = () => {
       page,
       limit,
       search: searchText,
+      status: activeTab,
     });
-  }, [page, limit, searchText]);
+  }, [page, limit, searchText, activeTab]);
 
   useEffect(() => {
     fetchCustomers();
@@ -590,7 +593,7 @@ const CreateQuote = () => {
     } catch (err) { console.error(err); }
   };
 
-  const filteredData = activeTab === "all" ? quotesData : quotesData.filter(d => d.status === activeTab);
+  const filteredData = quotesData;
 
 
   const exportAllQuotes = async () => {
@@ -670,8 +673,8 @@ const CreateQuote = () => {
             optionType="button"
             buttonStyle="solid"
           >
-            <Radio.Button value="quoted">Quoted ({quotesData.filter(d => d.status === 'quoted').length})</Radio.Button>
-            <Radio.Button value="pending">Pending ({quotesData.filter(d => d.status === 'pending').length})</Radio.Button>
+            <Radio.Button value="quoted">Quoted</Radio.Button>
+            <Radio.Button value="pending">Pending</Radio.Button>
           </Radio.Group>
         </Col>
       </Row>
@@ -680,7 +683,7 @@ const CreateQuote = () => {
       <Card>
         <Table
           columns={columns}
-          dataSource={filteredData}
+          dataSource={quotesData}
           rowKey={(record) => record._id || record.id} // 👈 IMPORTANT
           // rowSelection={rowSelection}
           pagination={{
@@ -690,7 +693,13 @@ const CreateQuote = () => {
             onChange: (p, l) => {
               setPage(p);
               setLimit(l);
-              fetchQuotes({ page: p, limit: l });
+
+              fetchQuotes({
+                page: p,
+                limit: l,
+                search: searchText,
+                status: activeTab,
+              });
             }
           }}
           size="small"

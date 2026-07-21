@@ -294,7 +294,8 @@ export const getAllQuotes = async (req, res) => {
       filter.$or = [
         { quoteNumber: { $regex: search, $options: 'i' } },
         { customerName: { $regex: search, $options: 'i' } },
-        { customerCompany: { $regex: search, $options: 'i' } }
+        { customerCompany: { $regex: search, $options: 'i' } },
+         { "items.drawingNumber": { $regex: search, $options: "i" } },
       ];
     }
 

@@ -60,7 +60,7 @@ const UserList = () => {
   const [pagination, setPagination] = useState(null)
 
 
-    const permissionLabelMap = useMemo(
+  const permissionLabelMap = useMemo(
     () => buildPermissionLabelMap(modules),
     []
   );
@@ -150,29 +150,20 @@ const UserList = () => {
       title: "Permissions",
       width: 1000,
       render: (r) => {
-        // Admin role → Full Access pill
         if (r.role?.name?.toLowerCase() === "admin") {
           return (
-            <Tag
-              style={{
-                margin: 0,
-                fontSize: "10px",
-                padding: "2px 10px",
-                borderRadius: "20px",
-                background: "#e6ffed",
-                fontWeight: 600,
-                fontFamily: "serif",
-              }}
-            >
+            <Tag color="green">
               Full Access
             </Tag>
           );
         }
 
-        // Merge role + user permissions, remove duplicates
         const mergedPermissions = Array.from(
           new Set([...(r.role?.permissions || []), ...(r.permissions || [])])
         );
+
+        const visiblePermissions = mergedPermissions.slice(0, 6);
+        const remainingCount = mergedPermissions.length - visiblePermissions.length;
 
         return (
           <div
@@ -180,49 +171,41 @@ const UserList = () => {
               display: "flex",
               flexWrap: "wrap",
               gap: 6,
-              maxWidth: "100%",
             }}
           >
-            {mergedPermissions?.length > 0 ? (
-              mergedPermissions.map((p, i) => {
-                                const displayLabel = permissionLabelMap[p] || p;
-
-                return (
-                <Tag
-                  key={i}
-                  style={{
-                    margin: 0,
-                    fontSize: "11px",
-                    padding: "2px 8px",
-                    borderRadius: "20px",
-                    border: "1px solid #d9d9d9",
-                    background: "#fff",
-                    color: "#555",
-                    lineHeight: "2",
-                    cursor: "default",
-                  }}
-                >
-                  {displayLabel}
-                </Tag>
-              )})
-            ) : (
-              <Tag
-                style={{
-                  margin: 0,
-                  fontSize: "10px",
-                  padding: "2px 8px",
-                  borderRadius: "20px",
-                  border: "1px solid #d9d9d9",
-                  background: "#fafafa",
-                  color: "#999",
-                }}
-              >
-                None
+            {visiblePermissions.map((p, i) => (
+              <Tag key={i}>
+                {permissionLabelMap[p] || p}
               </Tag>
+            ))}
+
+            {remainingCount > 0 && (
+              <Tooltip
+                overlayInnerStyle={{
+                  background: "#fff",
+                  color: "#333",
+                  border: "1px solid #d9d9d9",
+                  // boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                  Width: 500,
+                }}
+                title={
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                    {mergedPermissions.slice(6).map((p, i) => (
+                      <Tag key={i} style={{ fontSize: 8 }}>
+                        {permissionLabelMap[p] || p}
+                      </Tag>
+                    ))}
+                  </div>
+                }
+              >
+                <Tag color="blue" style={{ cursor: "pointer" }}>
+                  +{remainingCount} More
+                </Tag>
+              </Tooltip>
             )}
           </div>
         );
-      },
+      }
     },
 
 
