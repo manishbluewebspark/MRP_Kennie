@@ -9054,30 +9054,72 @@ export const saveWorkOrderStage = async (req, res) => {
     if (processKey === "cable_harness" && additionalQty > 0) {
       console.log("🔧 Cable Harness: stageQty > 0, clearing shortages");
 
+      // if (existing) {
+      //   // Update existing stage
+      //   existing.qty = (existing.qty || 0) + additionalQty;
+      //   existing.completedBy = userId;
+      //   existing.completedAt = new Date();
+
+      //   // Clear shortages from details
+      //   if (existing.details && existing.details.length > 0) {
+      //     for (const detail of existing.details) {
+      //       detail.shortage = false;
+      //       detail.shortageQty = 0;
+      //     }
+      //   }
+
+      //   // Add comment
+      //   existing.comments = existing.comments || [];
+      //   if (comments) {
+      //     existing.comments.push({
+      //       comment: comments,
+      //       commentedBy: userId,
+      //       commentedAt: new Date()
+      //     });
+      //   }
+      // }
       if (existing) {
-        // Update existing stage
-        existing.qty = (existing.qty || 0) + additionalQty;
-        existing.completedBy = userId;
-        existing.completedAt = new Date();
 
-        // Clear shortages from details
-        if (existing.details && existing.details.length > 0) {
-          for (const detail of existing.details) {
-            detail.shortage = false;
-            detail.shortageQty = 0;
-          }
-        }
+    existing.qty = (existing.qty || 0) + additionalQty;
+    existing.completedBy = userId;
+    existing.completedAt = new Date();
 
-        // Add comment
-        existing.comments = existing.comments || [];
-        if (comments) {
-          existing.comments.push({
+    existing.comments = existing.comments || [];
+    if (comments) {
+        existing.comments.push({
             comment: comments,
             commentedBy: userId,
-            commentedAt: new Date()
-          });
+            commentedAt: new Date(),
+        });
+    }
+
+    const stageDetailsMap = {};
+
+    (existing.details || []).forEach(detail => {
+        stageDetailsMap[String(detail.key)] = {
+            ...detail.toObject?.() ?? detail,
+        };
+    });
+
+    materials.forEach(material => {
+        const key = String(material.key);
+
+        if (stageDetailsMap[key]) {
+            stageDetailsMap[key].pickedQty += Number(material.pickedQty || 0);
+            stageDetailsMap[key].shortage = material.shortage;
+            stageDetailsMap[key].shortageQty = Number(material.shortageQty || 0);
+            stageDetailsMap[key].pickedAt = new Date();
+        } else {
+            stageDetailsMap[key] = {
+                ...material,
+                pickedAt: new Date(),
+            };
         }
-      } else {
+    });
+
+    existing.details = Object.values(stageDetailsMap);
+}
+       else {
         // Create new stage with no shortages
         wo.processHistory.push({
           process: "cable_harness",
@@ -9210,6 +9252,7 @@ export const saveWorkOrderStage = async (req, res) => {
     // ============================================================
 
     updateWorkOrderStatus(wo);
+    wo.markModified("processHistory");
     await wo.save();
 
     return res.json({

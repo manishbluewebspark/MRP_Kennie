@@ -367,6 +367,7 @@ const PickingDetailModal = ({
 
     const handleSave = () => {
         form.validateFields().then((values) => {
+            const isPickingStage = stage === "Picking";
             const additionalQty = Number(stageQty || 0);
             const hasShortage = Object.keys(shortageChecked).some(key => shortageChecked[key] === true);
             const remainingAllowed = workQty - alreadyCompletedQty;
@@ -405,9 +406,11 @@ const PickingDetailModal = ({
                 };
             });
 
-            const materialsToSend = formattedMaterials.filter(
-                m => m.pickedQty > 0 || m.shortage === true
-            );
+            const materialsToSend = isPickingStage
+                ? formattedMaterials.filter(
+                    m => m.pickedQty > 0 || m.shortage === true
+                )
+                : formattedMaterials;
 
             const existingPicking = wo?.processHistory?.find(
                 p => p.process?.toLowerCase() === "picking"
@@ -513,7 +516,19 @@ const PickingDetailModal = ({
                 });
 
 
-            if (additionalQty <= 0 && allMaterialsPicked) {
+            // if (additionalQty <= 0 && allMaterialsPicked) {
+            //     message.warning(
+            //         "All required materials have been picked. Please enter Produce Quantity."
+            //     );
+            //     return;
+            // }
+
+            if (
+                isPickingStage &&
+                additionalQty <= 0 &&
+                allMaterialsPicked &&
+                !hasShortage
+            ) {
                 message.warning(
                     "All required materials have been picked. Please enter Produce Quantity."
                 );
@@ -521,39 +536,57 @@ const PickingDetailModal = ({
             }
 
             // 🔥 Allow saving Picking/Shortage without production
-            if (additionalQty <= 0 && materialsToSend.length > 0) {
+            // if (additionalQty <= 0 && materialsToSend.length > 0) {
+            //     const payload = {
+            //         stage,
+            //         comments: values.comments || "",
+            //         stageQty: 0,
+            //         materials: materialsToSend,
+            //         workOrderId: wo.workOrderId,
+            //     };
+
+            //     console.log("Saving Picking Progress:", payload);
+
+            //     onSave?.(payload);
+            //     return;
+            // }
+
+            if (
+                (isPickingStage && additionalQty <= 0 && materialsToSend.length > 0) ||
+                (!isPickingStage && hasShortage)
+            ) {
                 const payload = {
                     stage,
                     comments: values.comments || "",
-                    stageQty: 0,
+                    stageQty: additionalQty,
                     materials: materialsToSend,
                     workOrderId: wo.workOrderId,
                 };
 
-                console.log("Saving Picking Progress:", payload);
-
-                onSave?.(payload);
+                onSave(payload);
                 return;
             }
 
-            // ❌ No picked material
-            if (possibleProducts === 0 && additionalQty > 0) {
-                message.error(
-                    "No picked materials available. Please complete Picking first."
-                );
-                return;
+            if (isPickingStage) {
+                // ❌ No picked material
+                if (possibleProducts === 0 && additionalQty > 0) {
+                    message.error(
+                        "No picked materials available. Please complete Picking first."
+                    );
+                    return;
+                }
+
+                // Validation
+                const totalAfterSave = alreadyCompletedQty + additionalQty;
+
+                if (totalAfterSave > possibleProducts) {
+                    message.error(
+                        `Only ${possibleProducts} product(s) can be produced with available picked materials`
+                    );
+                    return;
+                }
+
             }
-
-            // Validation
-            const totalAfterSave = alreadyCompletedQty + additionalQty;
-
-            if (totalAfterSave > possibleProducts) {
-                message.error(
-                    `Only ${possibleProducts} product(s) can be produced with available picked materials`
-                );
-                return;
-            }
-
             if (!additionalQty || additionalQty <= 0) {
                 message.warning("Please enter Produce Quantity");
                 return;
