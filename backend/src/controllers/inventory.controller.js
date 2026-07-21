@@ -1790,6 +1790,11 @@ export const getMaterialShortages = async (req, res) => {
             if (!match) return;
           }
 
+          console.log("MPN FILTER", {
+  requestMpnId: mpnId,
+  detailMpnId: d.mpnId,
+});
+
           shortages.push({
             workOrderId: wo._id,
             workOrderNo: wo.workOrderNo,

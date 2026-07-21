@@ -1208,7 +1208,7 @@ const SkillLevelCostingList = () => {
       key: "shortage",
       render: (_, record) => (
         <Space direction="vertical" size={0}>
-          <Tag color="red">Short: {record?.requiredQty ?? 0}</Tag>
+          <Tag color="red">Short: {record?.shortageQty ?? 0}</Tag>
           <Text>Picked: {record?.pickedQty ?? 0}</Text>
         </Space>
       ),
