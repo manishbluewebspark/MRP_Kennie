@@ -153,12 +153,12 @@ const MTOList = () => {
   };
   // columns
   const columns = [
-   {
-  title: "#",
-  key: "index",
-  width: 60,
-  render: (_, __, index) => ((page - 1) * limit) + index + 1,
-},
+    {
+      title: "#",
+      key: "index",
+      width: 60,
+      render: (_, __, index) => ((page - 1) * limit) + index + 1,
+    },
     {
       title: "Drawing No",
       dataIndex: "drawingNo",
@@ -226,7 +226,10 @@ const MTOList = () => {
       title: "Quoted Date",
       dataIndex: "createdAt",
       key: "createdAt",
-      render: (createdAt) => createdAt ? new Date(createdAt).toLocaleDateString() : 'Not set'
+      render: (createdAt) =>
+        createdAt
+          ? new Date(createdAt).toLocaleDateString("en-GB")
+          : "-",
     },
     {
       title: "Status",
@@ -266,7 +269,7 @@ const MTOList = () => {
 
   // search (debounced)
   const doSearch = useDebounce(async (val) => {
-    fetchData({search:val})
+    fetchData({ search: val })
   }, 400);
 
   // Modal flows
