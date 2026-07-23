@@ -254,6 +254,14 @@ export const getAllDrawings = async (req, res) => {
     // ---- base filters (NO numeric range here) ----
     const matchStage = {};
 
+    if (req.query.ids) {
+  const ids = req.query.ids.split(",");
+
+  matchStage._id = {
+    $in: ids.map(id => new mongoose.Types.ObjectId(id))
+  };
+}
+
     // if (search?.trim()) {
     //   matchStage.$or = [
     //     { drawingNo: { $regex: search, $options: "i" } },

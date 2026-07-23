@@ -569,7 +569,7 @@ const CreateQuote = () => {
   }, 400);
 
   const handleEdit = async (record) => {
-    // console.log('--------sss', record)
+    console.log('--------sss', record)
     setEditingQuote(record);
 
     try {
@@ -719,15 +719,29 @@ const CreateQuote = () => {
         customers={customers}
       />
 
-      <QuoteModal
-        open={isQuoteModalOpen}
-        onClose={() => { setIsQuoteModalOpen(false); setEditingQuote(null) }}
-        customer={selectedCustomer}
-        drawings={customerDrawings}
-        customers={customers}
-        onQuoteCreated={(data) => handleSubmitQuote(data)}
-        editingQuote={editingQuote}
-      />
+     {editingQuote ? (
+  <EditQuoteModal
+    open={isQuoteModalOpen}
+    onClose={() => {
+      setIsQuoteModalOpen(false);
+      setEditingQuote(null);
+    }}
+    editingQuote={editingQuote}
+    onQuoteUpdated={(data) => handleSubmitQuote(data)}
+  />
+) : (
+  <QuoteModal
+    open={isQuoteModalOpen}
+    onClose={() => {
+      setIsQuoteModalOpen(false);
+      setEditingQuote(null);
+    }}
+    customer={selectedCustomer}
+    drawings={customerDrawings}
+    customers={customers}
+    onQuoteCreated={(data) => handleSubmitQuote(data)}
+  />
+)}
 
 
       {/* <QuoteModal
@@ -752,6 +766,7 @@ const CreateQuote = () => {
         visible={successModalVisible}
         onOk={() => setSuccessModalVisible(false)}
         onExport={() => { setSuccessModalVisible(false); setExportMode("excel"); setExportModalVisible(true); }}
+       
       />
 
       <ExportExcelModal
