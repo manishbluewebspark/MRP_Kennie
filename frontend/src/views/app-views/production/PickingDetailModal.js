@@ -374,6 +374,9 @@ const PickingDetailModal = ({
 
             // Existing Picking Process
 
+const existingPicking = wo?.processHistory?.find(
+  p => p.process?.toLowerCase() === "picking"
+);
 
             // Calculate possible products
 
@@ -383,14 +386,31 @@ const PickingDetailModal = ({
             const formattedMaterials = dataSource.map((item) => {
                 const currentPickedQty = Number(pickedQuantities[item.key] || 0);
                 const recordKey = item.key;
-                let isShortage = shortageChecked[recordKey] === true;
-                let shortageQty = isShortage ? Number(shortageInputs[recordKey] || 0) : 0;
 
-                // 🔥 CRITICAL: If stageQty > 0, automatically clear shortage for this item
-                if (additionalQty > 0) {
-                    isShortage = false;
-                    shortageQty = 0;
-                }
+
+                const oldItem =
+  existingPicking?.details?.find(
+    d => String(d.key) === String(recordKey)
+  ) || {};
+  
+              const orderCompleted =
+    alreadyCompletedQty + additionalQty >= workQty;
+
+let isShortage =
+    shortageChecked[recordKey] !== undefined
+        ? shortageChecked[recordKey]
+        : Boolean(oldItem?.shortage);
+
+let shortageQty =
+    shortageChecked[recordKey] !== undefined
+        ? Number(shortageInputs[recordKey] || 0)
+        : Number(oldItem?.shortageQty || 0);
+
+// Sirf order complete hone par shortage hatao
+if (orderCompleted) {
+    isShortage = false;
+    shortageQty = 0;
+}
 
                 return {
                     key: item.key,
@@ -412,9 +432,9 @@ const PickingDetailModal = ({
                 )
                 : formattedMaterials;
 
-            const existingPicking = wo?.processHistory?.find(
-                p => p.process?.toLowerCase() === "picking"
-            );
+            // const existingPicking = wo?.processHistory?.find(
+            //     p => p.process?.toLowerCase() === "picking"
+            // );
 
 
             console.log("existingPicking", existingPicking);
