@@ -255,12 +255,12 @@ export const getAllDrawings = async (req, res) => {
     const matchStage = {};
 
     if (req.query.ids) {
-  const ids = req.query.ids.split(",");
+      const ids = req.query.ids.split(",");
 
-  matchStage._id = {
-    $in: ids.map(id => new mongoose.Types.ObjectId(id))
-  };
-}
+      matchStage._id = {
+        $in: ids.map(id => new mongoose.Types.ObjectId(id))
+      };
+    }
 
     // if (search?.trim()) {
     //   matchStage.$or = [
@@ -376,150 +376,150 @@ export const getAllDrawings = async (req, res) => {
 
     const searchStage = [];
 
-if (search?.trim()) {
-  searchStage.push({
-    $match: {
-      $or: [
-        {
-          drawingNo: {
-            $regex: search,
-            $options: "i",
-          },
+    if (search?.trim()) {
+      searchStage.push({
+        $match: {
+          $or: [
+            {
+              drawingNo: {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              description: {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              "projectId.projectName": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              "projectId.code": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              "customerId.companyName": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              "customerId.contactPerson": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              "customerId.name": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+          ],
         },
-        {
-          description: {
-            $regex: search,
-            $options: "i",
-          },
-        },
-        {
-          "projectId.projectName": {
-            $regex: search,
-            $options: "i",
-          },
-        },
-        {
-          "projectId.code": {
-            $regex: search,
-            $options: "i",
-          },
-        },
-        {
-          "customerId.companyName": {
-            $regex: search,
-            $options: "i",
-          },
-        },
-        {
-          "customerId.contactPerson": {
-            $regex: search,
-            $options: "i",
-          },
-        },
-        {
-          "customerId.name": {
-            $regex: search,
-            $options: "i",
-          },
-        },
-      ],
-    },
-  });
-}
+      });
+    }
 
     const pipeline = [
-  ...baseStages,
-  ...rangeStage,
+      ...baseStages,
+      ...rangeStage,
 
-  // lookups first
-  {
-    $lookup: {
-      from: "projects",
-      localField: "projectId",
-      foreignField: "_id",
-      as: "projectId",
-      pipeline: [{ $project: { projectName: 1, code: 1 } }],
-    },
-  },
-  { $unwind: { path: "$projectId", preserveNullAndEmptyArrays: true } },
+      // lookups first
+      {
+        $lookup: {
+          from: "projects",
+          localField: "projectId",
+          foreignField: "_id",
+          as: "projectId",
+          pipeline: [{ $project: { projectName: 1, code: 1 } }],
+        },
+      },
+      { $unwind: { path: "$projectId", preserveNullAndEmptyArrays: true } },
 
-  {
-    $lookup: {
-      from: "customers",
-      localField: "customerId",
-      foreignField: "_id",
-      as: "customerId",
-      pipeline: [{ $project: { name: 1, contactPerson: 1, companyName: 1 } }],
-    },
-  },
-  { $unwind: { path: "$customerId", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "customers",
+          localField: "customerId",
+          foreignField: "_id",
+          as: "customerId",
+          pipeline: [{ $project: { name: 1, contactPerson: 1, companyName: 1 } }],
+        },
+      },
+      { $unwind: { path: "$customerId", preserveNullAndEmptyArrays: true } },
 
-  {
-    $lookup: {
-      from: "users",
-      localField: "lastEditedBy",
-      foreignField: "_id",
-      as: "lastEditedBy",
-      pipeline: [{ $project: { name: 1, email: 1 } }],
-    },
-  },
-  { $unwind: { path: "$lastEditedBy", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "lastEditedBy",
+          foreignField: "_id",
+          as: "lastEditedBy",
+          pipeline: [{ $project: { name: 1, email: 1 } }],
+        },
+      },
+      { $unwind: { path: "$lastEditedBy", preserveNullAndEmptyArrays: true } },
 
-  {
-    $lookup: {
-      from: "currencies",
-      localField: "currency",
-      foreignField: "_id",
-      as: "currency",
-      pipeline: [{ $project: { code: 1, symbol: 1 } }],
-    },
-  },
-  { $unwind: { path: "$currency", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "currencies",
+          localField: "currency",
+          foreignField: "_id",
+          as: "currency",
+          pipeline: [{ $project: { code: 1, symbol: 1 } }],
+        },
+      },
+      { $unwind: { path: "$currency", preserveNullAndEmptyArrays: true } },
 
-  // search BEFORE pagination
-  ...searchStage,
+      // search BEFORE pagination
+      ...searchStage,
 
-  { $sort: sortOptions },
-  { $skip: (page - 1) * limit },
-  { $limit: limit },
+      { $sort: sortOptions },
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
 
-  { $project: { __numSuffix: 0 } },
-];
+      { $project: { __numSuffix: 0 } },
+    ];
 
     const drawings = await Drawing.aggregate(pipeline);
 
     // ---------- TOTAL COUNT (same filters, no sort/skip/limit) ----------
-const countPipeline = [
-  ...baseStages,
-  ...rangeStage,
+    const countPipeline = [
+      ...baseStages,
+      ...rangeStage,
 
-  // lookups required because search is on project/customer fields
-  {
-    $lookup: {
-      from: "projects",
-      localField: "projectId",
-      foreignField: "_id",
-      as: "projectId",
-      pipeline: [{ $project: { projectName: 1, code: 1 } }],
-    },
-  },
-  { $unwind: { path: "$projectId", preserveNullAndEmptyArrays: true } },
+      // lookups required because search is on project/customer fields
+      {
+        $lookup: {
+          from: "projects",
+          localField: "projectId",
+          foreignField: "_id",
+          as: "projectId",
+          pipeline: [{ $project: { projectName: 1, code: 1 } }],
+        },
+      },
+      { $unwind: { path: "$projectId", preserveNullAndEmptyArrays: true } },
 
-  {
-    $lookup: {
-      from: "customers",
-      localField: "customerId",
-      foreignField: "_id",
-      as: "customerId",
-      pipeline: [{ $project: { name: 1, contactPerson: 1, companyName: 1 } }],
-    },
-  },
-  { $unwind: { path: "$customerId", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "customers",
+          localField: "customerId",
+          foreignField: "_id",
+          as: "customerId",
+          pipeline: [{ $project: { name: 1, contactPerson: 1, companyName: 1 } }],
+        },
+      },
+      { $unwind: { path: "$customerId", preserveNullAndEmptyArrays: true } },
 
-  ...searchStage,
+      ...searchStage,
 
-  { $count: "total" },
-];
+      { $count: "total" },
+    ];
     const totalArr = await Drawing.aggregate(countPipeline);
     const total = totalArr?.[0]?.total || 0;
 
@@ -841,7 +841,7 @@ export const createDrawing = async (req, res) => {
 // 🟢 UPDATE DRAWING
 export const updateDrawing = async (req, res) => {
   try {
-    console.log('--------',req.body)
+    console.log('--------', req.body)
     const { id } = req.params;
     const userId = req.user.id;
     const data = req.body;
@@ -877,25 +877,25 @@ export const updateDrawing = async (req, res) => {
     // const unitPrice = data.unitPrice ?? existing.unitPrice;
     // data.totalPrice = qty * unitPrice;
 
-    
+
     const materialTotal = data.materialTotal ?? existing.materialTotal ?? 0;
-const manhourTotal = data.manhourTotal ?? existing.manhourTotal ?? 0;
-const packingTotal = data.packingTotal ?? existing.packingTotal ?? 0;
+    const manhourTotal = data.manhourTotal ?? existing.manhourTotal ?? 0;
+    const packingTotal = data.packingTotal ?? existing.packingTotal ?? 0;
 
-const materialMarkup = data.materialMarkup ?? existing.materialMarkup ?? 0;
-const manhourMarkup = data.manhourMarkup ?? existing.manhourMarkup ?? 0;
-const packingMarkup = data.packingMarkup ?? existing.packingMarkup ?? 0;
+    const materialMarkup = data.materialMarkup ?? existing.materialMarkup ?? 0;
+    const manhourMarkup = data.manhourMarkup ?? existing.manhourMarkup ?? 0;
+    const packingMarkup = data.packingMarkup ?? existing.packingMarkup ?? 0;
 
-// base price (without markup)
-data.totalPrice = materialTotal + manhourTotal + packingTotal;
+    // base price (without markup)
+    data.totalPrice = materialTotal + manhourTotal + packingTotal;
 
-// with markup
-const materialFinal = materialTotal * (1 + materialMarkup / 100);
-const manhourFinal = manhourTotal * (1 + manhourMarkup / 100);
-const packingFinal = packingTotal * (1 + packingMarkup / 100);
+    // with markup
+    const materialFinal = materialTotal * (1 + materialMarkup / 100);
+    const manhourFinal = manhourTotal * (1 + manhourMarkup / 100);
+    const packingFinal = packingTotal * (1 + packingMarkup / 100);
 
-data.totalPriceWithMarkup =
-  materialFinal + manhourFinal + packingFinal;
+    data.totalPriceWithMarkup =
+      materialFinal + manhourFinal + packingFinal;
 
 
     data.lastEditedBy = userId;
@@ -1659,7 +1659,7 @@ export const addCostingItem = async (req, res) => {
     const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
     const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
 
-    console.log('-----drawingCurrency-----sourceCurrency',drawingCurrency,sourceCurrency)
+    console.log('-----drawingCurrency-----sourceCurrency', drawingCurrency, sourceCurrency)
     // ✅ Convert only when needed
     const salesPriceInDrawingCurrency =
       sourceCurrency === drawingCurrency
@@ -1810,7 +1810,7 @@ export const updateCostingItem = async (req, res) => {
     // 2️⃣ Load Existing Item
     // -----------------------------
     const existingItem = await CostingItems.findById(itemId);
-    console.log('-----existingItem-',existingItem)
+    console.log('-----existingItem-', existingItem)
 
     if (!existingItem) {
       return res.status(404).json({ success: false, error: "Costing item not found" });
@@ -1852,74 +1852,75 @@ export const updateCostingItem = async (req, res) => {
     // -----------------------------
     const isSystemChange = isMpnChanged || isCurrencyChanged || isUOMChanged;
 
-// 👉 detect manual edit
-const isPriceChanged =
-  salesPrice !== toNum(existingItem.salesPrice) ||
-  unitPrice !== toNum(existingItem.unitPrice) ||
-  extPrice !== toNum(existingItem.extPrice);
+    // 👉 detect manual edit
+    const isPriceChanged =
+      salesPrice !== toNum(existingItem.salesPrice) ||
+      unitPrice !== toNum(existingItem.unitPrice) ||
+      extPrice !== toNum(existingItem.extPrice);
 
-if (isSystemChange) {
-  // ✅ SYSTEM RECALCULATION
-  let incomingUnitPrice = unitPrice;
+    if (isSystemChange) {
+      // ✅ SYSTEM RECALCULATION
+      let incomingUnitPrice = unitPrice;
 
-  if (isMpnChanged) {
-    const mpnData = await MPN.findById(req.body.mpn).populate("currency", "code");
-    incomingUnitPrice = toNum(mpnData?.RFQUnitPrice);
-  }
+      if (isMpnChanged) {
+        const mpnData = await MPN.findById(req.body.mpn).populate("currency", "code");
+        incomingUnitPrice = toNum(mpnData?.RFQUnitPrice);
+      }
 
-  finalUnitPrice =
-    sourceCurrency === drawingCurrency
-      ? round2(incomingUnitPrice)
-      : convertCurrency(
-          incomingUnitPrice,
-          sourceCurrency,
-          drawingCurrency,
-          settings,
-          { decimals: 2 }
-        );
+      finalUnitPrice =
+        sourceCurrency === drawingCurrency
+          ? round2(incomingUnitPrice)
+          : convertCurrency(
+            incomingUnitPrice,
+            sourceCurrency,
+            drawingCurrency,
+            settings,
+            { decimals: 2 }
+          );
 
-  const quantity = toNum(req.body.quantity || existingItem.quantity);
-  finalExtPrice = round2(quantity * finalUnitPrice);
+      const quantity = toNum(req.body.quantity || existingItem.quantity);
+      finalExtPrice = round2(quantity * finalUnitPrice);
 
-  finalSalesPrice = finalExtPrice;
-}
-else if (isPriceChanged) {
-  // ✅ USER EDIT → ACCEPT AS IS (NO CONVERSION)
-  finalUnitPrice = unitPrice;
-  finalExtPrice = extPrice;
-  finalSalesPrice = salesPrice;
-}
-else {
-  // ✅ NO CHANGE → KEEP OLD
-  finalUnitPrice = existingItem.unitPrice;
-  finalExtPrice = existingItem.extPrice;
-  finalSalesPrice = existingItem.salesPrice;
-}
+      finalSalesPrice = finalExtPrice;
+    }
+    else if (isPriceChanged) {
+      // ✅ USER EDIT → ACCEPT AS IS (NO CONVERSION)
+      finalUnitPrice = unitPrice;
+      finalExtPrice = extPrice;
+      finalSalesPrice = salesPrice;
+    }
+    else {
+      // ✅ NO CHANGE → KEEP OLD
+      finalUnitPrice = existingItem.unitPrice;
+      finalExtPrice = existingItem.extPrice;
+      finalSalesPrice = existingItem.salesPrice;
+    }
 
     // -----------------------------
     // 8️⃣ Safe Update डॉक्यूमेंट
     // -----------------------------
     const updateDoc = {
-  quantity: req.body.quantity ?? existingItem.quantity,
-  tolerance: req.body.tolerance ?? existingItem.tolerance,
-  uom: req.body.uom ?? existingItem.uom,
-  mpn: req.body.mpn ?? existingItem.mpn,
+      quantity: req.body.quantity ?? existingItem.quantity,
+      tolerance: req.body.tolerance ?? existingItem.tolerance,
+      uom: req.body.uom ?? existingItem.uom,
+      mpn: req.body.mpn ?? existingItem.mpn,
 
-  sgaPercent: req.body.sgaPercent ?? existingItem.sgaPercent,
-  matBurden: req.body.matBurden ?? existingItem.matBurden,
-  freightPercent: req.body.freightPercent ?? existingItem.freightPercent,
-  freightCost: req.body.freightCost ?? existingItem.freightCost,
+      sgaPercent: req.body.sgaPercent ?? existingItem.sgaPercent,
+      matBurden: req.body.matBurden ?? existingItem.matBurden,
+      freightPercent: req.body.freightPercent ?? existingItem.freightPercent,
+      freightCost: req.body.freightCost ?? existingItem.freightCost,
 
-  currency: drawingCurrency,
-  sourceCurrency,
-
-  unitPrice: finalUnitPrice,
-  extPrice: finalExtPrice,       // ✅ FIX
-  salesPrice: finalSalesPrice,   // ✅ FIX
-
-  lastEditedBy: req.user?._id,
-  updatedAt: new Date(),
-};
+      currency: drawingCurrency,
+      sourceCurrency,
+      remarks: req.body.remarks,
+      skillLevel: req.body.skillLevel ?? existingItem.skillLevel,
+      unitPrice: finalUnitPrice,
+      extPrice: finalExtPrice,       // ✅ FIX
+      salesPrice: finalSalesPrice,   // ✅ FIX
+      description : req.body.description ?? existingItem.description,
+      lastEditedBy: req.user?._id,
+      updatedAt: new Date(),
+    };
 
     const item = await CostingItems.findOneAndUpdate(
       { _id: itemId, drawingId },
@@ -2916,7 +2917,7 @@ export const importCostingItems = async (req, res) => {
 
           const uomRaw = (row["UOM"] ?? "").toString().trim() || childPart?.mpn?.UOM?.code?.trim();
           const uomId = await getUomId(uomRaw);
-         
+
 
           const quantity = toNum(row["Qty"]);
           if (!(quantity > 0)) {
@@ -2955,15 +2956,15 @@ export const importCostingItems = async (req, res) => {
           ).toUpperCase();
 
           // ✅ Convert ONLY if needed
-         
+
 
           let newPrice;
           let masterUomId = childPart.mpn?.UOM
           try {
             newPrice = await convertLengthUnitPrice(
               unitPriceRaw,
-               childPart?.mpn?.UOM?.code,
-               uomRaw,
+              childPart?.mpn?.UOM?.code,
+              uomRaw,
             );
           } catch (convErr) {
             errors.push({
@@ -2976,7 +2977,7 @@ export const importCostingItems = async (req, res) => {
             continue;
           }
 
-           const unitPrice =
+          const unitPrice =
             mpnCurrencyCode === drawingCurrencyCode
               ? round2(newPrice)
               : convertCurrency(
@@ -4888,9 +4889,9 @@ const fmtNo4 = (n) => String(n).padStart(4, "0");
 //               materialHasError = true;
 //             }
 
-           
 
-             
+
+
 
 
 
@@ -6584,7 +6585,7 @@ export const importDrawings = async (req, res) => {
 // };
 
 const convertLengthUnitPriceNew = (pricePerBaseUnit, baseUnit, targetUnit) => {
-  console.log('------pricePerBaseUnit, baseUnit, targetUnit',pricePerBaseUnit, baseUnit, targetUnit)
+  console.log('------pricePerBaseUnit, baseUnit, targetUnit', pricePerBaseUnit, baseUnit, targetUnit)
   if (!pricePerBaseUnit || !baseUnit || !targetUnit) return pricePerBaseUnit;
 
   const lengthMap = {
@@ -6645,26 +6646,26 @@ export const updateLatestPrice = async (req, res) => {
     //   .populate("mpn", "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM")
     //   .lean(false);
 
-     const costingItem = await CostingItems.findById(id)
-  .populate("uom", "name code symbol") // 👈 CostingItems ka UOM
-  .populate({
-    path: "mpn",
-    select:
-      "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
-    populate: [
-      {
-        path: "currency",
-        select: "code symbol name"
-      },
-      {
-        path: "UOM", // 👈 MPN ka UOM
-        select: "name code symbol"
-      }
-    ]
-  })
+    const costingItem = await CostingItems.findById(id)
+      .populate("uom", "name code symbol") // 👈 CostingItems ka UOM
+      .populate({
+        path: "mpn",
+        select:
+          "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
+        populate: [
+          {
+            path: "currency",
+            select: "code symbol name"
+          },
+          {
+            path: "UOM", // 👈 MPN ka UOM
+            select: "name code symbol"
+          }
+        ]
+      })
       .lean(false)
 
-      console.log('-------costingItem',costingItem)
+    console.log('-------costingItem', costingItem)
 
     if (!costingItem) {
       return res.status(404).json({ success: false, message: "Costing item not found" });
@@ -6697,7 +6698,7 @@ export const updateLatestPrice = async (req, res) => {
     const sourceCurrency = (costingItem.mpn.currency?.code || "USD").toUpperCase();
 
 
-    console.log('------drawingCurrency----sourceCurrency',drawingCurrency,sourceCurrency)
+    console.log('------drawingCurrency----sourceCurrency', drawingCurrency, sourceCurrency)
     // -----------------------------
     // 3️⃣ Get & Convert Unit Price
     // -----------------------------
@@ -6705,9 +6706,9 @@ export const updateLatestPrice = async (req, res) => {
     const incomingUnitPrice = toNum(costingItem.mpn.RFQUnitPrice);
 
 
-    const newPrice = convertLengthUnitPriceNew(incomingUnitPrice,costingItem?.mpn?.UOM?.code,costingItem?.uom?.code)
+    const newPrice = convertLengthUnitPriceNew(incomingUnitPrice, costingItem?.mpn?.UOM?.code, costingItem?.uom?.code)
 
-    console.log('------newPrice',newPrice)
+    console.log('------newPrice', newPrice)
 
     if (!(incomingUnitPrice > 0)) {
       return res.status(400).json({
@@ -6727,7 +6728,7 @@ export const updateLatestPrice = async (req, res) => {
           { decimals: 2 }
         );
 
-    console.log('------convertedUnitPrice',convertedUnitPrice)
+    console.log('------convertedUnitPrice', convertedUnitPrice)
 
     // -----------------------------
     // 4️⃣ Sync fields from MPN
@@ -6890,21 +6891,21 @@ export const updateLatestPriceBulk = async (req, res) => {
 
     const items = await CostingItems.find({ _id: { $in: validIds } })
       .populate("uom", "name code symbol") // 👈 CostingItems ka UOM
-  .populate({
-    path: "mpn",
-    select:
-      "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
-    populate: [
-      {
-        path: "currency",
-        select: "code symbol name"
-      },
-      {
-        path: "UOM", // 👈 MPN ka UOM
-        select: "name code symbol"
-      }
-    ]
-  })
+      .populate({
+        path: "mpn",
+        select:
+          "RFQUnitPrice MOQ LeadTime_WK currency Supplier RFQDate Description Manufacturer UOM",
+        populate: [
+          {
+            path: "currency",
+            select: "code symbol name"
+          },
+          {
+            path: "UOM", // 👈 MPN ka UOM
+            select: "name code symbol"
+          }
+        ]
+      })
       .lean(false);
 
     // console.log('------items',items)
@@ -6957,7 +6958,7 @@ export const updateLatestPriceBulk = async (req, res) => {
         }
 
 
-         const newPrice = convertLengthUnitPriceNew(newUnitPrice,costingItem?.mpn?.UOM?.code,costingItem?.uom?.code)
+        const newPrice = convertLengthUnitPriceNew(newUnitPrice, costingItem?.mpn?.UOM?.code, costingItem?.uom?.code)
 
         const convertedUnitPrice =
           sourceCurrency === drawingCurrency
