@@ -1909,7 +1909,7 @@ export const updateCostingItem = async (req, res) => {
       matBurden: req.body.matBurden ?? existingItem.matBurden,
       freightPercent: req.body.freightPercent ?? existingItem.freightPercent,
       freightCost: req.body.freightCost ?? existingItem.freightCost,
-
+      childPart:req.body.childPart ?? existingItem.childPart,
       currency: drawingCurrency,
       sourceCurrency,
       remarks: req.body.remarks,
