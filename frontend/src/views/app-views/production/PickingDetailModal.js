@@ -374,9 +374,9 @@ const PickingDetailModal = ({
 
             // Existing Picking Process
 
-const existingPicking = wo?.processHistory?.find(
-  p => p.process?.toLowerCase() === "picking"
-);
+            const existingPicking = wo?.processHistory?.find(
+                p => p.process?.toLowerCase() === "picking"
+            );
 
             // Calculate possible products
 
@@ -389,28 +389,26 @@ const existingPicking = wo?.processHistory?.find(
 
 
                 const oldItem =
-  existingPicking?.details?.find(
-    d => String(d.key) === String(recordKey)
-  ) || {};
-  
-              const orderCompleted =
-    alreadyCompletedQty + additionalQty >= workQty;
+                    existingPicking?.details?.find(
+                        d => String(d.key) === String(recordKey)
+                    ) || {};
 
-let isShortage =
-    shortageChecked[recordKey] !== undefined
-        ? shortageChecked[recordKey]
-        : Boolean(oldItem?.shortage);
+                const orderCompleted =
+                    alreadyCompletedQty + additionalQty >= workQty;
 
-let shortageQty =
-    shortageChecked[recordKey] !== undefined
-        ? Number(shortageInputs[recordKey] || 0)
-        : Number(oldItem?.shortageQty || 0);
+                let isShortage =
+                    shortageChecked[recordKey] === true;
 
-// Sirf order complete hone par shortage hatao
-if (orderCompleted) {
-    isShortage = false;
-    shortageQty = 0;
-}
+                let shortageQty =
+                    isShortage
+                        ? Number(shortageInputs[recordKey] || 0)
+                        : 0;
+
+                // Sirf order complete hone par shortage hatao
+                // if (orderCompleted) {
+                //     isShortage = false;
+                //     shortageQty = 0;
+                // }
 
                 return {
                     key: item.key,
@@ -543,6 +541,48 @@ if (orderCompleted) {
             //     return;
             // }
 
+
+            // ================= Non Picking Validation =================
+            if (!isPickingStage) {
+
+                let possibleProducts = workQty;
+
+                formattedMaterials.forEach(item => {
+
+                    const requiredPerProduct = Number(item.quantity || 1);
+
+                    const shortageQty = Number(item.shortageQty || 0);
+
+                    // Kitne products shortage ki wajah se ban nahi sakte
+                    const blockedProducts = Math.ceil(shortageQty / requiredPerProduct);
+
+                    // Kitne products ban sakte hain
+                    const canMake = Math.max(0, workQty - blockedProducts);
+
+                    possibleProducts = Math.min(possibleProducts, canMake);
+                });
+
+                const remainingPossibleProducts =
+                    Math.max(0, possibleProducts - alreadyCompletedQty);
+
+                console.log("Possible Products:", possibleProducts);
+                console.log("Remaining Possible:", remainingPossibleProducts);
+
+                if (remainingPossibleProducts <= 0 && additionalQty > 0) {
+                    message.error(
+                        "No product can be processed due to shortages."
+                    );
+                    return;
+                }
+
+                if (additionalQty > remainingPossibleProducts) {
+                    message.error(
+                        `Only ${remainingPossibleProducts} product(s) can be processed due to shortages.`
+                    );
+                    return;
+                }
+            }
+
             if (
                 isPickingStage &&
                 additionalQty <= 0 &&
@@ -588,7 +628,7 @@ if (orderCompleted) {
             }
 
             if (isPickingStage) {
-                // ❌ No picked material
+
                 if (possibleProducts === 0 && additionalQty > 0) {
                     message.error(
                         "No picked materials available. Please complete Picking first."
@@ -596,7 +636,6 @@ if (orderCompleted) {
                     return;
                 }
 
-                // Validation
                 const totalAfterSave = alreadyCompletedQty + additionalQty;
 
                 if (totalAfterSave > possibleProducts) {
@@ -605,7 +644,6 @@ if (orderCompleted) {
                     );
                     return;
                 }
-
             }
             if (!additionalQty || additionalQty <= 0) {
                 message.warning("Please enter Produce Quantity");
