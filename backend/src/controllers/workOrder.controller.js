@@ -280,33 +280,33 @@ export const getAllWorkOrders = async (req, res) => {
       query.isProductionComplete = false
     }
 
-if (search && String(search).trim()) {
-  const s = String(search).trim();
+    if (search && String(search).trim()) {
+      const s = String(search).trim();
 
-  const orConditions = [
-    { workOrderNo: { $regex: s, $options: "i" } },
-    { poNumber: { $regex: s, $options: "i" } },
-    { projectNo: { $regex: s, $options: "i" } },
-  ];
+      const orConditions = [
+        { workOrderNo: { $regex: s, $options: "i" } },
+        { poNumber: { $regex: s, $options: "i" } },
+        { projectNo: { $regex: s, $options: "i" } },
+      ];
 
-  // Search POS No
-  if (!isNaN(s)) {
-    orConditions.push({ posNo: Number(s) });
-  }
+      // Search POS No
+      if (!isNaN(s)) {
+        orConditions.push({ posNo: Number(s) });
+      }
 
-  // Search by Drawing No
-  const drawingIds = await Drawing.find({
-    drawingNo: { $regex: s, $options: "i" },
-  }).distinct("_id");
+      // Search by Drawing No
+      const drawingIds = await Drawing.find({
+        drawingNo: { $regex: s, $options: "i" },
+      }).distinct("_id");
 
-  if (drawingIds.length) {
-    orConditions.push({
-      drawingId: { $in: drawingIds },
-    });
-  }
+      if (drawingIds.length) {
+        orConditions.push({
+          drawingId: { $in: drawingIds },
+        });
+      }
 
-  query.$or = orConditions;
-}
+      query.$or = orConditions;
+    }
 
 
     // ✅ Sort
@@ -8836,6 +8836,10 @@ export const getCompleteWorkOrders = async (req, res) => {
 // UPDATE WORK ORDER STATUS - COMPLETE FIX
 // ============================================================
 
+
+
+
+
 export const saveWorkOrderStage = async (req, res) => {
   try {
     const { id } = req.params;
@@ -8853,6 +8857,46 @@ export const saveWorkOrderStage = async (req, res) => {
         message: "Work order not found",
       });
     }
+
+    const getPossibleProductsFromPicking = () => {
+      const pickingProcess = wo.processHistory?.find(
+        p => p.process === "picking"
+      );
+
+      // First Picking Save
+      if (!pickingProcess) {
+        let possibleProducts = Number(wo.quantity);
+
+        materials.forEach(material => {
+          const requiredPerProduct = Number(material.quantity || 1);
+          const pickedQty = Number(material.pickedQty || 0);
+
+          const canMake = Math.floor(
+            pickedQty / requiredPerProduct
+          );
+
+          possibleProducts = Math.min(possibleProducts, canMake);
+        });
+
+        return possibleProducts;
+      }
+
+      // Existing Picking
+      let possibleProducts = Number(wo.quantity);
+
+      pickingProcess.details.forEach(item => {
+        const requiredPerProduct = Number(item.quantity || 1);
+        const pickedQty = Number(item.pickedQty || 0);
+
+        const canMake = Math.floor(
+          pickedQty / requiredPerProduct
+        );
+
+        possibleProducts = Math.min(possibleProducts, canMake);
+      });
+
+      return possibleProducts;
+    };
 
     const processKey = mapStageToProcessKey(stage);
     console.log('----processKey', processKey)
@@ -8888,12 +8932,20 @@ export const saveWorkOrderStage = async (req, res) => {
 
     if (wo.projectType === "other") {
       if (processKey === "picking_assembly") {
-        if (hasShortage && additionalQty > 0) {
+
+
+        const possibleProducts = getPossibleProductsFromPicking();
+
+        const remainingPossible =
+          Math.max(0, possibleProducts - pickingDone);
+
+        if (additionalQty > remainingPossible) {
           return res.status(400).json({
             success: false,
-            message: "Cannot enter Produce Qty while shortage exists",
+            message: `Only ${remainingPossible} product(s) can be produced.`,
           });
         }
+
         if (pickingAssemblyDone + additionalQty > wo.quantity) {
           return res.status(400).json({
             success: false,
@@ -8912,10 +8964,15 @@ export const saveWorkOrderStage = async (req, res) => {
     }
     else if (wo.projectType === "box_build") {
       if (processKey === "picking") {
-        if (hasShortage && additionalQty > 0) {
+        const possibleProducts = getPossibleProductsFromPicking();
+
+        const remainingPossible =
+          Math.max(0, possibleProducts - pickingDone);
+
+        if (additionalQty > remainingPossible) {
           return res.status(400).json({
             success: false,
-            message: "Cannot enter Produce Qty while shortage exists",
+            message: `Only ${remainingPossible} product(s) can be produced.`,
           });
         }
         if (pickingDone + additionalQty > wo.quantity) {
@@ -8944,10 +9001,14 @@ export const saveWorkOrderStage = async (req, res) => {
     }
     else if (wo.projectType === "cable_harness") {
       if (processKey === "picking") {
-        if (hasShortage && additionalQty > 0) {
+        const possibleProducts = getPossibleProductsFromPicking();
+        console.log('-----possibleProducts', possibleProducts)
+
+
+        if (additionalQty > possibleProducts) {
           return res.status(400).json({
             success: false,
-            message: "Cannot enter Produce Qty while shortage exists",
+            message: `Only ${possibleProducts} product(s) can be produced.`,
           });
         }
         if (pickingDone + additionalQty > wo.quantity) {
@@ -8958,26 +9019,41 @@ export const saveWorkOrderStage = async (req, res) => {
         }
       }
       if (processKey === "cable_harness") {
-        if (cableHarnessDone + additionalQty > pickingDone) {
+        const possibleProducts = getPossibleProductsFromPicking();
+
+        const remaining =
+          Math.max(0, possibleProducts - cableHarnessDone);
+
+        if (additionalQty > remaining) {
           return res.status(400).json({
             success: false,
-            message: "Cable Harness cannot exceed picked quantity",
+            message: `Only ${remaining} product(s) can be processed.`,
           });
         }
       }
       if (processKey === "labelling") {
-        if (labellingDone + additionalQty > cableHarnessDone) {
+        const possibleProducts = getPossibleProductsFromPicking();
+
+        const remaining =
+          Math.max(0, possibleProducts - labellingDone);
+
+        if (additionalQty > remaining) {
           return res.status(400).json({
             success: false,
-            message: "Labelling cannot exceed Cable Harness quantity",
+            message: `Only ${remaining} product(s) can be processed.`,
           });
         }
       }
       if (processKey === "quality_check") {
-        if (qcDone + additionalQty > labellingDone) {
+        const possibleProducts = getPossibleProductsFromPicking();
+
+        const remaining =
+          Math.max(0, possibleProducts - qcDone);
+
+        if (additionalQty > remaining) {
           return res.status(400).json({
             success: false,
-            message: "QC cannot exceed Labelling quantity",
+            message: `Only ${remaining} product(s) can be processed.`,
           });
         }
       }
@@ -9080,46 +9156,46 @@ export const saveWorkOrderStage = async (req, res) => {
       // }
       if (existing) {
 
-    existing.qty = (existing.qty || 0) + additionalQty;
-    existing.completedBy = userId;
-    existing.completedAt = new Date();
+        existing.qty = (existing.qty || 0) + additionalQty;
+        existing.completedBy = userId;
+        existing.completedAt = new Date();
 
-    existing.comments = existing.comments || [];
-    if (comments) {
-        existing.comments.push({
+        existing.comments = existing.comments || [];
+        if (comments) {
+          existing.comments.push({
             comment: comments,
             commentedBy: userId,
             commentedAt: new Date(),
-        });
-    }
+          });
+        }
 
-    const stageDetailsMap = {};
+        const stageDetailsMap = {};
 
-    (existing.details || []).forEach(detail => {
-        stageDetailsMap[String(detail.key)] = {
+        (existing.details || []).forEach(detail => {
+          stageDetailsMap[String(detail.key)] = {
             ...detail.toObject?.() ?? detail,
-        };
-    });
+          };
+        });
 
-    materials.forEach(material => {
-        const key = String(material.key);
+        materials.forEach(material => {
+          const key = String(material.key);
 
-        if (stageDetailsMap[key]) {
+          if (stageDetailsMap[key]) {
             stageDetailsMap[key].pickedQty += Number(material.pickedQty || 0);
             stageDetailsMap[key].shortage = material.shortage;
             stageDetailsMap[key].shortageQty = Number(material.shortageQty || 0);
             stageDetailsMap[key].pickedAt = new Date();
-        } else {
+          } else {
             stageDetailsMap[key] = {
-                ...material,
-                pickedAt: new Date(),
+              ...material,
+              pickedAt: new Date(),
             };
-        }
-    });
+          }
+        });
 
-    existing.details = Object.values(stageDetailsMap);
-}
-       else {
+        existing.details = Object.values(stageDetailsMap);
+      }
+      else {
         // Create new stage with no shortages
         wo.processHistory.push({
           process: "cable_harness",
