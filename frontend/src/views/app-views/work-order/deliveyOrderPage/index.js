@@ -254,7 +254,7 @@ const DeliveryOrderPage = () => {
   // ✅ Export PDF (selected only)
   const handleExportPDF = async () => {
     try {
-      if (!validateBeforeExport({ requireDelivered: false })) return;
+      // if (!validateBeforeExport({ requireDelivered: false })) return;
 
       const payload = {
         ids: selectedRowKeys,
@@ -289,7 +289,7 @@ const DeliveryOrderPage = () => {
   // ✅ Export Excel (selected only)
   const handleExportExcel = async () => {
     try {
-      if (!validateBeforeExport({ requireDelivered: false })) return;
+      // if (!validateBeforeExport({ requireDelivered: false })) return;
 
       const payload = {
         ids: selectedRowKeys,
@@ -323,7 +323,7 @@ const DeliveryOrderPage = () => {
 
   const handleExportWork = async () => {
     try {
-      if (!validateBeforeExport({ requireDelivered: false })) return;
+      // if (!validateBeforeExport({ requireDelivered: false })) return;
 
       const payload = {
         ids: selectedRowKeys,

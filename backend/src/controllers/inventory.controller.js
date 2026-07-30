@@ -2230,7 +2230,8 @@ export const getCompleteDrawingsMTO = async (req, res) => {
           (r.drawingNo || "").toLowerCase().includes(s) ||
           (r.description || "").toLowerCase().includes(s) ||
           r.projects.some((p) => p.toLowerCase().includes(s)) ||
-          r.customers.some((c) => c.toLowerCase().includes(s))
+          r.customers.some((c) => c.toLowerCase().includes(s)) ||
+          r.workOrders.some((c) => c.toLowerCase().includes(s))
         );
       });
     }

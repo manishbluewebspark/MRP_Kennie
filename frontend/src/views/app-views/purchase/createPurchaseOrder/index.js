@@ -295,7 +295,11 @@ const PurchaseOrderForm = () => {
           value={record.unitPrice}
           onChange={(v) => handleItemChange(record.key, 'unitPrice', n(v))}
           style={{ width: '100%' }}
-          formatter={(v) => (v === undefined || v === null ? '' : ` ${v}`)}
+          formatter={(value) =>
+        value === undefined || value === null || value === ''
+          ? ''
+          : Number(value).toFixed(2)
+      }
           parser={(v) => (v ? String(v).replace('$', '').trim() : 0)}
         />
       ),

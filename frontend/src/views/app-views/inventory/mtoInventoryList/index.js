@@ -45,7 +45,7 @@ const MtoInventoryList = () => {
     const [editingWorkOrder, setEditingWorkOrder] = useState(null);
     const [totalCount, setTotalCount] = useState(0);
     const [isViewQtyModal, setIsViewQtyModal] = useState(false);
-const [selectedDORecord, setSelectedDORecord] = useState(null);
+    const [selectedDORecord, setSelectedDORecord] = useState(null);
 
     const columns = [
         { title: "No.", dataIndex: "no", key: "no", width: 60 },
@@ -85,7 +85,7 @@ const [selectedDORecord, setSelectedDORecord] = useState(null);
             key: "workOrders",
             render: (arr) => arr?.join(", "),
         },
-          {
+        {
             title: "PO No.",
             dataIndex: "poNumbers",
             key: "poNumbers",
@@ -362,22 +362,31 @@ const [selectedDORecord, setSelectedDORecord] = useState(null);
     return (
         <div>
             {/* Header Section */}
-            <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 16,
-                width: '100%'
-            }}>
-                <div>
-                    <h2 style={{ margin: 0 }}>Make To Order (MTO) Inventory List</h2>
-                    <p style={{ margin: 0, fontSize: 14, color: '#888' }}>
-                        Completed drawings available for delivery
-                    </p>
-                </div>
+          <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+    width: "100%",
+    gap: 16,
+  }}
+>
+  <div>
+    <h2 style={{ margin: 0 }}>Make To Order (MTO) Inventory List</h2>
+    <p style={{ margin: "4px 0 0", fontSize: 14, color: "#888" }}>
+      Completed drawings available for delivery
+    </p>
+  </div>
 
-
-            </div>
+  <div style={{ minWidth: 300 }}>
+    <GlobalTableActions
+      showSearch
+      onSearch={handleSearch}
+      searchPlaceholder="search po no./project name/work order no.."
+    />
+  </div>
+</div>
 
 
 
@@ -408,11 +417,11 @@ const [selectedDORecord, setSelectedDORecord] = useState(null);
                 onUpdate={handleUpdateSubmit}
             />
 
-           <DeliveryOrderInformationModal
-  visible={isViewQtyModal}
-  onCancel={() => setIsViewQtyModal(false)}
-  data={selectedDORecord}
-/>
+            <DeliveryOrderInformationModal
+                visible={isViewQtyModal}
+                onCancel={() => setIsViewQtyModal(false)}
+                data={selectedDORecord}
+            />
 
 
 

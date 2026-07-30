@@ -8,22 +8,27 @@ import {
     Spin,
     Empty,
     message,
+    Pagination,
 } from 'antd';
 import {
     CalendarOutlined,
     ClockCircleOutlined,
 } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
-
+import useDebounce from "utils/debouce";
 import { formatDate } from 'utils/formatDate';
 import { fetchPurchaseOrders } from 'store/slices/purchaseOrderSlice';
 import ReceiveMaterialService from 'services/ReceiveMaterial';
 import ReceiveMaterialsModal from '../inventoryListPage/ReceiveMaterialsModal';
+import GlobalTableActions from 'components/GlobalTableActions';
 
 
 const { Title, Text } = Typography;
 
 const PurchaseOrdersReceivePage = () => {
+    const [search, setSearch] = useState("");
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(10);
     const dispatch = useDispatch();
 
     const [isReceiveMaterialModalOpen, setIsReceiveMaterialModalOpen] =
@@ -36,8 +41,10 @@ const PurchaseOrdersReceivePage = () => {
         loadingSummary,
         loading,
         error,
+        pagination,
     } = useSelector((state) => state.purchaseOrders || {});
 
+    console.log('----pagination', pagination)
     const isLoading = loadingSummary || loading;
 
     // ✅ Page load pe Pending POs fetch
@@ -101,6 +108,20 @@ const PurchaseOrdersReceivePage = () => {
         setSelectedPO(null);
     };
 
+    const handleSearch = useDebounce((value) => {
+        setPage(1);
+        setSearch(value);
+
+        dispatch(
+            fetchPurchaseOrders({
+                status: ["Partially Received", "Acknowledged", "Emailed"],
+                page: 1,
+                limit,
+                search: value,
+            })
+        );
+    }, 500);
+
     const handleClosePO = async (id) => {
         try {
             const po = selectedPO;
@@ -150,27 +171,44 @@ const PurchaseOrdersReceivePage = () => {
     }
 
     // ❌ No pending POs
-    if (!isLoading && (!purchaseOrders || purchaseOrders.length === 0)) {
-        return (
-            <div style={{ padding: 24 }}>
-                <Title level={3} style={{ marginBottom: 8 }}>
-                    Select Purchase Order
-                </Title>
-                <Empty description="No pending Purchase Orders found" />
-            </div>
-        );
-    }
+    // if (!isLoading && (!purchaseOrders || purchaseOrders.length === 0)) {
+    //     return (
+    //         <div style={{ padding: 24 }}>
+    //             <Title level={3} style={{ marginBottom: 8 }}>
+    //                 Select Purchase Order
+    //             </Title>
+    //             <Empty description="No pending Purchase Orders found" />
+    //         </div>
+    //     );
+    // }
 
     return (
         <div style={{ padding: 24 }}>
             {/* Header */}
-            <div style={{ marginBottom: 16 }}>
-                <Title level={3} style={{ margin: 0 }}>
-                    Select Purchase Order to Receive
-                </Title>
-                <Text type="secondary">
-                    Outstanding Purchase Orders ({purchaseOrders.length})
-                </Text>
+            <div
+                style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 16,
+                    gap: 16,
+                }}
+            >
+                <div>
+                    <Title level={3} style={{ margin: 0 }}>
+                        Select Purchase Order to Receive
+                    </Title>
+                    <Text type="secondary">
+                        Outstanding Purchase Orders ({purchaseOrders.length})
+                    </Text>
+                </div>
+
+                <div style={{ minWidth: 300 }}>
+                    <GlobalTableActions
+                        showSearch
+                        onSearch={handleSearch}
+                    />
+                </div>
             </div>
 
             {/* PO Cards List */}
@@ -294,7 +332,30 @@ const PurchaseOrdersReceivePage = () => {
 
                         </div>
                     </Card>
+
+
+
                 ))}
+
+                <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+                    <Pagination
+                        current={pagination.current}
+                        pageSize={pagination.pageSize}
+                        total={pagination.total}
+                        showSizeChanger
+                        showQuickJumper
+                        onChange={(page, pageSize) => {
+                            dispatch(
+                                fetchPurchaseOrders({
+                                    status: ["Partially Received", "Acknowledged", "Emailed"],
+                                    page,
+                                    limit: pageSize,
+                                    search,
+                                })
+                            );
+                        }}
+                    />
+                </div>
             </div>
 
             <Divider style={{ margin: '16px 0' }} />

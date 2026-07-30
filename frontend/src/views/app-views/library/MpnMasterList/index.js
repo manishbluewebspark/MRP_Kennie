@@ -101,53 +101,53 @@ const MpnMasterList = () => {
     const { suppliers } = useSelector((state) => state.suppliers);
     const { categories } = useSelector((state) => state.categories);
     const { currencies } = useSelector((state) => state.currency);
-const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+    const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 
 
-const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-const [deleteMode, setDeleteMode] = useState("single"); // "single" | "bulk"
-const [deleteId, setDeleteId] = useState(null);
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [deleteMode, setDeleteMode] = useState("single"); // "single" | "bulk"
+    const [deleteId, setDeleteId] = useState(null);
 
 
-const rowSelection = {
-  selectedRowKeys,
-  preserveSelectedRowKeys: true,
-  onChange: (keys) => setSelectedRowKeys(keys),
-};
+    const rowSelection = {
+        selectedRowKeys,
+        preserveSelectedRowKeys: true,
+        onChange: (keys) => setSelectedRowKeys(keys),
+    };
 
-const handleDeleteSelected = () => {
-  if (!selectedRowKeys.length) {
-    message.warning("Please select at least one item");
-    return;
-  }
-  setDeleteMode("bulk");
-  setDeleteModalVisible(true);
-};
+    const handleDeleteSelected = () => {
+        if (!selectedRowKeys.length) {
+            message.warning("Please select at least one item");
+            return;
+        }
+        setDeleteMode("bulk");
+        setDeleteModalVisible(true);
+    };
 
-      const handleConfirmDelete = async () => {
-  try {
-    setLoading(true);
-    message.loading({ content: "Deleting...", key: "bulkDel" });
+    const handleConfirmDelete = async () => {
+        try {
+            setLoading(true);
+            message.loading({ content: "Deleting...", key: "bulkDel" });
 
-    if (deleteMode === "bulk") {
-      await LibraryService.deleteMPNsBulk({ ids: selectedRowKeys });
-      message.success({ content: "Selected items deleted", key: "bulkDel" });
-      setSelectedRowKeys([]);
-    } else {
-      await LibraryService.deleteMpn(deleteId);
-      message.success({ content: "Item deleted", key: "bulkDel" });
-    }
+            if (deleteMode === "bulk") {
+                await LibraryService.deleteMPNsBulk({ ids: selectedRowKeys });
+                message.success({ content: "Selected items deleted", key: "bulkDel" });
+                setSelectedRowKeys([]);
+            } else {
+                await LibraryService.deleteMpn(deleteId);
+                message.success({ content: "Item deleted", key: "bulkDel" });
+            }
 
-    setDeleteModalVisible(false);
-    setDeleteId(null);
-    fetchMpn();
-  } catch (err) {
-    console.error(err);
-    message.error({ content: "Failed to delete", key: "bulkDel" });
-  } finally {
-    setLoading(false);
-  }
-};
+            setDeleteModalVisible(false);
+            setDeleteId(null);
+            fetchMpn();
+        } catch (err) {
+            console.error(err);
+            message.error({ content: "Failed to delete", key: "bulkDel" });
+        } finally {
+            setLoading(false);
+        }
+    };
 
 
 
@@ -207,11 +207,15 @@ const handleDeleteSelected = () => {
             dataIndex: "RFQUnitPrice",
             key: "RFQUnitPrice",
             ellipsis: true,
+            align: "right",
             sorter: (a, b) => (a.RFQUnitPrice || 0) - (b.RFQUnitPrice || 0),
-            render: (_, record) =>
-                record?.currency && record?.RFQUnitPrice != null
-                    ? `${record.currency.symbol} ${record.RFQUnitPrice}`
-                    : ""
+            render: (_, record) => (
+                <div style={{ textAlign: "right" }}>
+                    {record?.currency && record?.RFQUnitPrice != null
+                        ? `${record.currency.symbol} ${Number(record.RFQUnitPrice).toFixed(2)}`
+                        : ""}
+                </div>
+            ),
         },
         {
             title: "MOQ",
@@ -254,22 +258,22 @@ const handleDeleteSelected = () => {
         },
         {
             title: (
-          <Space>
-            Actions
-            {hasPermission("library.child:create_edit_delete") && (
-              <Button
-                danger
-                size="small"
-                icon={<DeleteFilled style={{ color: "#FF4D4F" }} />}
-                // disabled={selectedRowKeys?.length == 0}
-                onClick={handleDeleteSelected}
-              >
-              </Button>
+                <Space>
+                    Actions
+                    {hasPermission("library.child:create_edit_delete") && (
+                        <Button
+                            danger
+                            size="small"
+                            icon={<DeleteFilled style={{ color: "#FF4D4F" }} />}
+                            // disabled={selectedRowKeys?.length == 0}
+                            onClick={handleDeleteSelected}
+                        >
+                        </Button>
 
 
-            )}
-          </Space>
-        ),
+                    )}
+                </Space>
+            ),
             key: "actions",
             // fixed: "right",
             render: (_, record) => (
@@ -588,14 +592,14 @@ const handleDeleteSelected = () => {
                 title="Filters"
             />
 
-     <ConfirmDeleteModal
-  open={deleteModalVisible}
-  loading={loading}
-  mode={deleteMode}
-  count={selectedRowKeys.length}
-  onCancel={() => !loading && setDeleteModalVisible(false)}
-  onConfirm={handleConfirmDelete}
-/>
+            <ConfirmDeleteModal
+                open={deleteModalVisible}
+                loading={loading}
+                mode={deleteMode}
+                count={selectedRowKeys.length}
+                onCancel={() => !loading && setDeleteModalVisible(false)}
+                onConfirm={handleConfirmDelete}
+            />
 
 
         </div>
