@@ -160,7 +160,7 @@ const buildPickedMap = async () => {
         const mpnId = String(d.mpnId || "");
         if (!mpnId) continue;
 
-        
+
 
         const qty = convertToBaseUOM(
           Number(d.pickedQty || 0),
@@ -442,12 +442,12 @@ export const getInventoryList = async (req, res) => {
       const pickedQty = pickedMap.get(mpnIdStr) || 0;
 
 
-      console.log('------mpnIdStr',mpnIdStr)
+      console.log('------mpnIdStr', mpnIdStr)
       console.log('-------meter pickedMap', pickedMap)
       console.log('-------meter demandMap', demandMap)
       // reduce picked globally
-     const effectiveDemand = Math.max(demandQty - pickedQty, 0);
-      console.log('------effectiveDemand',effectiveDemand)
+      const effectiveDemand = Math.max(demandQty - pickedQty, 0);
+      console.log('------effectiveDemand', effectiveDemand)
 
 
 
@@ -654,40 +654,60 @@ export const getMaterialRequiredList = async (req, res) => {
       ];
     }
 
+
+    const demandMap = await buildDemandMap();
+    const pickedMap = await buildPickedMap();
+
+
+    console.log("Demand Map Size:", demandMap.size);
+    console.log("Picked Map Size:", pickedMap.size);
+
     // Get all inventory items with MPN data
     const inventoryList = await Inventory.find(filter)
       .populate({
         path: "mpnId",
-        select: "MPN Description Manufacturer UOM minStockLevel maxStockLevel preferredSuppliers",
+        select: "MPN Description Manufacturer UOM Supplier",
         model: "MPNLibrary"
       })
       .lean();
+
+    console.log("Inventory Count:", inventoryList.length);
+    console.log(inventoryList[0]);
 
     // Calculate shortage for each item
     const materialRequiredList = await Promise.all(
       inventoryList.map(async (item) => {
         try {
-          const mpnData = item.mpnId || {};
-          const currentQty = item.balanceQuantity || 0;
-          const minStockLevel = mpnData.minStockLevel || 0;
-          const requiredQty = minStockLevel;
+          const mpnData = item?.mpnId;
+          const mpnId = String(item.mpnId?._id || "");
+
+          const currentQty = Number(item.balanceQuantity || 0);
+
+          const demandQty = Number(demandMap.get(mpnId) || 0);
+
+          const pickedQty = Number(pickedMap.get(mpnId) || 0);
+
+          // Actual remaining material required
+          const requiredQty = Math.max(0, demandQty - pickedQty);
+
+          // Inventory shortage
           const shortageQty = Math.max(0, requiredQty - currentQty);
 
           // Get preferred suppliers
-          const preferredSuppliers = mpnData.preferredSuppliers || [];
+          const supplierId = mpnData.Supplier;
+
           let supplierNames = "N/A";
 
-          if (preferredSuppliers.length > 0) {
-            // If you have a Supplier model, populate the names
-            const suppliers = await Supplier.find({
-              _id: { $in: preferredSuppliers }
-            }).select("name").lean();
+          if (supplierId) {
+            const supplier = await Supplier.findById(supplierId)
+              .select("name")
+              .lean();
 
-            supplierNames = suppliers.map(s => s.name).join(", ");
+            supplierNames = supplier?.name || "N/A";
           }
 
           // Only return items that have shortage or need attention
-          if (shortageQty > 0 || currentQty < minStockLevel) {
+          if (requiredQty > 0) {
             return {
               _id: item._id,
               MPN: mpnData.MPN || "N/A",
@@ -696,9 +716,9 @@ export const getMaterialRequiredList = async (req, res) => {
               Suppliers: supplierNames,
               CurrentQty: currentQty,
               RequiredQty: requiredQty,
+              PickedQty: pickedQty,
               ShortageQty: shortageQty,
-              Status: getShortageStatus(currentQty, minStockLevel),
-              mpnId: item.mpnId?._id
+              mpnId,
             };
           }
           return null;
@@ -780,6 +800,10 @@ export const getLowStockAlerts = async (req, res) => {
     limit = Number(limit) || 10;
     const skip = (page - 1) * limit;
 
+
+    const demandMap = await buildDemandMap();
+    const pickedMap = await buildPickedMap();
+
     // ✅ 0) Load system thresholds (fallback values)
     const settings = await SystemSettings.findOne({}).lean();
     // console.log('-----settings', settings?.inventoryAlerts)
@@ -830,31 +854,33 @@ export const getLowStockAlerts = async (req, res) => {
         const mpn = inv.mpnId;
 
         const currentStock = Number(inv.balanceQuantity || 0);
+
+        const mpnId = String(inv.mpnId?._id || inv.mpnId);
+
+        const demandQty = Number(demandMap.get(mpnId) || 0);
+
+        const pickedQty = Number(pickedMap.get(mpnId) || 0);
+
+        const totalRequired = Math.max(0, demandQty - pickedQty);
+
+        const shortfall = Math.max(0, totalRequired - currentStock);
         const workOrders = (inv.workOrders || []).filter(w => w?.needDate);
 
-        if (!workOrders.length) return null; // needDate wala shortage hi nahi
-
-        const totalRequired = workOrders.reduce(
-          (sum, w) => sum + Number(w.requiredQty || 0),
-          0
-        );
-
-        const shortfall = Math.max(totalRequired - currentStock, 0);
-        if (shortfall <= 0) return null; // stock enough, alert nahi
-
-        // earliest need date
         const earliestNeedDate = workOrders
           .map(w => new Date(w.needDate))
           .sort((a, b) => a - b)[0];
 
-        const weeksLeft = weeksBetween(now, earliestNeedDate); // negative means already overdue
+        if (totalRequired <= 0) return null;
 
-        // ✅ urgency based on thresholds
+        const weeksLeft = weeksBetween(new Date(), earliestNeedDate);
+
         let urgency = "normal";
-        if (weeksLeft <= criticalWeeksLeft) urgency = "critical";
-        else if (weeksLeft <= urgentWeeksLeft) urgency = "urgent";
-        else if (weeksLeft <= normalWeeksLeft) urgency = "normal";
-        else urgency = "normal"; // more than normalWeeksLeft, still shortage but not urgent
+
+        if (weeksLeft <= criticalWeeksLeft) {
+          urgency = "critical";
+        } else if (weeksLeft <= urgentWeeksLeft) {
+          urgency = "urgent";
+        }
 
         return {
           mpnId: mpn?._id || inv.mpnId,
@@ -1791,9 +1817,9 @@ export const getMaterialShortages = async (req, res) => {
           }
 
           console.log("MPN FILTER", {
-  requestMpnId: mpnId,
-  detailMpnId: d.mpnId,
-});
+            requestMpnId: mpnId,
+            detailMpnId: d.mpnId,
+          });
 
           shortages.push({
             workOrderId: wo._id,

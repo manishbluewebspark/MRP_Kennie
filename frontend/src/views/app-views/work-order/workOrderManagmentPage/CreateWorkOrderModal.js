@@ -30,7 +30,7 @@ const CreateWorkOrderModal = ({
   lastWorkOrderNo,
 }) => {
 
-  console.log('---------editingWorkOrder')
+  console.log('---------editingWorkOrder',editingWorkOrder)
 
   // console.log('----projectData',projectData)
   const [form] = Form.useForm();
@@ -47,7 +47,7 @@ const CreateWorkOrderModal = ({
 
   const isEditMode = !!editingWorkOrder?._id;
   const editDrawingId = editingWorkOrder?.drawingId ? String(editingWorkOrder.drawingId) : null;
-
+  const canEdit = !!editingWorkOrder?.isInProduction
   const filterConfig = useMemo(() => {
     return [
       {
@@ -296,6 +296,7 @@ const CreateWorkOrderModal = ({
             value={record.workOrderQty}
             onChange={(val) => handleRowChange(record.drawingId, "workOrderQty", val)}
             style={{ width: "100%" }}
+            disabled={canEdit}
           />
         ),
       },

@@ -133,7 +133,7 @@
 	"settings.currency-setting": "Currency",
 	"settings.category-setting": "Category",
 	"settings.uom-setting": "UOM",
-	"inventory.inventory":"inventory",
+	"inventory.inventory":"Inventory",
 	"inventory.inventory-list":"Inventory List",
 	"inventory.mto-inventory":"MTO Inventory",
 	"inventory.recieve-material":"Receive Material",
