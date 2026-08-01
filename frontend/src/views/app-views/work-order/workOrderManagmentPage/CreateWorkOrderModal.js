@@ -30,7 +30,7 @@ const CreateWorkOrderModal = ({
   lastWorkOrderNo,
 }) => {
 
-  console.log('---------editingWorkOrder',editingWorkOrder)
+  // console.log('---------editingWorkOrder',editingWorkOrder)
 
   // console.log('----projectData',projectData)
   const [form] = Form.useForm();
@@ -81,7 +81,7 @@ const CreateWorkOrderModal = ({
   }, [projectData]);
 
   const generateWorkOrderNumber = (lastWorkOrderNoInput) => {
-    console.log('-----lastWorkOrderNoInput', lastWorkOrderNoInput)
+    // console.log('-----lastWorkOrderNoInput', lastWorkOrderNoInput)
     const now = new Date();
     const year = now.getFullYear().toString().slice(-2);
     const month = String(now.getMonth() + 1).padStart(2, "0");

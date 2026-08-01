@@ -138,14 +138,14 @@ export const createReceiveMaterial = async (req, res) => {
       const fromUOMId = await MPN.findById(line.mpnId._id)
 
 
-      console.log('-------acceptedQty', poItem.receivedQtyTotal, fromUomId,receivedQty)
+      // console.log('-------acceptedQty', poItem.receivedQtyTotal, fromUomId,receivedQty)
       const acceptedQtyInMaster = await convertToMeter({
         qty:receivedQty,
         fromUom: fromUomId,
         // toUom: masterUomId,
       });
 
-      console.log('-------acceptedQtyInMaster',acceptedQtyInMaster)
+      // console.log('-------acceptedQtyInMaster',acceptedQtyInMaster)
       // ---- PO totals update ----
       if (poItem) {
         const orderedQty = Number(poItem.qty || line.orderedQty || 0);
@@ -227,10 +227,10 @@ export const createReceiveMaterial = async (req, res) => {
   mpnId: new mongoose.Types.ObjectId(mpnId)
 });
 
-console.log(
-  "BEFORE:",
-  before.balanceQuantity
-);
+// console.log(
+//   "BEFORE:",
+//   before.balanceQuantity
+// );
       // ============================
       // ✅ Inventory update (MASTER UOM)
       // ============================
@@ -255,10 +255,10 @@ console.log(
   mpnId: new mongoose.Types.ObjectId(mpnId)
 });
 
-console.log(
-  "AFTER:",
-  after.balanceQuantity
-);
+// console.log(
+//   "AFTER:",
+//   after.balanceQuantity
+// );
 
       // 4️⃣ MPN.purchaseHistory update
       const purchaseHistoryEntry = {

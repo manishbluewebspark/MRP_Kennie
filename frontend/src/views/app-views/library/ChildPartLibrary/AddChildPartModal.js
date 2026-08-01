@@ -156,7 +156,7 @@ const AddChildPartModal = ({
   // ✅ MPN change handler
   const handleMpnChange = (mpnId) => {
     const selectedMpn = mpnOptions.find((m) => m.value === mpnId);
-    console.log('----selectedMpn',selectedMpn)
+    // console.log('----selectedMpn',selectedMpn)
     if (selectedMpn) {
       const cat = selectedMpn.categoryId || "";
       setCategory(cat);

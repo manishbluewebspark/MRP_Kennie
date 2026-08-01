@@ -1199,7 +1199,7 @@ export const importWorkOrders = async (req, res) => {
       });
     }
 
-    console.log("🔍 Sample Rows:", rows.length);
+    // console.log("🔍 Sample Rows:", rows.length);
 
     // ✅ 3) Existing WO combinations
     const existingWOs = await WorkOrder.find({})
@@ -1340,7 +1340,7 @@ export const importWorkOrders = async (req, res) => {
           ? row["WorkorderNo"].toString().trim()
           : "";
 
-        console.log("------excelWO", excelWO);
+        // console.log("------excelWO", excelWO);
 
         let workOrderNo;
 
@@ -4708,19 +4708,28 @@ export const getAllChilPartByDrawingId = async (req, res) => {
 
 export const getTotalMPNNeeded = async (req, res) => {
   try {
-    const {
-      drawingDate,
-      customer,
-      project,
-      drawingRange,
-    } = req.query;
+   const {
+  drawingDate,
+  customer,
+  project,
+  drawingRange,
+  page = 1,
+  limit = 10,
+  search
+} = req.query;
 
+
+const pageNumber = Math.max(1, Number(page));
+const limitNumber = Math.max(1, Number(limit));
+const searchText = (search || "").trim().toLowerCase();
     // =========================================================
     // 1️⃣ DRAWING FILTERS
     // =========================================================
 
     const drawingFilters = {};
 
+
+   
     if (drawingRange === "range1") {
       drawingFilters.drawingNo = { $gte: 0, $lte: 50 };
     }
@@ -4963,9 +4972,29 @@ export const getTotalMPNNeeded = async (req, res) => {
         totalNeeded - convertedStock
       );
 
+      const mpnNumber = (
+  mpn?.MPN ||
+  mpn?.mpn ||
+  ""
+).toLowerCase();
+
+const workOrderNo = (
+  row.workOrderNo || ""
+).toLowerCase();
+
+if (
+  searchText &&
+  !mpnNumber.includes(searchText) &&
+  !workOrderNo.includes(searchText)
+) {
+  continue;
+}
+
       // only shortage
       if (shortfall <= 0) continue;
 
+
+      
       result.push({
         drawingId: row.drawingId,
 
@@ -5010,13 +5039,22 @@ export const getTotalMPNNeeded = async (req, res) => {
     // 🔟 RESPONSE
     // =========================================================
 
-    return res.json({
-      status: true,
-      message:
-        "Filtered Total MPN Needed fetched successfully",
-      total: result.length,
-      data: result,
-    });
+   const total = result.length;
+
+const paginatedData = result.slice(
+  (pageNumber - 1) * limitNumber,
+  pageNumber * limitNumber
+);
+
+return res.json({
+  status: true,
+  message: "Filtered Total MPN Needed fetched successfully",
+  total,
+  page: pageNumber,
+  limit: limitNumber,
+  totalPages: Math.ceil(total / limitNumber),
+  data: paginatedData,
+});
 
   } catch (error) {
     console.error(
@@ -8899,7 +8937,7 @@ export const saveWorkOrderStage = async (req, res) => {
     };
 
     const processKey = mapStageToProcessKey(stage);
-    console.log('----processKey', processKey)
+    // console.log('----processKey', processKey)
     if (!processKey) {
       return res.status(400).json({
         success: false,
@@ -8910,7 +8948,7 @@ export const saveWorkOrderStage = async (req, res) => {
     const additionalQty = Number(stageQty || 0);
     const userId = req.user?._id;
 
-    console.log('-----userId', userId)
+    // console.log('-----userId', userId)
 
     const getStageQty = (key) =>
       wo.processHistory?.find((p) => p.process === key)?.qty || 0;
@@ -9002,7 +9040,7 @@ export const saveWorkOrderStage = async (req, res) => {
     else if (wo.projectType === "cable_harness") {
       if (processKey === "picking") {
         const possibleProducts = getPossibleProductsFromPicking();
-        console.log('-----possibleProducts', possibleProducts)
+        // console.log('-----possibleProducts', possibleProducts)
 
 
         if (additionalQty > possibleProducts) {
@@ -9104,7 +9142,7 @@ export const saveWorkOrderStage = async (req, res) => {
 
         const baseQty = await convertToMeter({ qty: currentPickedQty, fromUom: material.uomId, })
 
-        console.log('--------baseQty', inventory.balanceQuantity, baseQty)
+        // console.log('--------baseQty', inventory.balanceQuantity, baseQty)
 
         if (inventory.balanceQuantity < baseQty) {
           return res.status(400).json({
@@ -9128,7 +9166,7 @@ export const saveWorkOrderStage = async (req, res) => {
 
     // 🔥 CRITICAL FIX: For Cable Harness stage with stageQty > 0
     if (processKey === "cable_harness" && additionalQty > 0) {
-      console.log("🔧 Cable Harness: stageQty > 0, clearing shortages");
+      // console.log("🔧 Cable Harness: stageQty > 0, clearing shortages");
 
       // if (existing) {
       //   // Update existing stage

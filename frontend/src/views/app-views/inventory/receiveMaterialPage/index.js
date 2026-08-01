@@ -44,7 +44,7 @@ const PurchaseOrdersReceivePage = () => {
         pagination,
     } = useSelector((state) => state.purchaseOrders || {});
 
-    console.log('----pagination', pagination)
+    // console.log('----pagination', pagination)
     const isLoading = loadingSummary || loading;
 
     // ✅ Page load pe Pending POs fetch

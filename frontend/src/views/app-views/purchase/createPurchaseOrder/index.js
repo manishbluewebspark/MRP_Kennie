@@ -76,7 +76,7 @@ const generatePOItemNumber = (existingNumbers = []) => {
 const PurchaseOrderForm = () => {
   const location = useLocation();
   const isRevisionMode = location.state?.isRevision || false;
-  console.log('------isRevisionMode', isRevisionMode)
+  // console.log('------isRevisionMode', isRevisionMode)
   // 🔹 Shortage → PO flags & data
   const fromShortage = location.state?.fromShortage || false;
   const shortageItems = location.state?.shortageItems || [];
@@ -149,12 +149,12 @@ const PurchaseOrderForm = () => {
     const subTotalAmount = grossAmount + freight - totalDiscount;
 
 
-    console.log({
-      grossAmount,
-      freight,
-      totalDiscount,
-      subTotalAmount,
-    });
+    // console.log({
+    //   grossAmount,
+    //   freight,
+    //   totalDiscount,
+    //   subTotalAmount,
+    // });
 
     const gstPercent = Number(
       workOrderSettings?.gstSettings?.gstPercentage || 0

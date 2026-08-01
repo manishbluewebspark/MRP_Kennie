@@ -442,12 +442,12 @@ export const getInventoryList = async (req, res) => {
       const pickedQty = pickedMap.get(mpnIdStr) || 0;
 
 
-      console.log('------mpnIdStr', mpnIdStr)
-      console.log('-------meter pickedMap', pickedMap)
-      console.log('-------meter demandMap', demandMap)
+      // console.log('------mpnIdStr', mpnIdStr)
+      // console.log('-------meter pickedMap', pickedMap)
+      // console.log('-------meter demandMap', demandMap)
       // reduce picked globally
       const effectiveDemand = Math.max(demandQty - pickedQty, 0);
-      console.log('------effectiveDemand', effectiveDemand)
+      // console.log('------effectiveDemand', effectiveDemand)
 
 
 
@@ -659,8 +659,8 @@ export const getMaterialRequiredList = async (req, res) => {
     const pickedMap = await buildPickedMap();
 
 
-    console.log("Demand Map Size:", demandMap.size);
-    console.log("Picked Map Size:", pickedMap.size);
+    // console.log("Demand Map Size:", demandMap.size);
+    // console.log("Picked Map Size:", pickedMap.size);
 
     // Get all inventory items with MPN data
     const inventoryList = await Inventory.find(filter)
@@ -671,8 +671,8 @@ export const getMaterialRequiredList = async (req, res) => {
       })
       .lean();
 
-    console.log("Inventory Count:", inventoryList.length);
-    console.log(inventoryList[0]);
+    // console.log("Inventory Count:", inventoryList.length);
+    // console.log(inventoryList[0]);
 
     // Calculate shortage for each item
     const materialRequiredList = await Promise.all(
@@ -842,9 +842,52 @@ export const getLowStockAlerts = async (req, res) => {
 
     // ✅ 2) Inventories + workOrders
     const inventories = await Inventory.find({ mpnId: { $in: mpnIds } })
-      .populate("mpnId", "MPN description manufacturer uom leadTimeWeeks")
+      .populate("mpnId", "MPN Description Manufacturer uom leadTimeWeeks")
       .select("mpnId balanceQuantity location workOrders updatedAt")
       .lean();
+
+    const costingItems = await CostingItems.find({
+      mpn: { $in: mpnIds },
+    })
+      .select("mpn drawingId")
+      .lean();
+
+
+    const mpnDrawingMap = new Map();
+
+    for (const item of costingItems) {
+      const mpnId = String(item.mpn);
+
+      if (!mpnDrawingMap.has(mpnId)) {
+        mpnDrawingMap.set(mpnId, new Set());
+      }
+
+      mpnDrawingMap.get(mpnId).add(String(item.drawingId));
+    }
+
+
+    const allDrawingIds = [
+      ...new Set(costingItems.map(x => String(x.drawingId)))
+    ];
+
+    const workOrderDocs = await WorkOrder.find({
+      drawingId: { $in: allDrawingIds }
+    })
+      .select("_id drawingId workOrderNo needDate quantity")
+      .lean();
+
+
+    const drawingWorkOrderMap = new Map();
+
+    for (const wo of workOrderDocs) {
+      const key = String(wo.drawingId);
+
+      if (!drawingWorkOrderMap.has(key)) {
+        drawingWorkOrderMap.set(key, []);
+      }
+
+      drawingWorkOrderMap.get(key).push(wo);
+    }
 
     // ✅ 3) Build alerts
     const now = new Date();
@@ -853,9 +896,27 @@ export const getLowStockAlerts = async (req, res) => {
       .map((inv) => {
         const mpn = inv.mpnId;
 
+
+
+        // const drawingIds = [...new Set(costingItems.map(c => c.drawingId))];
+
+
+        const mpnId = String(inv.mpnId._id);
+
+        const drawingIds = [...(mpnDrawingMap.get(mpnId) || [])];
+
+        const workOrders = [
+          ...new Map(
+            drawingIds
+              .flatMap(id => drawingWorkOrderMap.get(id) || [])
+              .map(w => [String(w._id), w])
+          ).values()
+        ];
+
+
         const currentStock = Number(inv.balanceQuantity || 0);
 
-        const mpnId = String(inv.mpnId?._id || inv.mpnId);
+        // const mpnId = String(inv.mpnId?._id || inv.mpnId);
 
         const demandQty = Number(demandMap.get(mpnId) || 0);
 
@@ -864,7 +925,7 @@ export const getLowStockAlerts = async (req, res) => {
         const totalRequired = Math.max(0, demandQty - pickedQty);
 
         const shortfall = Math.max(0, totalRequired - currentStock);
-        const workOrders = (inv.workOrders || []).filter(w => w?.needDate);
+        const filteredWorkOrders = workOrders.filter(w => w?.needDate);
 
         const earliestNeedDate = workOrders
           .map(w => new Date(w.needDate))
@@ -885,8 +946,8 @@ export const getLowStockAlerts = async (req, res) => {
         return {
           mpnId: mpn?._id || inv.mpnId,
           mpnNumber: mpn?.MPN || "N/A",
-          description: mpn?.description || "",
-          manufacturer: mpn?.manufacturer || "",
+          description: mpn?.Description || "",
+          manufacturer: mpn?.Manufacturer || "",
           uom: mpn?.uom || "PCS",
 
           currentStock,
@@ -910,6 +971,7 @@ export const getLowStockAlerts = async (req, res) => {
           lastUpdated: inv.updatedAt || new Date(),
         };
       })
+
       .filter(Boolean);
 
     // ✅ 4) Sorting
@@ -1816,10 +1878,10 @@ export const getMaterialShortages = async (req, res) => {
             if (!match) return;
           }
 
-          console.log("MPN FILTER", {
-            requestMpnId: mpnId,
-            detailMpnId: d.mpnId,
-          });
+          // console.log("MPN FILTER", {
+          //   requestMpnId: mpnId,
+          //   detailMpnId: d.mpnId,
+          // });
 
           shortages.push({
             workOrderId: wo._id,

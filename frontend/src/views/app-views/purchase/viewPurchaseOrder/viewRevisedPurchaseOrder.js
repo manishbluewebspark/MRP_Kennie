@@ -84,7 +84,7 @@ const PurchaseReviseOrderDetailsPage = () => {
     setDownloadPdf(true)
     const res = await PurchaseOrderService.exportRevisedPurchaseOrderPDF(id);
 
-    console.log('--------res',res)
+    // console.log('--------res',res)
 
     const blob = new Blob([res.data], { type: "application/pdf" });
     const url = window.URL.createObjectURL(blob);

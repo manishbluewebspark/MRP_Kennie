@@ -7,15 +7,15 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 
 const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData, closePO }) => {
-  console.log("closePO", closePO);
-  console.log("type", typeof closePO);
+  // console.log("closePO", closePO);
+  // console.log("type", typeof closePO);
   const [form] = Form.useForm();
   const [receivedQuantities, setReceivedQuantities] = useState({});
   const [rejectedQuantities, setRejectedQuantities] = useState({});
   const [remarks, setRemarks] = useState({});
 
 
-  console.log('----purchaseOrderData', purchaseOrderData)
+  // console.log('----purchaseOrderData', purchaseOrderData)
   // Initialize quantities when modal opens or purchaseOrderData changes
   useEffect(() => {
     if (visible && purchaseOrderData?.items) {

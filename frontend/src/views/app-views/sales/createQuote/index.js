@@ -569,7 +569,7 @@ const CreateQuote = () => {
   }, 400);
 
   const handleEdit = async (record) => {
-    console.log('--------sss', record)
+    // console.log('--------sss', record)
     setEditingQuote(record);
 
     try {

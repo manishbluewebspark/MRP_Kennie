@@ -1048,7 +1048,7 @@ const SkillLevelCostingList = () => {
         search,
       });
 
-      console.log("Material shortage response:", res);
+      // console.log("Material shortage response:", res);
 
       if (res?.success && Array.isArray(res?.data)) {
         setMaterialShortages(res.data);

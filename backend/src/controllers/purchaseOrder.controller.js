@@ -164,7 +164,7 @@ export const addPurchaseOrder = async (req, res) => {
 
     const finalAmount = +(subTotal + freightAmount + data.ostTax);
 
-    console.log('------finalAmount', finalAmount)
+    // console.log('------finalAmount', finalAmount)
 
 
 
@@ -859,7 +859,7 @@ export const revisedPurchaseOrder = async (req, res) => {
     const oldString = JSON.stringify(sortObject(oldData));
     const newString = JSON.stringify(sortObject(newData));
 
-    console.log(oldString === newString);
+    // console.log(oldString === newString);
 
     if (oldString === newString) {
       return res.status(400).json({
@@ -1576,7 +1576,7 @@ export const sendPurchaseOrderMail = async (req, res) => {
         select: "MPN Description",
       })
       .lean();
-    console.log('--------purchaseOrder', purchaseOrder)
+    // console.log('--------purchaseOrder', purchaseOrder)
 
     if (!purchaseOrder) {
       return res.status(404).json({
@@ -1616,7 +1616,7 @@ export const sendPurchaseOrderMail = async (req, res) => {
         (item) => Number(item?.receivedQtyTotal || 0) > 0
       );
 
-      console.log('----rejectedItems', rejectedItems)
+      // console.log('----rejectedItems', rejectedItems)
 
       subject = `Rejected Material / Replacement Required - ${purchaseOrder.poNumber}`;
 
@@ -2469,7 +2469,7 @@ export const getPurchaseShortageList = async (req, res) => {
     }
 
 
-    console.log('------poReservedMap', poReservedMap)
+    // console.log('------poReservedMap', poReservedMap)
     // =========================================================
     // 4) FETCH ALL MPN LIBS
     // =========================================================
@@ -2589,7 +2589,7 @@ export const getPurchaseShortageList = async (req, res) => {
         const key = `${wo._id}_${mpnId}`;
         const pickedQty = Number(pickedMap.get(key) || 0);
 
-        console.log('-------pickedQty', pickedQty)
+        // console.log('-------pickedQty', pickedQty)
         const remainingRequired = Math.max(totalRequired - pickedQty, 0);
 
         const existing = mpnUsagePerMpn.get(mpnId) || {
@@ -2656,7 +2656,7 @@ export const getPurchaseShortageList = async (req, res) => {
     let list = [];
 
     for (const row of mpnUsagePerMpn.values()) {
-      console.log('------row', row)
+      // console.log('------row', row)
       const mpnId = row.mpnId;
 
       const globalStock = Number(inventoryMap.get(mpnId) || 0);

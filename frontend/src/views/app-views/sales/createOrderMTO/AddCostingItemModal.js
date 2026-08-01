@@ -290,7 +290,7 @@ const AddCostingItemModal = ({
 
   const handleChildPartChange = (value, option) => {
     // value = { value: _id, label: ChildPartNo }
-    console.log('------------last')
+    // console.log('------------last')
     const selected = option?.data;
 
     setChildPartData(selected || null);
@@ -366,13 +366,13 @@ const AddCostingItemModal = ({
     const selectedUom = uoms.find(u => u._id === uomId);
 
     const currentPrice = Number(form.getFieldValue("baseunitPrice"));
-    console.log('-------currentPrice',currentPrice)
+    // console.log('-------currentPrice',currentPrice)
 
     const from = baseUom;
     const to = selectedUom?.code;
-console.log('-------from',from,to)
+// console.log('-------from',from,to)
     const newPrice = convertLengthUnitPrice(currentPrice, from, to);
-   console.log('-------newPrice',newPrice)
+  //  console.log('-------newPrice',newPrice)
     form.setFieldsValue({
       unitPrice: Number(newPrice.toFixed(6))
     });
@@ -384,7 +384,7 @@ console.log('-------from',from,to)
     const selected = mpnList.find((m) => String(m._id) === String(mpnId));
     if (!selected) return;
 
-    console.log('-------selected',selected)
+    // console.log('-------selected',selected)
     setPackingUOM(selected?.UOM?.code)
     const uomId =
       selected?.UOM?._id ||
@@ -416,7 +416,7 @@ console.log('-------from',from,to)
   // ---------- EFFECT: initialize form values on open / edit ----------
   useEffect(() => {
     if (!visible) return;
-    console.log('-------editData',editData)
+    // console.log('-------editData',editData)
     // reset for add
     if (!editData) {
       form.resetFields();

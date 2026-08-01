@@ -841,7 +841,7 @@ export const createDrawing = async (req, res) => {
 // 🟢 UPDATE DRAWING
 export const updateDrawing = async (req, res) => {
   try {
-    console.log('--------', req.body)
+    // console.log('--------', req.body)
     const { id } = req.params;
     const userId = req.user.id;
     const data = req.body;
@@ -1659,7 +1659,7 @@ export const addCostingItem = async (req, res) => {
     const mpnCurrency = await MPN.findById(req.body.mpn).populate("currency", "code")
     const sourceCurrency = (mpnCurrency?.currency?.code || "USD").toUpperCase();
 
-    console.log('-----drawingCurrency-----sourceCurrency', drawingCurrency, sourceCurrency)
+    // console.log('-----drawingCurrency-----sourceCurrency', drawingCurrency, sourceCurrency)
     // ✅ Convert only when needed
     const salesPriceInDrawingCurrency =
       sourceCurrency === drawingCurrency
@@ -1810,7 +1810,7 @@ export const updateCostingItem = async (req, res) => {
     // 2️⃣ Load Existing Item
     // -----------------------------
     const existingItem = await CostingItems.findById(itemId);
-    console.log('-----existingItem-', existingItem)
+    // console.log('-----existingItem-', existingItem)
 
     if (!existingItem) {
       return res.status(404).json({ success: false, error: "Costing item not found" });
@@ -2883,7 +2883,7 @@ export const importCostingItems = async (req, res) => {
           });
 
 
-          console.log('------childPart', childPart)
+          // console.log('------childPart', childPart)
 
 
           if (!childPart || !childPart.mpn) {
@@ -6585,7 +6585,7 @@ export const importDrawings = async (req, res) => {
 // };
 
 const convertLengthUnitPriceNew = (pricePerBaseUnit, baseUnit, targetUnit) => {
-  console.log('------pricePerBaseUnit, baseUnit, targetUnit', pricePerBaseUnit, baseUnit, targetUnit)
+  // console.log('------pricePerBaseUnit, baseUnit, targetUnit', pricePerBaseUnit, baseUnit, targetUnit)
   if (!pricePerBaseUnit || !baseUnit || !targetUnit) return pricePerBaseUnit;
 
   const lengthMap = {
@@ -6665,7 +6665,7 @@ export const updateLatestPrice = async (req, res) => {
       })
       .lean(false)
 
-    console.log('-------costingItem', costingItem)
+    // console.log('-------costingItem', costingItem)
 
     if (!costingItem) {
       return res.status(404).json({ success: false, message: "Costing item not found" });
@@ -6698,7 +6698,7 @@ export const updateLatestPrice = async (req, res) => {
     const sourceCurrency = (costingItem.mpn.currency?.code || "USD").toUpperCase();
 
 
-    console.log('------drawingCurrency----sourceCurrency', drawingCurrency, sourceCurrency)
+    // console.log('------drawingCurrency----sourceCurrency', drawingCurrency, sourceCurrency)
     // -----------------------------
     // 3️⃣ Get & Convert Unit Price
     // -----------------------------
@@ -6708,7 +6708,7 @@ export const updateLatestPrice = async (req, res) => {
 
     const newPrice = convertLengthUnitPriceNew(incomingUnitPrice, costingItem?.mpn?.UOM?.code, costingItem?.uom?.code)
 
-    console.log('------newPrice', newPrice)
+    // console.log('------newPrice', newPrice)
 
     if (!(incomingUnitPrice > 0)) {
       return res.status(400).json({
@@ -6728,7 +6728,7 @@ export const updateLatestPrice = async (req, res) => {
           { decimals: 2 }
         );
 
-    console.log('------convertedUnitPrice', convertedUnitPrice)
+    // console.log('------convertedUnitPrice', convertedUnitPrice)
 
     // -----------------------------
     // 4️⃣ Sync fields from MPN

@@ -291,7 +291,7 @@ const PickingDetailModal = ({
             const isChecked = shortageChecked[recordKey] || false;
             const shortageValue = shortageInputs[recordKey] || 0;
 
-            console.log(`Rendering shortage for ${record.mpn}: key=${recordKey}, isChecked=${isChecked}, value=${shortageValue}`);
+            // console.log(`Rendering shortage for ${record.mpn}: key=${recordKey}, isChecked=${isChecked}, value=${shortageValue}`);
 
             return (
                 <Space>
@@ -300,7 +300,7 @@ const PickingDetailModal = ({
                         checked={isChecked}
                         onChange={(e) => {
                             const checked = e.target.checked;
-                            console.log(`Checkbox changed for ${record.mpn}: ${checked}`);
+                            // console.log(`Checkbox changed for ${record.mpn}: ${checked}`);
                             setShortageChecked(prev => ({ ...prev, [recordKey]: checked }));
                             if (!checked) {
                                 setShortageInputs(prev => {
@@ -435,8 +435,8 @@ const PickingDetailModal = ({
             // );
 
 
-            console.log("existingPicking", existingPicking);
-            console.log("processHistory", wo?.processHistory);
+            // console.log("existingPicking", existingPicking);
+            // console.log("processHistory", wo?.processHistory);
 
             const invalidMaterials = formattedMaterials.filter((item) => {
                 const oldItem = existingPicking?.details?.find(
@@ -466,7 +466,7 @@ const PickingDetailModal = ({
                 );
             });
 
-            console.log("Invalid Materials", invalidMaterials);
+            // console.log("Invalid Materials", invalidMaterials);
 
 
             if (invalidMaterials.length > 0) {
@@ -565,8 +565,8 @@ const PickingDetailModal = ({
                 const remainingPossibleProducts =
                     Math.max(0, possibleProducts - alreadyCompletedQty);
 
-                console.log("Possible Products:", possibleProducts);
-                console.log("Remaining Possible:", remainingPossibleProducts);
+                // console.log("Possible Products:", possibleProducts);
+                // console.log("Remaining Possible:", remainingPossibleProducts);
 
                 if (remainingPossibleProducts <= 0 && additionalQty > 0) {
                     message.error(
@@ -668,7 +668,7 @@ const PickingDetailModal = ({
                 workOrderId: wo.workOrderId,
             };
 
-            console.log("Saving payload:", JSON.stringify(payload, null, 2));
+            // console.log("Saving payload:", JSON.stringify(payload, null, 2));
             onSave?.(payload);
         });
     };

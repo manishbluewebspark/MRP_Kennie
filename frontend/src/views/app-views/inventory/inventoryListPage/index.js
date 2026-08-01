@@ -6,6 +6,7 @@ import {
   InfoCircleFilled,
   FileSearchOutlined,
   SettingFilled,
+  CheckCircleFilled,
 } from "@ant-design/icons";
 
 import GlobalTableActions from "components/GlobalTableActions";
@@ -21,6 +22,7 @@ import UpdateOutgoingQuantityModal from "../mtoInventoryList/UpdateOutgoingQuant
 import IncomingStockModal from "./IncomingStockModal";
 import { render } from "@testing-library/react";
 import { fromMeter, toMeter } from "utils/unitConversion";
+import WorkOrderService from "services/WorkOrderService";
 
 const { Title, Text } = Typography;
 
@@ -67,15 +69,15 @@ const InventoryListPage = () => {
   const [showPoDataModal, setShowPoDataModal] = useState(false);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
   const [selectedPurchaseData, setSelectedPurchaseData] = useState(null);
-const [view, setView] = useState("all"); // all | incoming | shortage | low
+  const [view, setView] = useState("all"); // all | incoming | shortage | low
 
   const { purchaseOrders } = useSelector((state) => state.purchaseOrders);
 
   // ✅ Debounced Search (page reset)
- const handleSearch = useDebounce((value) => {
-  setSearch(value);
-  setPagination((prev) => ({ ...prev, page: 1, total: 0 })); // ✅ important
-}, 500);
+  const handleSearch = useDebounce((value) => {
+    setSearch(value);
+    setPagination((prev) => ({ ...prev, page: 1, total: 0 })); // ✅ important
+  }, 500);
 
   // ✅ Inventory List API (ONLY inventory_list needs pagination+search)
   const getInventoryList = useCallback(async () => {
@@ -112,10 +114,20 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
   const getMaterialRequiredList = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page: 1, limit: 1000, search }; // or use pagination if you want later
-      const response = await InventoryService.getMaterialRequiredList(params);
-      if (response?.success) {
+      const params = {
+        page: pagination.page,
+        limit: pagination.limit,
+        search,
+      };
+
+      const response = await WorkOrderService.getTotalMPNNeeded(params);
+      // console.log('-----response',response)
+      if (response?.status) {
         setMaterialRequiredData(response.data || []);
+        setPagination((prev) => ({
+          ...prev,
+          total: Number(response.total || 0),
+        }));
       } else {
         message.error(response?.message || "Failed to fetch material required data");
       }
@@ -130,10 +142,20 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
   const getLowStockAlertList = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page: 1, limit: 1000, search };
+      const params = {
+        page: pagination.page,
+        limit: pagination.limit,
+        search,
+      };
+
       const response = await InventoryService.getLowStockAlertList(params);
+
       if (response?.success) {
         setLowStockAlertData(response.data || []);
+        setPagination((prev) => ({
+          ...prev,
+          total: Number(response.total || 0),
+        }));
       } else {
         message.error(response?.message || "Failed to fetch low stock alerts");
       }
@@ -157,11 +179,13 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
   }, [activeTab, getInventoryList, getLowStockAlertList, getMaterialRequiredList]);
 
   // ✅ When tab changes reset pagination (only relevant for inventory_list)
-  useEffect(() => {
-    if (activeTab === "inventory_list") {
-      setPagination((prev) => ({ ...prev, page: 1 }));
-    }
-  }, [activeTab]);
+ useEffect(() => {
+  setPagination((prev) => ({
+    ...prev,
+    page: 1,
+    total: 0,
+  }));
+}, [activeTab]);
 
   useEffect(() => {
     dispatch(fetchPurchaseOrders({ status: "Pending" }));
@@ -278,118 +302,145 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
   };
 
   // ================= Columns =================
-  const materialRequiredColumns = [
-    {
-      title: "",
-      dataIndex: "MPN",
-      key: "MPN",
-      render: (_, record) => (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-          <ExclamationCircleFilled style={{ color: "#ff4d4f", fontSize: "24px", alignSelf: "center" }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <Title level={4} style={{ margin: 0, fontSize: "16px", fontWeight: "bold" }}>
-                {record?.MPN}
-              </Title>
-              <Tag color="red" style={{ fontSize: "14px", fontWeight: "bold", padding: "2px 8px" }}>
-                {record?.Description}
-              </Tag>
-            </div>
+ const materialRequiredColumns = [
+  {
+    title: "",
+    key: "mpn",
+    render: (_, record) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 0" }}>
+        <ExclamationCircleFilled style={{ color: record.shortfall > 0 ? "#ff4d4f" : "#52c41a", fontSize: 16 }} />
+        <span style={{ fontWeight: 600, fontSize: 13, minWidth: 80 }}>{record.mpn}</span>
+        <Tag color={record.shortfall > 0 ? "red" : "green"} style={{ fontSize: 10, padding: "0 4px", lineHeight: "18px" }}>
+          {record.shortfall > 0 ? `-${record.shortfall}` : "✔"}
+        </Tag>
+        <span style={{ fontSize: 11, color: "#999" }}>{record.description?.slice(0, 20)}</span>
+        <span style={{ fontSize: 11, color: "#ccc", marginLeft: "auto" }}>
+          {record.workOrderNo} · {record.currentStock}/{record.totalNeeded} {record.uom}
+        </span>
+      </div>
+    ),
+  },
+];
 
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
-              <Text type="secondary" style={{ fontSize: "12px" }}>
-                Required by Work Orders: {record?.workOrders}
-              </Text>
-              <Text type="secondary" style={{ fontSize: "12px" }}>
-                Current: {record?.CurrentQty}
-              </Text>
-            </div>
+ const urgencyMeta = {
+  critical: { 
+    color: "#ff4d4f", 
+    bg: "#fff1f0", 
+    label: "CRITICAL", 
+    icon: <ExclamationCircleFilled style={{ color: "#ff4d4f", fontSize: 20 }} /> 
+  },
+  urgent: { 
+    color: "#faad14", 
+    bg: "#fffbe6", 
+    label: "URGENT", 
+    icon: <ExclamationCircleFilled style={{ color: "#faad14", fontSize: 20 }} /> 
+  },
+  normal: { 
+    color: "#52c41a", 
+    bg: "#f6ffed", 
+    label: "NORMAL", 
+    icon: <CheckCircleFilled style={{ color: "#52c41a", fontSize: 20 }} /> 
+  }
+};
 
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
-              <Text type="secondary" style={{ fontSize: "12px" }}>
-                Alpha + UOME: {record?.UOM}
-              </Text>
-              <Text type="secondary" style={{ fontSize: "12px" }}>
-                Required: {record?.RequiredQty}
-              </Text>
-            </div>
-          </div>
-        </div>
-      ),
+const inventoryAlertsColumns = [
+  {
+    title: "Item",
+    key: "index",
+    width: 60,
+    render: (_, __, index) => index + 1,
+  },
+  {
+    title: "Work Order no.",
+    dataIndex: "workOrderNo",
+    key: "workOrderNo",
+    render: (workOrderNo, record) => {
+      // If multiple work orders, show all
+      if (record?.workOrders?.length > 0) {
+        return record.workOrders.map(w => w.workOrderNo).join(", ");
+      }
+      return workOrderNo || "N/A";
+    }
+  },
+  {
+    title: "MPN",
+    dataIndex: "mpnNumber",
+    key: "mpnNumber",
+    render: (mpn, record) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontWeight: 500 }}>{mpn}</span>
+      </div>
+    ),
+  },
+  {
+    title: "Description",
+    dataIndex: "description",
+    key: "description",
+    render: (desc) => desc || "N/A",
+    ellipsis: true,
+  },
+  {
+    title: "Manufacturer",
+    dataIndex: "manufacturer",
+    key: "manufacturer",
+    render: (mfr) => mfr || "N/A",
+  },
+  {
+    title: "UOM",
+    dataIndex: "uom",
+    key: "uom",
+    render: (uom) => uom || "PCS",
+    width:80,
+    align:'center'
+  },
+  {
+    title: "Need Date",
+    key: "needDate",
+    render: (_, record) => {
+      if (record?.workOrders?.length > 0) {
+        return record.workOrders.map(w => 
+          new Date(w.needDate).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+          })
+        ).join(", ");
+      }
+      if (record?.earliestNeedDate) {
+        return new Date(record.earliestNeedDate).toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric"
+        });
+      }
+      return "N/A";
     },
-  ];
-
-  const inventoryAlertsColumns = [
-    {
-      title: "Low Stock Alerts",
-      dataIndex: "mpnNumber",
-      key: "mpnNumber",
-      render: (_, record) => {
-        const mpn = record?.mpnNumber || record?.MPN || "N/A";
-        const manufacturer = record?.manufacturer || record?.Manufacturer || "N/A";
-        const desc = record?.description || record?.Description || "";
-        const uom = record?.uom || record?.UOM || "PCS";
-
-        const current = Number(record?.currentStock ?? record?.CurrentStock ?? 0);
-        const required = Number(record?.totalRequired ?? record?.RecommendedOrder ?? 0);
-        const shortfall = Number(record?.shortfall ?? Math.max(required - current, 0));
-
-        const urgency = (record?.urgency || "normal").toLowerCase();
-        const meta = urgencyMeta[urgency] || urgencyMeta.normal;
-
-        return (
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-            {meta.icon}
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <div>
-                  <Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
-                    {mpn}
-                  </Title>
-                  <div style={{ marginTop: 6 }}>
-                    <Tag color={meta.tagColor} style={{ fontWeight: 700, fontSize: 11 }}>
-                      {meta.label}
-                    </Tag>
-                  </div>
-                </div>
-
-                <Tag color="geekblue" style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px" }}>
-                  {manufacturer}
-                </Tag>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {desc ? `Required by Work Orders: ${desc}` : "Required by Work Orders"}
-                </Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Location: {record?.storageLocation || record?.location || "Not Set"}
-                </Text>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  UOM: <b>{uom}</b>
-                </Text>
-
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Current: <b>{current}</b>
-                  </Text>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Required: <b>{required}</b>
-                  </Text>
-                  <Text style={{ fontSize: 12, color: shortfall > 0 ? "#ff4d4f" : "#52c41a" }}>
-                    Shortfall: <b>{shortfall}</b>
-                  </Text>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      },
-    },
-  ];
+  },
+  {
+  title: "Shortage Qty",
+  key: "shortfall",
+   width:120,
+    align:'center',
+  render: (_, record) => {
+    const shortfall = Number(record?.shortfall ?? 0);
+    return (
+      <span style={{ 
+        display: "inline-block",
+        padding: "2px 12px",
+        borderRadius: "4px",
+        backgroundColor: shortfall > 0 ? "#fff1f0" : "#f6ffed",
+        color: shortfall > 0 ? "#ff4d4f" : "#52c41a",
+        fontWeight: "bold",
+        border: `1px solid ${shortfall > 0 ? "#ffccc7" : "#b7eb8f"}`,
+        minWidth: "40px",
+        textAlign: "center"
+      }}>
+        {shortfall}
+      </span>
+    );
+  },
+},
+];
 
   const inventoryListColumns = [
     {
@@ -401,34 +452,34 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
     { title: "MPN", dataIndex: "MPN", key: "MPN", width: 120 },
     { title: "Manufacturer", dataIndex: "Manufacturer", key: "Manufacturer", width: 150 },
     { title: "Description", dataIndex: "Description", key: "Description", width: 180 },
-   {
-  title: "UOM",
-  dataIndex: "UOM",
-  key: "UOM",
-  width: 120,
-  render: (_, record) => {
-    const uom = record?.UOM;
+    {
+      title: "UOM",
+      dataIndex: "UOM",
+      key: "UOM",
+      width: 120,
+      render: (_, record) => {
+        const uom = record?.UOM;
 
-    if (!uom) return <Text>-</Text>;
-    if (typeof uom === "string") return <Text>{uom}</Text>;
-    if (typeof uom === "object" && uom.code) return <Text>{uom.code}</Text>;
+        if (!uom) return <Text>-</Text>;
+        if (typeof uom === "string") return <Text>{uom}</Text>;
+        if (typeof uom === "object" && uom.code) return <Text>{uom.code}</Text>;
 
-    return <Text>-</Text>;
-  },
-},
+        return <Text>-</Text>;
+      },
+    },
     { title: "Storage", dataIndex: "Storage", key: "Storage", width: 100, align: "center" },
     {
-  title: "Balance Qty",
-  dataIndex: "balanceQuantity",
-  key: "balanceQuantity",
-  width: 200,
-  align: "center",
-  render: (_, record) => {
-    return fromMeter(
-      record?.balanceQuantity,
-      record?.UOM   // yaha apna correct field name do
-    );
-  }
+      title: "Balance Qty",
+      dataIndex: "balanceQuantity",
+      key: "balanceQuantity",
+      width: 200,
+      align: "center",
+      render: (_, record) => {
+        return fromMeter(
+          record?.balanceQuantity,
+          record?.UOM   // yaha apna correct field name do
+        );
+      }
     },
     {
       title: "Incoming Qty",
@@ -443,22 +494,26 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
       record?.IncomingQty,
       record?.UOM   // yaha apna correct field name do
     )}</span> */}
-    {record?.IncomingQty}
+          {record?.IncomingQty}
         </div>
       ),
     },
-    { title: "Demand Qty", dataIndex: "DemandQty", key: "DemandQty", width: 120, align: "center",render: (_, record) => {
-    return fromMeter(
-      record?.DemandQty,
-      record?.UOM   // yaha apna correct field name do
-    );
-  } },
-    { title: "Shortage Qty", dataIndex: "ShortageQty", key: "ShortageQty", width: 120, align: "center",render: (_, record) => {
-    return fromMeter(
-      record?.ShortageQty,
-      record?.UOM   // yaha apna correct field name do
-    );
-  } },
+    {
+      title: "Demand Qty", dataIndex: "DemandQty", key: "DemandQty", width: 120, align: "center", render: (_, record) => {
+        return fromMeter(
+          record?.DemandQty,
+          record?.UOM   // yaha apna correct field name do
+        );
+      }
+    },
+    {
+      title: "Shortage Qty", dataIndex: "ShortageQty", key: "ShortageQty", width: 120, align: "center", render: (_, record) => {
+        return fromMeter(
+          record?.ShortageQty,
+          record?.UOM   // yaha apna correct field name do
+        );
+      }
+    },
     {
       title: "Status",
       dataIndex: "Status",
@@ -494,27 +549,27 @@ const [view, setView] = useState("all"); // all | incoming | shortage | low
     return inventoryListColumns;
   };
 
-const filterConfig = [
-  {
-    type: "select",
-    name: "view",                 // ✅ important: Form.Item expects `name`
-    label: "View",
-    placeholder: "Select filter",
-    options: [
-      { label: "All", value: "all" },
-      { label: "Show Shortage Only", value: "shortage" },
-      { label: "Show Incoming Qty Only", value: "incoming" },
-      { label: "Show Low Stock Only", value: "low" }, // optional
-    ],
-  },
-];
+  const filterConfig = [
+    {
+      type: "select",
+      name: "view",                 // ✅ important: Form.Item expects `name`
+      label: "View",
+      placeholder: "Select filter",
+      options: [
+        { label: "All", value: "all" },
+        { label: "Show Shortage Only", value: "shortage" },
+        { label: "Show Incoming Qty Only", value: "incoming" },
+        { label: "Show Low Stock Only", value: "low" }, // optional
+      ],
+    },
+  ];
 
 
-const handleFilterSubmit = async (data) => {
-  setView(data?.view || "all");
-  setPagination((p) => ({ ...p, page: 1, total: 0 })); // ✅ important
-  setIsFilterModalOpen(false);
-};
+  const handleFilterSubmit = async (data) => {
+    setView(data?.view || "all");
+    setPagination((p) => ({ ...p, page: 1, total: 0 })); // ✅ important
+    setIsFilterModalOpen(false);
+  };
 
 
 
@@ -552,13 +607,13 @@ const handleFilterSubmit = async (data) => {
         }}
         showExport={true}
         onExport={handleExport}
-        showFilter={true}
+      showFilter={activeTab === "inventory_list"}
         onFilter={() => setIsFilterModalOpen(true)}
         showExportPDF={false}
         showProductSetting={false}
         onProductSetting={() => setIsPurchaseOrderModalOpen(true)}
         showProductSettingText="Receive Material"
-        onExportPDF={() => {}}
+        onExportPDF={() => { }}
       />
 
       <Card>
@@ -567,23 +622,19 @@ const handleFilterSubmit = async (data) => {
           dataSource={getCurrentData()}
           loading={loading}
           rowKey="_id"
-          pagination={
-            activeTab === "inventory_list"
-              ? {
-                  current: pagination.page,
-                  pageSize: pagination.limit,
-                  total: pagination.total,
-                  showSizeChanger: true,
-                  onChange: (page, pageSize) => {
-                    setPagination((prev) => ({
-                      ...prev,
-                      page,
-                      limit: pageSize,
-                    }));
-                  },
-                }
-              : false
-          }
+          pagination={{
+  current: pagination.page,
+  pageSize: pagination.limit,
+  total: pagination.total,
+  showSizeChanger: true,
+  onChange: (page, pageSize) => {
+    setPagination((prev) => ({
+      ...prev,
+      page,
+      limit: pageSize,
+    }));
+  },
+}}
         />
       </Card>
 
@@ -610,7 +661,7 @@ const handleFilterSubmit = async (data) => {
         inventoryItem={selectedInventoryItem}
       />
 
-      <IncomingStockModal visible={showPoDataModal} onCancel={() => {setShowPoDataModal(false); getInventoryList()}} purchaseData={selectedPurchaseData} />
+      <IncomingStockModal visible={showPoDataModal} onCancel={() => { setShowPoDataModal(false); getInventoryList() }} purchaseData={selectedPurchaseData} />
     </div>
   );
 };
