@@ -4708,20 +4708,20 @@ export const getAllChilPartByDrawingId = async (req, res) => {
 
 export const getTotalMPNNeeded = async (req, res) => {
   try {
-   const {
-  drawingDate,
-  customer,
-  project,
-  drawingRange,
-  page = 1,
-  limit = 10,
-  search
-} = req.query;
+    const {
+      drawingDate,
+      customer,
+      project,
+      drawingRange,
+      page = 1,
+      limit = 10,
+      search
+    } = req.query;
 
 
-const pageNumber = Math.max(1, Number(page));
-const limitNumber = Math.max(1, Number(limit));
-const searchText = (search || "").trim().toLowerCase();
+    const pageNumber = Math.max(1, Number(page));
+    const limitNumber = Math.max(1, Number(limit));
+    const searchText = (search || "").trim().toLowerCase();
     // =========================================================
     // 1️⃣ DRAWING FILTERS
     // =========================================================
@@ -4729,7 +4729,7 @@ const searchText = (search || "").trim().toLowerCase();
     const drawingFilters = {};
 
 
-   
+
     if (drawingRange === "range1") {
       drawingFilters.drawingNo = { $gte: 0, $lte: 50 };
     }
@@ -4841,39 +4841,46 @@ const searchText = (search || "").trim().toLowerCase();
       if (!costingArr.length) continue;
 
       const woQty = Number(wo.quantity || 0);
+for (const ci of costingArr) {
+    if (!ci.mpn) continue;
 
-      for (const ci of costingArr) {
-        if (!ci.mpn) continue;
+    const mpnId = String(ci.mpn);
 
-        const mpnId = String(ci.mpn);
+    mpnIds.add(mpnId);
 
-        mpnIds.add(mpnId);
+    const neededQty = Number(ci.quantity || 0) * woQty;
 
-        const neededQty =
-          Number(ci.quantity || 0) * woQty;
+    const key = mpnId;
 
-        const key = `${mpnId}_${wo._id}`;
-
-        if (!mpnUsageMap.has(key)) {
-          mpnUsageMap.set(key, {
+    if (!mpnUsageMap.has(key)) {
+        mpnUsageMap.set(key, {
             mpnId,
+            description: ci.description || "",
+            manufacturer: ci.manufacturer || "",
+            uomId: ci.uom || null,
+            totalNeeded: 0,
+            workOrders: [],
+        });
+    }
+
+    const row = mpnUsageMap.get(key);
+
+    row.totalNeeded += neededQty;
+
+    const existingWO = row.workOrders.find(
+        w => w.workOrderNo === wo.workOrderNo
+    );
+
+    if (existingWO) {
+        existingWO.quantity += neededQty;
+    } else {
+        row.workOrders.push({
             drawingId,
             workOrderNo: wo.workOrderNo,
-
-            description:
-              ci.description || "",
-
-            manufacturer:
-              ci.manufacturer || "",
-
-            uomId: ci.uom || null,
-
-            totalNeeded: 0,
-          });
-        }
-
-        mpnUsageMap.get(key).totalNeeded += neededQty;
-      }
+            quantity: neededQty,
+        });
+    }
+}
     }
 
     // =========================================================
@@ -4973,32 +4980,33 @@ const searchText = (search || "").trim().toLowerCase();
       );
 
       const mpnNumber = (
-  mpn?.MPN ||
-  mpn?.mpn ||
-  ""
-).toLowerCase();
+        mpn?.MPN ||
+        mpn?.mpn ||
+        ""
+      ).toLowerCase();
 
-const workOrderNo = (
-  row.workOrderNo || ""
-).toLowerCase();
+  const workOrderNo = row.workOrders
+  .map(x => x.workOrderNo)
+  .join(", ")
+  .toLowerCase();
 
-if (
-  searchText &&
-  !mpnNumber.includes(searchText) &&
-  !workOrderNo.includes(searchText)
-) {
-  continue;
-}
+      if (
+        searchText &&
+        !mpnNumber.includes(searchText) &&
+        !workOrderNo.includes(searchText)
+      ) {
+        continue;
+      }
 
       // only shortage
       if (shortfall <= 0) continue;
 
 
-      
+
       result.push({
         drawingId: row.drawingId,
 
-        workOrderNo: row.workOrderNo,
+        workOrderNo: workOrderNo.toUpperCase(),
 
         mpnId: row.mpnId,
 
@@ -5039,22 +5047,22 @@ if (
     // 🔟 RESPONSE
     // =========================================================
 
-   const total = result.length;
+    const total = result.length;
 
-const paginatedData = result.slice(
-  (pageNumber - 1) * limitNumber,
-  pageNumber * limitNumber
-);
+    const paginatedData = result.slice(
+      (pageNumber - 1) * limitNumber,
+      pageNumber * limitNumber
+    );
 
-return res.json({
-  status: true,
-  message: "Filtered Total MPN Needed fetched successfully",
-  total,
-  page: pageNumber,
-  limit: limitNumber,
-  totalPages: Math.ceil(total / limitNumber),
-  data: paginatedData,
-});
+    return res.json({
+      status: true,
+      message: "Filtered Total MPN Needed fetched successfully",
+      total,
+      page: pageNumber,
+      limit: limitNumber,
+      totalPages: Math.ceil(total / limitNumber),
+      data: paginatedData,
+    });
 
   } catch (error) {
     console.error(

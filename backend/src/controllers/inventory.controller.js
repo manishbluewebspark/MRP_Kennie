@@ -15,7 +15,7 @@ import SystemSettings from "../models/SystemSettings.js";
 
 import mongoose from "mongoose";
 import CostingItems from "../models/CostingItem.js";
-import { convertQty, convertToBaseUOM, convertUom } from "../utils/uomController.js";
+import { convertQty, convertToBaseUOM, convertToMeter, convertUom } from "../utils/uomController.js";
 import { round } from "../utils/currency.js";
 
 
@@ -144,6 +144,115 @@ async function buildDemandMap() {
 
   return demandMap;
 }
+
+export const buildLowStockDemandMap = async () => {
+  const workOrders = await WorkOrder.find({
+    isProductionComplete: false,
+  })
+    .select("_id drawingId workOrderNo quantity needDate")
+    .lean();
+
+  if (!workOrders.length) return new Map();
+
+  const drawingWorkOrders = new Map();
+  const drawingIds = new Set();
+
+  for (const wo of workOrders) {
+    const drawingId = String(wo.drawingId);
+    if (!drawingId) continue;
+
+    drawingIds.add(drawingId);
+
+    if (!drawingWorkOrders.has(drawingId)) {
+      drawingWorkOrders.set(drawingId, []);
+    }
+
+    drawingWorkOrders.get(drawingId).push(wo);
+  }
+
+  const costingItems = await CostingItems.find({
+    drawingId: { $in: [...drawingIds] },
+    quoteType: "material",
+  })
+    .populate({
+      path: "mpn",
+      populate: {
+        path: "UOM",
+        select: "code",
+      },
+    })
+    .populate("uom", "code")
+    .lean();
+
+  const demandMap = new Map();
+
+  for (const ci of costingItems) {
+    const drawingId = String(ci.drawingId);
+    const mpnId = String(ci.mpn?._id || ci.mpn);
+
+    if (!mpnId) continue;
+
+    const workOrders = drawingWorkOrders.get(drawingId) || [];
+
+    const fromUOM =
+      ci?.uom?.code ||
+      ci?.mpn?.UOM?.code ||
+      "M";
+
+    const qtyPerDrawing = convertToBaseUOM(
+      Number(ci.quantity || 0),
+      fromUOM,
+      "M"
+    );
+
+    for (const wo of workOrders) {
+
+      const demandQty = Number(
+        (qtyPerDrawing * Number(wo.quantity || 0)).toFixed(6)
+      );
+
+      const key =
+        `${mpnId}_${new Date(wo.needDate)
+          .toISOString()
+          .split("T")[0]}`;
+
+      if (!demandMap.has(key)) {
+        demandMap.set(key, {
+          mpnId,
+          needDate: wo.needDate,
+          demandQty: 0,
+          workOrders: [],
+        });
+      }
+
+      const row = demandMap.get(key);
+
+      row.demandQty = Number(
+        (row.demandQty + demandQty).toFixed(6)
+      );
+
+     const existingWO = row.workOrders.find(
+  w => String(w.workOrderId) === String(wo._id)
+);
+
+if (existingWO) {
+  existingWO.quantity = Number(
+    (existingWO.quantity + demandQty).toFixed(6)
+  );
+} else {
+  row.workOrders.push({
+    workOrderId: wo._id,
+    workOrderNo: wo.workOrderNo,
+    drawingId: wo.drawingId,
+    quantity: demandQty,
+    needDate: wo.needDate,
+  });
+}
+    }
+  }
+
+  return demandMap;
+};
 
 const buildPickedMap = async () => {
   const workOrders = await WorkOrder.find({
@@ -566,11 +675,15 @@ export const adjustInventory = async (req, res) => {
 
 
     const baseUomId = inventory.mpnId.UOM; // ✅ BASE UOM (meter / EA)
+    console.log('------baseUomId',baseUomId)
+console.log("Input Qty:", adjustmentQuantity);
 
-    const baseAdjustmentQty = await convertQty({
+    const baseAdjustmentQty = await convertToMeter({
       qty: adjustmentQuantity,
-      fromUomId: baseUomId,
+      fromUom: baseUomId,
     });
+
+    console.log("Converted Qty:", baseAdjustmentQty);
 
     // Use the static method for transaction safety
     const result = await Inventory.adjustInventory(
@@ -801,7 +914,7 @@ export const getLowStockAlerts = async (req, res) => {
     const skip = (page - 1) * limit;
 
 
-    const demandMap = await buildDemandMap();
+    const demandMap = await buildLowStockDemandMap();
     const pickedMap = await buildPickedMap();
 
     // ✅ 0) Load system thresholds (fallback values)
@@ -918,60 +1031,81 @@ export const getLowStockAlerts = async (req, res) => {
 
         // const mpnId = String(inv.mpnId?._id || inv.mpnId);
 
-        const demandQty = Number(demandMap.get(mpnId) || 0);
+        const demandRows = [...demandMap.values()]
+          .filter(x => x.mpnId === mpnId)
+          .sort(
+            (a, b) =>
+              new Date(a.needDate) - new Date(b.needDate)
+          );
 
-        const pickedQty = Number(pickedMap.get(mpnId) || 0);
-
-        const totalRequired = Math.max(0, demandQty - pickedQty);
-
-        const shortfall = Math.max(0, totalRequired - currentStock);
-        const filteredWorkOrders = workOrders.filter(w => w?.needDate);
-
-        const earliestNeedDate = workOrders
-          .map(w => new Date(w.needDate))
-          .sort((a, b) => a - b)[0];
-
-        if (totalRequired <= 0) return null;
-
-        const weeksLeft = weeksBetween(new Date(), earliestNeedDate);
-
-        let urgency = "normal";
-
-        if (weeksLeft <= criticalWeeksLeft) {
-          urgency = "critical";
-        } else if (weeksLeft <= urgentWeeksLeft) {
-          urgency = "urgent";
+        if (!demandRows.length) {
+          return null;
         }
 
-        return {
-          mpnId: mpn?._id || inv.mpnId,
-          mpnNumber: mpn?.MPN || "N/A",
-          description: mpn?.Description || "",
-          manufacturer: mpn?.Manufacturer || "",
-          uom: mpn?.uom || "PCS",
+        let availableStock =
+          currentStock -
+          Number(pickedMap.get(mpnId) || 0);
 
-          currentStock,
-          totalRequired,
-          shortfall,
+        const rows = [];
 
-          storageLocation: inv.location || "Not Set",
-          leadTimeWeeks: mpn?.leadTimeWeeks ?? 0,
+        for (const row of demandRows) {
 
-          earliestNeedDate,
-          weeksLeft,
+          availableStock -= row.demandQty;
 
-          urgency, // critical | urgent | normal
-          workOrders: workOrders.map(w => ({
-            workOrderNo: w.workOrderNo,
-            drawingId: w.drawingId,
-            requiredQty: w.requiredQty,
-            needDate: w.needDate
-          })),
+          const shortfall =
+            Math.max(0, -availableStock);
 
-          lastUpdated: inv.updatedAt || new Date(),
-        };
+            if (!shortfall) return null;
+
+          const weeksLeft = weeksBetween(
+            new Date(),
+            row.needDate
+          );
+
+          let urgency = "normal";
+
+          if (weeksLeft <= criticalWeeksLeft) {
+            urgency = "critical";
+          } else if (weeksLeft <= urgentWeeksLeft) {
+            urgency = "urgent";
+          }
+
+          rows.push({
+
+            mpnId: mpn._id,
+
+            mpnNumber: mpn.MPN,
+
+            description: mpn.Description,
+
+            manufacturer: mpn.Manufacturer,
+
+            uom: mpn.uom,
+
+            currentStock,
+
+            totalRequired: row.demandQty,
+
+            shortfall,
+
+            earliestNeedDate: row.needDate,
+
+            weeksLeft,
+
+            urgency,
+
+            workOrders: row.workOrders,
+
+            lastUpdated: inv.updatedAt
+
+          });
+
+
+        }
+
+        return rows;
       })
-
+  .flat()
       .filter(Boolean);
 
     // ✅ 4) Sorting

@@ -179,13 +179,13 @@ const InventoryListPage = () => {
   }, [activeTab, getInventoryList, getLowStockAlertList, getMaterialRequiredList]);
 
   // ✅ When tab changes reset pagination (only relevant for inventory_list)
- useEffect(() => {
-  setPagination((prev) => ({
-    ...prev,
-    page: 1,
-    total: 0,
-  }));
-}, [activeTab]);
+  useEffect(() => {
+    setPagination((prev) => ({
+      ...prev,
+      page: 1,
+      total: 0,
+    }));
+  }, [activeTab]);
 
   useEffect(() => {
     dispatch(fetchPurchaseOrders({ status: "Pending" }));
@@ -302,145 +302,243 @@ const InventoryListPage = () => {
   };
 
   // ================= Columns =================
- const materialRequiredColumns = [
+  const materialRequiredColumns = [
   {
     title: "",
     key: "mpn",
     render: (_, record) => (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 0" }}>
-        <ExclamationCircleFilled style={{ color: record.shortfall > 0 ? "#ff4d4f" : "#52c41a", fontSize: 16 }} />
-        <span style={{ fontWeight: 600, fontSize: 13, minWidth: 80 }}>{record.mpn}</span>
-        <Tag color={record.shortfall > 0 ? "red" : "green"} style={{ fontSize: 10, padding: "0 4px", lineHeight: "18px" }}>
-          {record.shortfall > 0 ? `-${record.shortfall}` : "✔"}
-        </Tag>
-        <span style={{ fontSize: 11, color: "#999" }}>{record.description?.slice(0, 20)}</span>
-        <span style={{ fontSize: 11, color: "#ccc", marginLeft: "auto" }}>
-          {record.workOrderNo} · {record.currentStock}/{record.totalNeeded} {record.uom}
-        </span>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          width: "100%",
+        }}
+      >
+        {/* LEFT */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <ExclamationCircleFilled
+            style={{
+              color: record.shortfall > 0 ? "#ff4d4f" : "#52c41a",
+              fontSize: 18,
+            }}
+          />
+
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: 15,
+                }}
+              >
+                {record.mpn}
+              </span>
+
+              <Tag
+                color={record.shortfall > 0 ? "red" : "green"}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {record.shortfall}
+              </Tag>
+            </div>
+
+            <div
+              style={{
+                fontSize: 13,
+                color: "#888",
+              }}
+            >
+              {record.description}
+            </div>
+          </div>
+        </div>
+
+         <div></div>
+
+        {/* RIGHT */}
+        <div
+          style={{
+            textAlign: "left",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
+            {record.workOrderNo}
+          </div>
+
+          <div
+            style={{
+              color: "#999",
+              fontSize: 13,
+            }}
+          >
+            Stock {record.currentStock} / Need {record.totalNeeded} {record.uom}
+          </div>
+        </div>
+
+        <div></div>
       </div>
     ),
   },
 ];
 
- const urgencyMeta = {
-  critical: { 
-    color: "#ff4d4f", 
-    bg: "#fff1f0", 
-    label: "CRITICAL", 
-    icon: <ExclamationCircleFilled style={{ color: "#ff4d4f", fontSize: 20 }} /> 
-  },
-  urgent: { 
-    color: "#faad14", 
-    bg: "#fffbe6", 
-    label: "URGENT", 
-    icon: <ExclamationCircleFilled style={{ color: "#faad14", fontSize: 20 }} /> 
-  },
-  normal: { 
-    color: "#52c41a", 
-    bg: "#f6ffed", 
-    label: "NORMAL", 
-    icon: <CheckCircleFilled style={{ color: "#52c41a", fontSize: 20 }} /> 
-  }
-};
-
-const inventoryAlertsColumns = [
-  {
-    title: "Item",
-    key: "index",
-    width: 60,
-    render: (_, __, index) => index + 1,
-  },
-  {
-    title: "Work Order no.",
-    dataIndex: "workOrderNo",
-    key: "workOrderNo",
-    render: (workOrderNo, record) => {
-      // If multiple work orders, show all
-      if (record?.workOrders?.length > 0) {
-        return record.workOrders.map(w => w.workOrderNo).join(", ");
-      }
-      return workOrderNo || "N/A";
+  const urgencyMeta = {
+    critical: {
+      color: "#ff4d4f",
+      bg: "#fff1f0",
+      label: "CRITICAL",
+      icon: <ExclamationCircleFilled style={{ color: "#ff4d4f", fontSize: 20 }} />
+    },
+    urgent: {
+      color: "#faad14",
+      bg: "#fffbe6",
+      label: "URGENT",
+      icon: <ExclamationCircleFilled style={{ color: "#faad14", fontSize: 20 }} />
+    },
+    normal: {
+      color: "#52c41a",
+      bg: "#f6ffed",
+      label: "NORMAL",
+      icon: <CheckCircleFilled style={{ color: "#52c41a", fontSize: 20 }} />
     }
-  },
-  {
-    title: "MPN",
-    dataIndex: "mpnNumber",
-    key: "mpnNumber",
-    render: (mpn, record) => (
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontWeight: 500 }}>{mpn}</span>
-      </div>
-    ),
-  },
-  {
-    title: "Description",
-    dataIndex: "description",
-    key: "description",
-    render: (desc) => desc || "N/A",
-    ellipsis: true,
-  },
-  {
-    title: "Manufacturer",
-    dataIndex: "manufacturer",
-    key: "manufacturer",
-    render: (mfr) => mfr || "N/A",
-  },
-  {
-    title: "UOM",
-    dataIndex: "uom",
-    key: "uom",
-    render: (uom) => uom || "PCS",
-    width:80,
-    align:'center'
-  },
-  {
-    title: "Need Date",
-    key: "needDate",
-    render: (_, record) => {
-      if (record?.workOrders?.length > 0) {
-        return record.workOrders.map(w => 
-          new Date(w.needDate).toLocaleDateString("en-GB", {
+  };
+
+  const inventoryAlertsColumns = [
+    {
+      title: "Item",
+      key: "index",
+      width: 60,
+      render: (_, __, index) => index + 1,
+    },
+    {
+      title: "Work Order no.",
+      dataIndex: "workOrderNo",
+      key: "workOrderNo",
+      render: (workOrderNo, record) => {
+        // If multiple work orders, show all
+        if (record?.workOrders?.length > 0) {
+          return record.workOrders.map(w => w.workOrderNo).join(", ");
+        }
+        return workOrderNo || "N/A";
+      }
+    },
+    {
+      title: "MPN",
+      dataIndex: "mpnNumber",
+      key: "mpnNumber",
+      render: (mpn, record) => (
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontWeight: 500 }}>{mpn}</span>
+        </div>
+      ),
+    },
+    {
+      title: "Description",
+      dataIndex: "description",
+      key: "description",
+      render: (desc) => desc || "N/A",
+      ellipsis: true,
+    },
+    {
+      title: "Manufacturer",
+      dataIndex: "manufacturer",
+      key: "manufacturer",
+      render: (mfr) => mfr || "N/A",
+    },
+    {
+      title: "UOM",
+      dataIndex: "uom",
+      key: "uom",
+      render: (uom) => uom || "PCS",
+      width: 80,
+      align: 'center'
+    },
+    {
+      title: "Need Date",
+      key: "needDate",
+      render: (_, record) => {
+        if (record?.workOrders?.length > 0) {
+          return record.workOrders.map(w =>
+            new Date(w.needDate).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric"
+            })
+          ).join(", ");
+        }
+        if (record?.earliestNeedDate) {
+          return new Date(record.earliestNeedDate).toLocaleDateString("en-GB", {
             day: "2-digit",
             month: "short",
             year: "numeric"
-          })
-        ).join(", ");
-      }
-      if (record?.earliestNeedDate) {
-        return new Date(record.earliestNeedDate).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric"
-        });
-      }
-      return "N/A";
+          });
+        }
+        return "N/A";
+      },
     },
-  },
-  {
-  title: "Shortage Qty",
-  key: "shortfall",
-   width:120,
-    align:'center',
-  render: (_, record) => {
-    const shortfall = Number(record?.shortfall ?? 0);
-    return (
-      <span style={{ 
-        display: "inline-block",
-        padding: "2px 12px",
-        borderRadius: "4px",
-        backgroundColor: shortfall > 0 ? "#fff1f0" : "#f6ffed",
-        color: shortfall > 0 ? "#ff4d4f" : "#52c41a",
-        fontWeight: "bold",
-        border: `1px solid ${shortfall > 0 ? "#ffccc7" : "#b7eb8f"}`,
-        minWidth: "40px",
-        textAlign: "center"
-      }}>
-        {shortfall}
-      </span>
-    );
-  },
-},
-];
+    {
+      title: "Shortage Qty",
+      key: "shortfall",
+      width: 120,
+      align: 'center',
+      render: (_, record) => {
+        const shortfall = Number(record?.shortfall ?? 0);
+        const urgency = record?.urgency || "normal";
+
+        const styles = {
+          critical: {
+            bg: "#fff1f0",
+            color: "#ff4d4f",
+            border: "#ffccc7",
+          },
+          urgent: {
+            bg: "#fff7e6",
+            color: "#fa8c16",
+            border: "#ffd591",
+          },
+          normal: {
+            bg: "#f6ffed",
+            color: "#52c41a",
+            border: "#b7eb8f",
+          },
+        };
+
+        const style = styles[urgency] || styles.normal;
+
+        return (
+          <span
+            style={{
+              display: "inline-block",
+              padding: "2px 12px",
+              borderRadius: "4px",
+              backgroundColor: style.bg,
+              color: style.color,
+              fontWeight: "bold",
+              border: `1px solid ${style.border}`,
+              minWidth: "50px",
+              textAlign: "center",
+            }}
+          >
+            {shortfall}
+          </span>
+        );
+      },
+    },
+  ];
 
   const inventoryListColumns = [
     {
@@ -607,7 +705,7 @@ const inventoryAlertsColumns = [
         }}
         showExport={true}
         onExport={handleExport}
-      showFilter={activeTab === "inventory_list"}
+        showFilter={activeTab === "inventory_list"}
         onFilter={() => setIsFilterModalOpen(true)}
         showExportPDF={false}
         showProductSetting={false}
@@ -623,18 +721,18 @@ const inventoryAlertsColumns = [
           loading={loading}
           rowKey="_id"
           pagination={{
-  current: pagination.page,
-  pageSize: pagination.limit,
-  total: pagination.total,
-  showSizeChanger: true,
-  onChange: (page, pageSize) => {
-    setPagination((prev) => ({
-      ...prev,
-      page,
-      limit: pageSize,
-    }));
-  },
-}}
+            current: pagination.page,
+            pageSize: pagination.limit,
+            total: pagination.total,
+            showSizeChanger: true,
+            onChange: (page, pageSize) => {
+              setPagination((prev) => ({
+                ...prev,
+                page,
+                limit: pageSize,
+              }));
+            },
+          }}
         />
       </Card>
 
