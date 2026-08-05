@@ -15,7 +15,7 @@ import SystemSettings from "../models/SystemSettings.js";
 
 import mongoose from "mongoose";
 import CostingItems from "../models/CostingItem.js";
-import { convertQty, convertToBaseUOM, convertToMeter, convertUom } from "../utils/uomController.js";
+import { convertFromMeter, convertQty, convertToBaseUOM, convertToMeter, convertUom } from "../utils/uomController.js";
 import { round } from "../utils/currency.js";
 
 
@@ -231,23 +231,23 @@ export const buildLowStockDemandMap = async () => {
         (row.demandQty + demandQty).toFixed(6)
       );
 
-     const existingWO = row.workOrders.find(
-  w => String(w.workOrderId) === String(wo._id)
-);
+      const existingWO = row.workOrders.find(
+        w => String(w.workOrderId) === String(wo._id)
+      );
 
-if (existingWO) {
-  existingWO.quantity = Number(
-    (existingWO.quantity + demandQty).toFixed(6)
-  );
-} else {
-  row.workOrders.push({
-    workOrderId: wo._id,
-    workOrderNo: wo.workOrderNo,
-    drawingId: wo.drawingId,
-    quantity: demandQty,
-    needDate: wo.needDate,
-  });
-}
+      if (existingWO) {
+        existingWO.quantity = Number(
+          (existingWO.quantity + demandQty).toFixed(6)
+        );
+      } else {
+        row.workOrders.push({
+          workOrderId: wo._id,
+          workOrderNo: wo.workOrderNo,
+          drawingId: wo.drawingId,
+          quantity: demandQty,
+          needDate: wo.needDate,
+        });
+      }
     }
   }
 
@@ -675,8 +675,8 @@ export const adjustInventory = async (req, res) => {
 
 
     const baseUomId = inventory.mpnId.UOM; // ✅ BASE UOM (meter / EA)
-    console.log('------baseUomId',baseUomId)
-console.log("Input Qty:", adjustmentQuantity);
+    console.log('------baseUomId', baseUomId)
+    console.log("Input Qty:", adjustmentQuantity);
 
     const baseAdjustmentQty = await convertToMeter({
       qty: adjustmentQuantity,
@@ -954,10 +954,60 @@ export const getLowStockAlerts = async (req, res) => {
     const mpnIds = mpnList.map((m) => m._id);
 
     // ✅ 2) Inventories + workOrders
-    const inventories = await Inventory.find({ mpnId: { $in: mpnIds } })
-      .populate("mpnId", "MPN Description Manufacturer uom leadTimeWeeks")
+    const inventories = await Inventory.find({
+      mpnId: { $in: mpnIds },
+    })
+      .populate({
+        path: "mpnId",
+        select: "MPN Description Manufacturer UOM leadTimeWeeks",
+        populate: {
+          path: "UOM",
+          select: "code name symbol",
+        },
+      })
       .select("mpnId balanceQuantity location workOrders updatedAt")
       .lean();
+
+      const mpnIdsOnList = inventories
+  .map(x => x?.mpnId?._id)
+  .filter(Boolean);
+
+const pendingPOs = await PurchaseOrders.find({
+  status: { $in: ["Emailed", "Acknowledged", "Partially Received"] },
+  "items.mpn": { $in: mpnIdsOnList },
+})
+  .select(
+    "poNumber items.mpn items.uom items.qty items.receivedQtyTotal"
+  )
+  .populate("items.uom", "code")
+  .lean();
+
+const poMap = new Map();
+
+for (const po of pendingPOs) {
+  for (const it of po.items || []) {
+    const mid = String(it?.mpn || "");
+    if (!mid) continue;
+
+    const inventoryItem = inventories.find(
+      x => String(x?.mpnId?._id) === mid
+    );
+
+    const rawRemainingQty =
+      Number(it.qty || 0) -
+      Number(it.receivedQtyTotal || 0);
+
+    if (rawRemainingQty <= 0) continue;
+
+    const remainingQty = convertUom({
+      qty: rawRemainingQty,
+      fromUom: it?.uom?.code || "",
+      toUom: inventoryItem?.mpnId?.UOM?.code || "",
+    });
+
+    poMap.set(mid, (poMap.get(mid) || 0) + remainingQty);
+  }
+}
 
     const costingItems = await CostingItems.find({
       mpn: { $in: mpnIds },
@@ -1005,107 +1055,120 @@ export const getLowStockAlerts = async (req, res) => {
     // ✅ 3) Build alerts
     const now = new Date();
 
-    const alerts = inventories
-      .map((inv) => {
-        const mpn = inv.mpnId;
+    const alerts = (
+      await Promise.all(
+        inventories.map(async (inv) => {
+          const mpn = inv.mpnId;
 
 
 
-        // const drawingIds = [...new Set(costingItems.map(c => c.drawingId))];
+          // const drawingIds = [...new Set(costingItems.map(c => c.drawingId))];
 
 
-        const mpnId = String(inv.mpnId._id);
+          const mpnId = String(inv.mpnId._id);
 
-        const drawingIds = [...(mpnDrawingMap.get(mpnId) || [])];
+          const drawingIds = [...(mpnDrawingMap.get(mpnId) || [])];
 
-        const workOrders = [
-          ...new Map(
-            drawingIds
-              .flatMap(id => drawingWorkOrderMap.get(id) || [])
-              .map(w => [String(w._id), w])
-          ).values()
-        ];
+          const workOrders = [
+            ...new Map(
+              drawingIds
+                .flatMap(id => drawingWorkOrderMap.get(id) || [])
+                .map(w => [String(w._id), w])
+            ).values()
+          ];
 
 
-        const currentStock = Number(inv.balanceQuantity || 0);
+          const currentStock = Number(inv.balanceQuantity || 0);
 
-        // const mpnId = String(inv.mpnId?._id || inv.mpnId);
+          // const mpnId = String(inv.mpnId?._id || inv.mpnId);
 
-        const demandRows = [...demandMap.values()]
-          .filter(x => x.mpnId === mpnId)
-          .sort(
-            (a, b) =>
-              new Date(a.needDate) - new Date(b.needDate)
-          );
+          const demandRows = [...demandMap.values()]
+            .filter(x => x.mpnId === mpnId)
+            .sort(
+              (a, b) =>
+                new Date(a.needDate) - new Date(b.needDate)
+            );
 
-        if (!demandRows.length) {
-          return null;
-        }
+          if (!demandRows.length) {
+            return null;
+          }
 
-        let availableStock =
-          currentStock -
-          Number(pickedMap.get(mpnId) || 0);
+        //  const currentStock = Number(inv.balanceQuantity || 0);
 
-        const rows = [];
+const incomingQty = Number(
+  poMap.get(String(inv.mpnId._id)) || 0
+);
 
-        for (const row of demandRows) {
+let availableStock =
+  currentStock +
+  incomingQty -
+  Number(pickedMap.get(mpnId) || 0);
 
-          availableStock -= row.demandQty;
+          const rows = [];
 
-          const shortfall =
-            Math.max(0, -availableStock);
+          for (const row of demandRows) {
+
+            availableStock -= row.demandQty;
+
+            const shortfall =
+              Math.max(0, -availableStock);
 
             if (!shortfall) return null;
 
-          const weeksLeft = weeksBetween(
-            new Date(),
-            row.needDate
-          );
+            const weeksLeft = weeksBetween(
+              new Date(),
+              row.needDate
+            );
 
-          let urgency = "normal";
+            let urgency = "normal";
 
-          if (weeksLeft <= criticalWeeksLeft) {
-            urgency = "critical";
-          } else if (weeksLeft <= urgentWeeksLeft) {
-            urgency = "urgent";
+            if (weeksLeft <= criticalWeeksLeft) {
+              urgency = "critical";
+            } else if (weeksLeft <= urgentWeeksLeft) {
+              urgency = "urgent";
+            }
+
+
+            const e = await convertFromMeter(shortfall, mpn.UOM?.code)
+            console.log('-----eee', e, shortfall)
+            rows.push({
+
+              mpnId: mpn._id,
+
+              mpnNumber: mpn.MPN,
+
+              description: mpn.Description,
+
+              manufacturer: mpn.Manufacturer,
+
+              uom: mpn.UOM?.code,
+
+              currentStock,
+
+              totalRequired: row.demandQty,
+
+              shortfall: e,
+
+              earliestNeedDate: row.needDate,
+
+              weeksLeft,
+
+              urgency,
+
+              workOrders: row.workOrders,
+
+              lastUpdated: inv.updatedAt
+
+            });
+
+
           }
 
-          rows.push({
-
-            mpnId: mpn._id,
-
-            mpnNumber: mpn.MPN,
-
-            description: mpn.Description,
-
-            manufacturer: mpn.Manufacturer,
-
-            uom: mpn.uom,
-
-            currentStock,
-
-            totalRequired: row.demandQty,
-
-            shortfall,
-
-            earliestNeedDate: row.needDate,
-
-            weeksLeft,
-
-            urgency,
-
-            workOrders: row.workOrders,
-
-            lastUpdated: inv.updatedAt
-
-          });
-
-
-        }
-
-        return rows;
-      })
-  .flat()
+          return rows;
+        })
+      )
+    )
+      .flat()
       .filter(Boolean);
 
     // ✅ 4) Sorting

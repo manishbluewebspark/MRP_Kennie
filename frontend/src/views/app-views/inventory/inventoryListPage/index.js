@@ -311,7 +311,7 @@ const InventoryListPage = () => {
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "right",
           width: "100%",
         }}
       >
@@ -348,13 +348,13 @@ const InventoryListPage = () => {
                   fontWeight: 600,
                 }}
               >
-                {record.shortfall}
+                {record.shortfall} {record.uom}
               </Tag>
             </div>
 
             <div
               style={{
-                fontSize: 13,
+                fontSize: 12,
                 color: "#888",
               }}
             >
@@ -363,12 +363,12 @@ const InventoryListPage = () => {
           </div>
         </div>
 
-         <div></div>
+  
 
         {/* RIGHT */}
         <div
           style={{
-            textAlign: "left",
+            textAlign: "right",
           }}
         >
           <div
@@ -390,7 +390,7 @@ const InventoryListPage = () => {
           </div>
         </div>
 
-        <div></div>
+       
       </div>
     ),
   },

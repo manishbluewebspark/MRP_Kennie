@@ -4706,6 +4706,378 @@ export const getAllChilPartByDrawingId = async (req, res) => {
 //   }
 // };
 
+// export const getTotalMPNNeeded = async (req, res) => {
+//   try {
+//     const {
+//       drawingDate,
+//       customer,
+//       project,
+//       drawingRange,
+//       page = 1,
+//       limit = 10,
+//       search
+//     } = req.query;
+
+
+//     const pageNumber = Math.max(1, Number(page));
+//     const limitNumber = Math.max(1, Number(limit));
+//     const searchText = (search || "").trim().toLowerCase();
+//     // =========================================================
+//     // 1️⃣ DRAWING FILTERS
+//     // =========================================================
+
+//     const drawingFilters = {};
+
+
+
+//     if (drawingRange === "range1") {
+//       drawingFilters.drawingNo = { $gte: 0, $lte: 50 };
+//     }
+
+//     if (drawingRange === "range2") {
+//       drawingFilters.drawingNo = { $gte: 51, $lte: 100 };
+//     }
+
+//     if (drawingRange === "range3") {
+//       drawingFilters.drawingNo = { $gte: 101, $lte: 200 };
+//     }
+
+//     if (customer) {
+//       drawingFilters.customerId = customer;
+//     }
+
+//     if (project) {
+//       drawingFilters.projectId = project;
+//     }
+
+//     if (drawingDate) {
+//       const dateOnly = new Date(drawingDate);
+
+//       const nextDay = new Date(dateOnly);
+//       nextDay.setDate(nextDay.getDate() + 1);
+
+//       drawingFilters.createdAt = {
+//         $gte: dateOnly,
+//         $lt: nextDay,
+//       };
+//     }
+
+//     const filteredDrawings = await Drawing.find(drawingFilters)
+//       .select("_id drawingNo")
+//       .lean();
+
+//     if (!filteredDrawings.length) {
+//       return res.json({
+//         status: true,
+//         message: "No drawings found",
+//         data: [],
+//       });
+//     }
+
+//     const drawingIds = filteredDrawings.map((d) => d._id);
+
+//     // =========================================================
+//     // 2️⃣ WORK ORDERS
+//     // =========================================================
+
+//     const workOrders = await WorkOrder.find({
+//       drawingId: { $in: drawingIds },
+//     }).lean();
+
+//     if (!workOrders.length) {
+//       return res.json({
+//         status: true,
+//         message: "No work orders found",
+//         data: [],
+//       });
+//     }
+
+//     // =========================================================
+//     // 3️⃣ COSTING ITEMS
+//     // =========================================================
+
+//     const costingItems = await CostingItems.find({
+//       drawingId: { $in: drawingIds },
+//       quoteType: "material",
+//     }).lean();
+
+//     if (!costingItems.length) {
+//       return res.json({
+//         status: true,
+//         message: "No costing items found",
+//         data: [],
+//       });
+//     }
+
+//     // =========================================================
+//     // 4️⃣ GROUP COSTING BY DRAWING
+//     // =========================================================
+
+//     const costingByDrawing = new Map();
+
+//     for (const ci of costingItems) {
+//       const key = String(ci.drawingId);
+
+//       if (!costingByDrawing.has(key)) {
+//         costingByDrawing.set(key, []);
+//       }
+
+//       costingByDrawing.get(key).push(ci);
+//     }
+
+//     // =========================================================
+//     // 5️⃣ BUILD REQUIRED QTY
+//     // =========================================================
+
+//     const mpnUsageMap = new Map();
+//     const mpnIds = new Set();
+
+//     for (const wo of workOrders) {
+//       const drawingId = String(wo.drawingId);
+
+//       const costingArr =
+//         costingByDrawing.get(drawingId) || [];
+
+//       if (!costingArr.length) continue;
+
+//       const woQty = Number(wo.quantity || 0);
+// for (const ci of costingArr) {
+//     if (!ci.mpn) continue;
+
+//     const mpnId = String(ci.mpn);
+
+//     mpnIds.add(mpnId);
+
+//     const neededQty = Number(ci.quantity || 0) * woQty;
+
+//     const key = mpnId;
+
+//     if (!mpnUsageMap.has(key)) {
+//         mpnUsageMap.set(key, {
+//             mpnId,
+//             description: ci.description || "",
+//             manufacturer: ci.manufacturer || "",
+//             uomId: ci.uom || null,
+//             totalNeeded: 0,
+//             workOrders: [],
+//         });
+//     }
+
+//     const row = mpnUsageMap.get(key);
+
+//     row.totalNeeded += neededQty;
+
+//     const existingWO = row.workOrders.find(
+//         w => w.workOrderNo === wo.workOrderNo
+//     );
+
+//     if (existingWO) {
+//         existingWO.quantity += neededQty;
+//     } else {
+//         row.workOrders.push({
+//             drawingId,
+//             workOrderNo: wo.workOrderNo,
+//             quantity: neededQty,
+//         });
+//     }
+// }
+//     }
+
+//     // =========================================================
+//     // 6️⃣ LOAD MPN MASTER
+//     // =========================================================
+
+//     const mpnObjectIds = [...mpnIds].map(
+//       (id) => new mongoose.Types.ObjectId(id)
+//     );
+
+//     const mpnDocs = await MPN.find({
+//       _id: { $in: mpnObjectIds },
+//     }).lean();
+
+//     const mpnMap = new Map(
+//       mpnDocs.map((m) => [String(m._id), m])
+//     );
+
+//     // =========================================================
+//     // 7️⃣ LOAD UOMS
+//     // =========================================================
+
+//     const uomIds = [
+//       ...new Set(
+//         [...mpnUsageMap.values()]
+//           .map((x) => x.uomId)
+//           .filter(Boolean)
+//       ),
+//     ];
+
+//     const uomDocs = await UOM.find({
+//       _id: { $in: uomIds },
+//     }).lean();
+
+//     const uomMap = new Map(
+//       uomDocs.map((u) => [String(u._id), u])
+//     );
+
+//     // =========================================================
+//     // 8️⃣ INVENTORY
+//     // =========================================================
+
+//     const inventoryDocs = await Inventory.find({
+//       mpnId: { $in: mpnObjectIds },
+//     }).lean();
+
+//     // IMPORTANT:
+//     // balanceQuantity ALWAYS stored in METER
+
+//     const inventoryMap = new Map();
+
+//     for (const inv of inventoryDocs) {
+//       const key = String(inv.mpnId);
+
+//       const qty = Number(inv.balanceQuantity || 0);
+
+//       inventoryMap.set(
+//         key,
+//         (inventoryMap.get(key) || 0) + qty
+//       );
+//     }
+
+//     // =========================================================
+//     // 9️⃣ FINAL RESULT
+//     // =========================================================
+
+//     const result = [];
+
+//     for (const row of mpnUsageMap.values()) {
+//       const mpn = mpnMap.get(row.mpnId);
+
+//       const uom = row.uomId
+//         ? uomMap.get(String(row.uomId))
+//         : null;
+
+//       const targetUom = uom?.code || "EA";
+
+//       // inventory stored in meter
+//       const stockInMeter = Number(
+//         inventoryMap.get(row.mpnId) || 0
+//       );
+
+//       // convert stock -> costing uom
+//       const convertedStock = convertUom({
+//         qty: stockInMeter,
+//         fromUom: "M",
+//         toUom: targetUom,
+//       });
+
+//       const totalNeeded = Number(
+//         row.totalNeeded || 0
+//       );
+
+//       const shortfall = Math.max(
+//         0,
+//         totalNeeded - convertedStock
+//       );
+
+//       const mpnNumber = (
+//         mpn?.MPN ||
+//         mpn?.mpn ||
+//         ""
+//       ).toLowerCase();
+
+//   const workOrderNo = row.workOrders
+//   .map(x => x.workOrderNo)
+//   .join(", ")
+//   .toLowerCase();
+
+//       if (
+//         searchText &&
+//         !mpnNumber.includes(searchText) &&
+//         !workOrderNo.includes(searchText)
+//       ) {
+//         continue;
+//       }
+
+//       // only shortage
+//       if (shortfall <= 0) continue;
+
+
+
+//       result.push({
+//         drawingId: row.drawingId,
+
+//         workOrderNo: workOrderNo.toUpperCase(),
+
+//         mpnId: row.mpnId,
+
+//         mpn:
+//           mpn?.MPN ||
+//           mpn?.mpn ||
+//           null,
+
+//         description:
+//           row.description ||
+//           mpn?.Description ||
+//           mpn?.description ||
+//           "",
+
+//         manufacturer:
+//           row.manufacturer ||
+//           mpn?.Manufacturer ||
+//           mpn?.manufacturer ||
+//           "",
+
+//         uom: targetUom,
+
+//         totalNeeded: Number(
+//           totalNeeded.toFixed(4)
+//         ),
+
+//         currentStock: Number(
+//           convertedStock.toFixed(4)
+//         ),
+
+//         shortfall: Number(
+//           shortfall.toFixed(4)
+//         ),
+//       });
+//     }
+
+//     // =========================================================
+//     // 🔟 RESPONSE
+//     // =========================================================
+
+//     const total = result.length;
+
+//     const paginatedData = result.slice(
+//       (pageNumber - 1) * limitNumber,
+//       pageNumber * limitNumber
+//     );
+
+//     return res.json({
+//       status: true,
+//       message: "Filtered Total MPN Needed fetched successfully",
+//       total,
+//       page: pageNumber,
+//       limit: limitNumber,
+//       totalPages: Math.ceil(total / limitNumber),
+//       data: paginatedData,
+//     });
+
+//   } catch (error) {
+//     console.error(
+//       "getTotalMPNNeeded error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       status: false,
+//       message: error.message,
+//       data: [],
+//     });
+//   }
+// };
+
 export const getTotalMPNNeeded = async (req, res) => {
   try {
     const {
@@ -4715,20 +5087,18 @@ export const getTotalMPNNeeded = async (req, res) => {
       drawingRange,
       page = 1,
       limit = 10,
-      search
+      search,
     } = req.query;
-
 
     const pageNumber = Math.max(1, Number(page));
     const limitNumber = Math.max(1, Number(limit));
     const searchText = (search || "").trim().toLowerCase();
+
     // =========================================================
     // 1️⃣ DRAWING FILTERS
     // =========================================================
 
     const drawingFilters = {};
-
-
 
     if (drawingRange === "range1") {
       drawingFilters.drawingNo = { $gte: 0, $lte: 50 };
@@ -4752,7 +5122,6 @@ export const getTotalMPNNeeded = async (req, res) => {
 
     if (drawingDate) {
       const dateOnly = new Date(drawingDate);
-
       const nextDay = new Date(dateOnly);
       nextDay.setDate(nextDay.getDate() + 1);
 
@@ -4799,7 +5168,9 @@ export const getTotalMPNNeeded = async (req, res) => {
     const costingItems = await CostingItems.find({
       drawingId: { $in: drawingIds },
       quoteType: "material",
-    }).lean();
+    })
+      .populate("uom", "code")
+      .lean();
 
     if (!costingItems.length) {
       return res.json({
@@ -4826,7 +5197,7 @@ export const getTotalMPNNeeded = async (req, res) => {
     }
 
     // =========================================================
-    // 5️⃣ BUILD REQUIRED QTY
+    // 5️⃣ BUILD REQUIRED QTY (CONSOLIDATED BY MPN)
     // =========================================================
 
     const mpnUsageMap = new Map();
@@ -4835,52 +5206,66 @@ export const getTotalMPNNeeded = async (req, res) => {
     for (const wo of workOrders) {
       const drawingId = String(wo.drawingId);
 
-      const costingArr =
-        costingByDrawing.get(drawingId) || [];
+      const costingArr = costingByDrawing.get(drawingId) || [];
 
       if (!costingArr.length) continue;
 
       const woQty = Number(wo.quantity || 0);
-for (const ci of costingArr) {
-    if (!ci.mpn) continue;
 
-    const mpnId = String(ci.mpn);
+      for (const ci of costingArr) {
+        console.log('----ci',ci)
+        if (!ci.mpn) continue;
 
-    mpnIds.add(mpnId);
+        const mpnId = String(ci.mpn);
 
-    const neededQty = Number(ci.quantity || 0) * woQty;
+        mpnIds.add(mpnId);
 
-    const key = mpnId;
+        const fromUom =
+          ci?.uom?.code ||
+          ci?.uomCode ||
+          "EA";
 
-    if (!mpnUsageMap.has(key)) {
-        mpnUsageMap.set(key, {
+        const neededQty = convertUom({
+          qty: Number(ci.quantity || 0) * woQty,
+          fromUom,
+          toUom: fromUom,
+        });
+
+        if (!mpnUsageMap.has(mpnId)) {
+          mpnUsageMap.set(mpnId, {
             mpnId,
             description: ci.description || "",
             manufacturer: ci.manufacturer || "",
             uomId: ci.uom || null,
+
             totalNeeded: 0,
+
+            drawingIds: new Set(),
+
             workOrders: [],
-        });
-    }
+          });
+        }
 
-    const row = mpnUsageMap.get(key);
+        const row = mpnUsageMap.get(mpnId);
 
-    row.totalNeeded += neededQty;
+        row.totalNeeded += Number(neededQty);
 
-    const existingWO = row.workOrders.find(
-        w => w.workOrderNo === wo.workOrderNo
-    );
+        row.drawingIds.add(drawingId);
 
-    if (existingWO) {
-        existingWO.quantity += neededQty;
-    } else {
-        row.workOrders.push({
+        const existingWO = row.workOrders.find(
+          (x) => x.workOrderNo === wo.workOrderNo
+        );
+
+        if (existingWO) {
+          existingWO.quantity += Number(neededQty);
+        } else {
+          row.workOrders.push({
             drawingId,
             workOrderNo: wo.workOrderNo,
-            quantity: neededQty,
-        });
-    }
-}
+            quantity: Number(neededQty),
+          });
+        }
+      }
     }
 
     // =========================================================
@@ -4899,7 +5284,7 @@ for (const ci of costingArr) {
       mpnDocs.map((m) => [String(m._id), m])
     );
 
-    // =========================================================
+        // =========================================================
     // 7️⃣ LOAD UOMS
     // =========================================================
 
@@ -4923,25 +5308,32 @@ for (const ci of costingArr) {
     // 8️⃣ INVENTORY
     // =========================================================
 
-    const inventoryDocs = await Inventory.find({
-      mpnId: { $in: mpnObjectIds },
-    }).lean();
+  const inventoryDocs = await Inventory.find({
+  mpnId: { $in: mpnObjectIds },
+})
+.populate({
+  path: "mpnId",
+  select: "UOM",
+  populate: {
+    path: "UOM",
+    select: "code",
+  },
+})
+.lean();
 
-    // IMPORTANT:
-    // balanceQuantity ALWAYS stored in METER
+   const inventoryMap = new Map();
 
-    const inventoryMap = new Map();
+for (const inv of inventoryDocs) {
+  const key = String(inv.mpnId._id);
 
-    for (const inv of inventoryDocs) {
-      const key = String(inv.mpnId);
+  inventoryMap.set(key, {
+    balanceQuantity:
+      (inventoryMap.get(key)?.balanceQuantity || 0) +
+      Number(inv.balanceQuantity || 0),
 
-      const qty = Number(inv.balanceQuantity || 0);
-
-      inventoryMap.set(
-        key,
-        (inventoryMap.get(key) || 0) + qty
-      );
-    }
+    uomCode: inv.mpnId?.UOM?.code || "EA",
+  });
+}
 
     // =========================================================
     // 9️⃣ FINAL RESULT
@@ -4951,27 +5343,31 @@ for (const ci of costingArr) {
 
     for (const row of mpnUsageMap.values()) {
       const mpn = mpnMap.get(row.mpnId);
-
+      console.log('--inventoryMap',inventoryMap)
       const uom = row.uomId
-        ? uomMap.get(String(row.uomId))
+        ? uomMap.get(String(row.uomId?._id))
         : null;
 
       const targetUom = uom?.code || "EA";
 
-      // inventory stored in meter
-      const stockInMeter = Number(
-        inventoryMap.get(row.mpnId) || 0
+     const inventory = inventoryMap.get(row.mpnId);
+
+const stockInMeter = Number(
+  inventory?.balanceQuantity || 0
+);
+
+const convertedStock = convertUom({
+  qty: stockInMeter,
+  fromUom: "M",
+  toUom: inventory?.uomCode || targetUom,
+});
+
+      row.workOrders.sort((a, b) =>
+        a.workOrderNo.localeCompare(b.workOrderNo)
       );
 
-      // convert stock -> costing uom
-      const convertedStock = convertUom({
-        qty: stockInMeter,
-        fromUom: "M",
-        toUom: targetUom,
-      });
-
       const totalNeeded = Number(
-        row.totalNeeded || 0
+        row.totalNeeded.toFixed(4)
       );
 
       const shortfall = Math.max(
@@ -4979,41 +5375,43 @@ for (const ci of costingArr) {
         totalNeeded - convertedStock
       );
 
+      // Material Required
+      // incoming stock ignore karega
+      if (shortfall <= 0) continue;
+
+      const workOrderString = row.workOrders
+        .map((x) => x.workOrderNo)
+        .join(", ");
+
       const mpnNumber = (
         mpn?.MPN ||
         mpn?.mpn ||
         ""
       ).toLowerCase();
 
-  const workOrderNo = row.workOrders
-  .map(x => x.workOrderNo)
-  .join(", ")
-  .toLowerCase();
-
       if (
         searchText &&
         !mpnNumber.includes(searchText) &&
-        !workOrderNo.includes(searchText)
+        !workOrderString
+          .toLowerCase()
+          .includes(searchText)
       ) {
         continue;
       }
 
-      // only shortage
-      if (shortfall <= 0) continue;
-
-
-
       result.push({
-        drawingId: row.drawingId,
+        drawingIds: [...row.drawingIds],
 
-        workOrderNo: workOrderNo.toUpperCase(),
+        workOrders: row.workOrders,
+
+        workOrderNo: workOrderString,
 
         mpnId: row.mpnId,
 
         mpn:
           mpn?.MPN ||
           mpn?.mpn ||
-          null,
+          "",
 
         description:
           row.description ||
@@ -5027,11 +5425,10 @@ for (const ci of costingArr) {
           mpn?.manufacturer ||
           "",
 
-        uom: targetUom,
+       currentStock: Number(convertedStock.toFixed(4)),
+uom: inventory?.uomCode || targetUom,
 
-        totalNeeded: Number(
-          totalNeeded.toFixed(4)
-        ),
+        totalNeeded,
 
         currentStock: Number(
           convertedStock.toFixed(4)
@@ -5044,7 +5441,19 @@ for (const ci of costingArr) {
     }
 
     // =========================================================
-    // 🔟 RESPONSE
+    // 🔟 SORT
+    // =========================================================
+
+    result.sort((a, b) => {
+      if (b.shortfall !== a.shortfall) {
+        return b.shortfall - a.shortfall;
+      }
+
+      return a.mpn.localeCompare(b.mpn);
+    });
+
+    // =========================================================
+    // 11️⃣ PAGINATION
     // =========================================================
 
     const total = result.length;
@@ -5056,14 +5465,14 @@ for (const ci of costingArr) {
 
     return res.json({
       status: true,
-      message: "Filtered Total MPN Needed fetched successfully",
+      message:
+        "Filtered Total MPN Needed fetched successfully",
       total,
       page: pageNumber,
       limit: limitNumber,
       totalPages: Math.ceil(total / limitNumber),
       data: paginatedData,
     });
-
   } catch (error) {
     console.error(
       "getTotalMPNNeeded error:",
