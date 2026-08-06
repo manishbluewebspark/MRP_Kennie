@@ -1471,40 +1471,40 @@ export const getRevisePurchaseOrderById = async (req, res) => {
       });
     }
 
-   const revision = purchaseOrder.revisionHistory.id(id);
+    const revision = purchaseOrder.revisionHistory.id(id);
 
-const snapshotDoc = PurchaseOrders.hydrate(revision.snapshot);
+    const snapshotDoc = PurchaseOrders.hydrate(revision.snapshot);
 
-await snapshotDoc.populate([
-  {
-    path: "supplier",
-    populate: {
-      path: "currency",
-      select: "code",
-    },
-  },
-  {
-    path: "workOrderNo",
-    select: "workOrderNo poNumber projectNo",
-  },
-  {
-    path: "items.mpn",
-    model: "MPNLibrary",
-  },
-  {
-    path: "items.uom",
-    model: "UOM",
-  },
-]);
+    await snapshotDoc.populate([
+      {
+        path: "supplier",
+        populate: {
+          path: "currency",
+          select: "code",
+        },
+      },
+      {
+        path: "workOrderNo",
+        select: "workOrderNo poNumber projectNo",
+      },
+      {
+        path: "items.mpn",
+        model: "MPNLibrary",
+      },
+      {
+        path: "items.uom",
+        model: "UOM",
+      },
+    ]);
 
-return res.status(200).json({
-  success: true,
-  data: {
-    ...snapshotDoc.toObject(),
-    revisionNo: revision.revisionNo,
-    revisedAt: revision.revisedAt,
-  },
-});
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...snapshotDoc.toObject(),
+        revisionNo: revision.revisionNo,
+        revisedAt: revision.revisedAt,
+      },
+    });
   } catch (err) {
     console.error(err);
 
@@ -2443,11 +2443,11 @@ export const getPurchaseShortageList = async (req, res) => {
 
     const emailedPOs = await PurchaseOrders.find({
       status: {
-        $in: ["Emailed", "Acknowledged"]
+        $in: ["Emailed", "Acknowledged", "Partially Received"],
       },
-      // isDeleted: { $ne: true },
     })
       .select("items status")
+      .populate("items.uom", "code")
       .lean();
 
     const poReservedMap = new Map();
@@ -2458,12 +2458,23 @@ export const getPurchaseShortageList = async (req, res) => {
 
         const mpnId = String(item.mpn);
 
-        const currentReserved =
-          poReservedMap.get(mpnId) || 0;
+        // Remaining quantity still expected on PO
+        const rawRemainingQty =
+          Number(item.qty || 0) -
+          Number(item.receivedQtyTotal || 0);
+
+        if (rawRemainingQty <= 0) continue;
+
+        // Inventory is stored in Meter
+        const remainingQty = convertToBaseUOM(
+          rawRemainingQty,
+          item?.uom?.code || "M",
+          "M"
+        );
 
         poReservedMap.set(
           mpnId,
-          currentReserved + Number(item.qty || 0)
+          (poReservedMap.get(mpnId) || 0) + remainingQty
         );
       }
     }
