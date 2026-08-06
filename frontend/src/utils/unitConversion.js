@@ -70,7 +70,7 @@ const isCountUnit = (uom) =>
 // };
 
 export const toMeter = (qty, fromUom, decimal = 4) => {
-  console.log("----fromUom", qty, fromUom);
+  // console.log("----fromUom", qty, fromUom);
 
   const unit = normalizeUnit(fromUom);
 
@@ -94,7 +94,7 @@ export const toMeter = (qty, fromUom, decimal = 4) => {
 ============================ */
 
 export const fromMeter = (meterQty, toUom) => {
-    console.log('----',meterQty,toUom)
+    // console.log('----',meterQty,toUom)
   const unit = normalizeUnit(toUom);
 
   // ✅ PCS / EA → return same value

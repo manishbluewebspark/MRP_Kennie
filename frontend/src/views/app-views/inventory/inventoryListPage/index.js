@@ -533,7 +533,7 @@ const InventoryListPage = () => {
               textAlign: "center",
             }}
           >
-            {shortfall}
+            {record?.totalRequired} {record?.uom}
           </span>
         );
       },

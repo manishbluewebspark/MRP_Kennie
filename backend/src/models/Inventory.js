@@ -35,6 +35,9 @@
 // models/Inventory.js
 import mongoose from "mongoose";
 
+
+const round = (num) => Number(num.toFixed(6));
+
 const adjustmentLogSchema = new mongoose.Schema({
   adjustmentQuantity: {
     type: Number,
@@ -147,6 +150,7 @@ const inventorySchema = new mongoose.Schema({
   timestamps: true
 });
 
+
 // ✅ Auto-update stockStatus based on balanceQuantity
 inventorySchema.pre('save', function (next) {
   if (this.balanceQuantity > 10) {
@@ -177,25 +181,38 @@ inventorySchema.statics.adjustInventory = async function (
       throw new Error('Inventory item not found');
     }
 
-    const previousBalance = inventory.balanceQuantity;
-    const newBalance = previousBalance + adjustmentQuantity;
+const previousBalance = Number(inventory.balanceQuantity || 0);
 
-    if (newBalance < 0) {
-      throw new Error(`Cannot adjust below zero. Current: ${previousBalance}, Adjustment: ${adjustmentQuantity}`);
-    }
+const EPSILON = 0.00001;
 
-    // Update balance quantity
-    inventory.balanceQuantity = newBalance;
+let newBalance = previousBalance + adjustmentQuantity;
+
+if (Math.abs(newBalance) < EPSILON) {
+  newBalance = 0;
+}
+
+if (newBalance < -EPSILON) {
+  throw new Error(
+    `Cannot adjust below zero. Current: ${previousBalance}, Adjustment: ${adjustmentQuantity}`
+  );
+}
+
+inventory.balanceQuantity = Number(newBalance.toFixed(6));
 
     // Add adjustment log
-    inventory.adjustmentLogs.push({
-      adjustmentQuantity,
-      reason,
-      adjustedBy,
-      previousBalance,
-      newBalance,
-      adjustmentType: adjustmentQuantity > 0 ? "INCREASE" : adjustmentQuantity < 0 ? "DECREASE" : "ADJUSTMENT"
-    });
+   inventory.adjustmentLogs.push({
+  adjustmentQuantity: Number(adjustmentQuantity.toFixed(6)),
+  reason,
+  adjustedBy,
+  previousBalance: Number(previousBalance.toFixed(6)),
+  newBalance,
+  adjustmentType:
+    adjustmentQuantity > 0
+      ? "INCREASE"
+      : adjustmentQuantity < 0
+      ? "DECREASE"
+      : "ADJUSTMENT",
+});
 
     // Increment total adjustments counter
     inventory.totalAdjustments += 1;

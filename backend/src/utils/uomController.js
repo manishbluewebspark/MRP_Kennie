@@ -126,9 +126,9 @@ export const convertToInventoryUom = async ({
   fromUom,     // supplier UOM (FT / M / CM etc)
   toUom,       // MPN Master UOM
 }) => {
-  console.log('----ccc',qty,
-  fromUom,     // supplier UOM (FT / M / CM etc)
-  toUom,)
+  // console.log('----ccc',qty,
+  // fromUom,     // supplier UOM (FT / M / CM etc)
+  // toUom,)
   const quantity = Number(qty);
   if (!Number.isFinite(quantity) || quantity === 0) return 0;
 
@@ -136,7 +136,7 @@ export const convertToInventoryUom = async ({
   const fromCode = await resolveUomCode(fromUom);
   const toCode = await resolveUomCode(toUom);
 
-  console.log('------fromCode',fromCode,toCode)
+  // console.log('------fromCode',fromCode,toCode)
   if (!fromCode || !toCode) {
     throw new Error("Invalid UOM");
   }
@@ -304,7 +304,7 @@ export const convertUom = ({
 // };
 
 export const convertToBaseUOM = (qty, from, to) => {
-  console.log('---------qty', qty, from, to);
+  // console.log('---------qty', qty, from, to);
 
   if (!qty || !from || !to) return qty;
 
@@ -329,7 +329,7 @@ export const convertToBaseUOM = (qty, from, to) => {
 
 
 export const convertLengthUnitPrice = (price, from, to) => {
-  console.log('------price',price,from,to)
+  // console.log('------price',price,from,to)
   // agar price ya unit missing ho, return price
   if (!price || !from || !to) return price;
 

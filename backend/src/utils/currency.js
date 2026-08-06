@@ -118,7 +118,7 @@ export const truncate = (n, decimals = 2) => {
 };
 
 export const convertCurrency = (amount, from, to, settings) => {
-  console.log('-------ss',amount,from, to, settings)
+  // console.log('-------ss',amount,from, to, settings)
   const n = toNum(amount);
   const rate = getRate(from, to, settings);
   const converted = n * rate;

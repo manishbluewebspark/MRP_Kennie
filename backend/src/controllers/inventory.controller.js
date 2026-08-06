@@ -206,49 +206,60 @@ export const buildLowStockDemandMap = async () => {
     );
 
     for (const wo of workOrders) {
-
       const demandQty = Number(
         (qtyPerDrawing * Number(wo.quantity || 0)).toFixed(6)
       );
 
-      const key =
-        `${mpnId}_${new Date(wo.needDate)
-          .toISOString()
-          .split("T")[0]}`;
-
-      if (!demandMap.has(key)) {
-        demandMap.set(key, {
-          mpnId,
-          needDate: wo.needDate,
-          demandQty: 0,
-          workOrders: [],
-        });
+      // Create array for this MPN if not exists
+      if (!demandMap.has(mpnId)) {
+        demandMap.set(mpnId, []);
       }
 
-      const row = demandMap.get(key);
+      const rows = demandMap.get(mpnId);
 
-      row.demandQty = Number(
-        (row.demandQty + demandQty).toFixed(6)
+      // Merge only same needDate
+      const existingRow = rows.find(
+        r =>
+          new Date(r.needDate).toISOString().split("T")[0] ===
+          new Date(wo.needDate).toISOString().split("T")[0]
       );
 
-      const existingWO = row.workOrders.find(
-        w => String(w.workOrderId) === String(wo._id)
-      );
-
-      if (existingWO) {
-        existingWO.quantity = Number(
-          (existingWO.quantity + demandQty).toFixed(6)
+      if (existingRow) {
+        existingRow.demandQty = Number(
+          (existingRow.demandQty + demandQty).toFixed(6)
         );
-      } else {
-        row.workOrders.push({
+
+        existingRow.workOrders.push({
           workOrderId: wo._id,
           workOrderNo: wo.workOrderNo,
           drawingId: wo.drawingId,
           quantity: demandQty,
           needDate: wo.needDate,
         });
+      } else {
+        rows.push({
+          mpnId,
+          needDate: wo.needDate,
+          demandQty,
+          workOrders: [
+            {
+              workOrderId: wo._id,
+              workOrderNo: wo.workOrderNo,
+              drawingId: wo.drawingId,
+              quantity: demandQty,
+              needDate: wo.needDate,
+            },
+          ],
+        });
       }
     }
+  }
+
+  // Sort each MPN's demand by need date
+  for (const rows of demandMap.values()) {
+    rows.sort(
+      (a, b) => new Date(a.needDate) - new Date(b.needDate)
+    );
   }
 
   return demandMap;
@@ -675,15 +686,15 @@ export const adjustInventory = async (req, res) => {
 
 
     const baseUomId = inventory.mpnId.UOM; // ✅ BASE UOM (meter / EA)
-    console.log('------baseUomId', baseUomId)
-    console.log("Input Qty:", adjustmentQuantity);
+    // console.log('------baseUomId', baseUomId)
+    // console.log("Input Qty:", adjustmentQuantity);
 
     const baseAdjustmentQty = await convertToMeter({
       qty: adjustmentQuantity,
       fromUom: baseUomId,
     });
 
-    console.log("Converted Qty:", baseAdjustmentQty);
+    // console.log("Converted Qty:", baseAdjustmentQty);
 
     // Use the static method for transaction safety
     const result = await Inventory.adjustInventory(
@@ -968,46 +979,46 @@ export const getLowStockAlerts = async (req, res) => {
       .select("mpnId balanceQuantity location workOrders updatedAt")
       .lean();
 
-      const mpnIdsOnList = inventories
-  .map(x => x?.mpnId?._id)
-  .filter(Boolean);
+    const mpnIdsOnList = inventories
+      .map(x => x?.mpnId?._id)
+      .filter(Boolean);
 
-const pendingPOs = await PurchaseOrders.find({
-  status: { $in: ["Emailed", "Acknowledged", "Partially Received"] },
-  "items.mpn": { $in: mpnIdsOnList },
-})
-  .select(
-    "poNumber items.mpn items.uom items.qty items.receivedQtyTotal"
-  )
-  .populate("items.uom", "code")
-  .lean();
+    const pendingPOs = await PurchaseOrders.find({
+      status: { $in: ["Emailed", "Acknowledged", "Partially Received"] },
+      "items.mpn": { $in: mpnIdsOnList },
+    })
+      .select(
+        "poNumber items.mpn items.uom items.qty items.receivedQtyTotal"
+      )
+      .populate("items.uom", "code")
+      .lean();
 
-const poMap = new Map();
+    const poMap = new Map();
 
-for (const po of pendingPOs) {
-  for (const it of po.items || []) {
-    const mid = String(it?.mpn || "");
-    if (!mid) continue;
+    for (const po of pendingPOs) {
+      for (const it of po.items || []) {
+        const mid = String(it?.mpn || "");
+        if (!mid) continue;
 
-    const inventoryItem = inventories.find(
-      x => String(x?.mpnId?._id) === mid
-    );
+        const inventoryItem = inventories.find(
+          x => String(x?.mpnId?._id) === mid
+        );
 
-    const rawRemainingQty =
-      Number(it.qty || 0) -
-      Number(it.receivedQtyTotal || 0);
+        const rawRemainingQty =
+          Number(it.qty || 0) -
+          Number(it.receivedQtyTotal || 0);
 
-    if (rawRemainingQty <= 0) continue;
+        if (rawRemainingQty <= 0) continue;
 
-    const remainingQty = convertUom({
-      qty: rawRemainingQty,
-      fromUom: it?.uom?.code || "",
-      toUom: inventoryItem?.mpnId?.UOM?.code || "",
-    });
+        const remainingQty = convertUom({
+          qty: rawRemainingQty,
+          fromUom: it?.uom?.code || "",
+          toUom: inventoryItem?.mpnId?.UOM?.code || "",
+        });
 
-    poMap.set(mid, (poMap.get(mid) || 0) + remainingQty);
-  }
-}
+        poMap.set(mid, (poMap.get(mid) || 0) + remainingQty);
+      }
+    }
 
     const costingItems = await CostingItems.find({
       mpn: { $in: mpnIds },
@@ -1059,12 +1070,6 @@ for (const po of pendingPOs) {
       await Promise.all(
         inventories.map(async (inv) => {
           const mpn = inv.mpnId;
-
-
-
-          // const drawingIds = [...new Set(costingItems.map(c => c.drawingId))];
-
-
           const mpnId = String(inv.mpnId._id);
 
           const drawingIds = [...(mpnDrawingMap.get(mpnId) || [])];
@@ -1072,48 +1077,53 @@ for (const po of pendingPOs) {
           const workOrders = [
             ...new Map(
               drawingIds
-                .flatMap(id => drawingWorkOrderMap.get(id) || [])
-                .map(w => [String(w._id), w])
-            ).values()
+                .flatMap((id) => drawingWorkOrderMap.get(id) || [])
+                .map((w) => [String(w._id), w])
+            ).values(),
           ];
-
 
           const currentStock = Number(inv.balanceQuantity || 0);
 
-          // const mpnId = String(inv.mpnId?._id || inv.mpnId);
-
-          const demandRows = [...demandMap.values()]
-            .filter(x => x.mpnId === mpnId)
-            .sort(
-              (a, b) =>
-                new Date(a.needDate) - new Date(b.needDate)
-            );
+          // console.log('------demandMap', demandMap)
+          // console.log('------demandMap------', demandMap.get(mpnId))
+          const demandRows = demandMap.get(mpnId) || [];
 
           if (!demandRows.length) {
             return null;
           }
 
-        //  const currentStock = Number(inv.balanceQuantity || 0);
+          const incomingQty = Number(
+            poMap.get(mpnId) || 0
+          );
 
-const incomingQty = Number(
-  poMap.get(String(inv.mpnId._id)) || 0
-);
+          // Available inventory
+          let availableStock = currentStock + incomingQty;
 
-let availableStock =
-  currentStock +
-  incomingQty -
-  Number(pickedMap.get(mpnId) || 0);
+          // Total picked quantity for this MPN
+          let remainingPicked = Number(
+            pickedMap.get(mpnId) || 0
+          );
 
           const rows = [];
 
           for (const row of demandRows) {
+            // Picked quantity pehle demand consume karegi
+            const effectiveDemand = Math.max(
+              0,
+              row.demandQty - remainingPicked
+            );
 
-            availableStock -= row.demandQty;
+            remainingPicked = Math.max(
+              0,
+              remainingPicked - row.demandQty
+            );
 
-            const shortfall =
-              Math.max(0, -availableStock);
+            availableStock -= effectiveDemand;
 
-            if (!shortfall) return null;
+            const shortfall = Math.max(0, -availableStock);
+
+            // Agar shortage nahi hai to next demand check karo
+            if (!shortfall) continue;
 
             const weeksLeft = weeksBetween(
               new Date(),
@@ -1128,26 +1138,28 @@ let availableStock =
               urgency = "urgent";
             }
 
+            const convertedShortfall = await convertFromMeter(
+              shortfall,
+              mpn.UOM?.code
+            );
 
-            const e = await convertFromMeter(shortfall, mpn.UOM?.code)
-            console.log('-----eee', e, shortfall)
+            const convertedDemand = await convertFromMeter(
+              effectiveDemand,
+              mpn.UOM?.code
+            );
+
             rows.push({
-
               mpnId: mpn._id,
-
               mpnNumber: mpn.MPN,
-
               description: mpn.Description,
-
               manufacturer: mpn.Manufacturer,
-
               uom: mpn.UOM?.code,
 
               currentStock,
 
-              totalRequired: row.demandQty,
+              totalRequired: convertedDemand,
 
-              shortfall: e,
+              shortfall: convertedShortfall,
 
               earliestNeedDate: row.needDate,
 
@@ -1157,14 +1169,11 @@ let availableStock =
 
               workOrders: row.workOrders,
 
-              lastUpdated: inv.updatedAt
-
+              lastUpdated: inv.updatedAt,
             });
-
-
           }
 
-          return rows;
+          return rows.length ? rows : null;
         })
       )
     )

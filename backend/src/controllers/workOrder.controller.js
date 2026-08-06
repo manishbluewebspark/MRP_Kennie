@@ -29,7 +29,7 @@ import Child from "../models/library/Child.js";
 import path from "path";
 import ejs from 'ejs'
 import puppeteer from 'puppeteer'
-import { convertFromMeter, convertQty, convertToInventoryUom, convertToMeter, convertUom } from "../utils/uomController.js";
+import { convertFromMeter, convertQty, convertToBaseUOM, convertToInventoryUom, convertToMeter, convertUom } from "../utils/uomController.js";
 import { getProcess, getUserName } from "../utils/helpers.js";
 
 function generateWorkOrderNumber(lastWorkOrderNo) {
@@ -5078,6 +5078,108 @@ export const getAllChilPartByDrawingId = async (req, res) => {
 //   }
 // };
 
+async function buildDemandMap() {
+  const workOrders = await WorkOrder.find({
+    isProductionComplete: false,
+  })
+    .select("_id drawingId quantity")
+    .lean();
+
+  if (!workOrders.length) return new Map();
+
+  const woQtyByDrawing = new Map();
+  const drawingIds = new Set();
+
+  for (const wo of workOrders) {
+    const dId = String(wo.drawingId);
+    if (!dId) continue;
+
+    drawingIds.add(dId);
+    woQtyByDrawing.set(
+      dId,
+      (woQtyByDrawing.get(dId) || 0) + Number(wo.quantity || 0)
+    );
+  }
+
+  const costingItems = await CostingItems.find({
+    drawingId: { $in: [...drawingIds] },
+    quoteType: "material",
+  })
+    .populate({
+      path: "mpn",
+      populate: { path: "UOM", select: "code" },
+    })
+    .populate("uom", "code")
+    .lean();
+
+  const demandMap = new Map();
+
+  for (const ci of costingItems) {
+    const dId = String(ci.drawingId);
+    const mpnId = String(ci.mpn?._id || ci.mpn);
+
+    if (!mpnId) continue;
+
+    const woQty = woQtyByDrawing.get(dId) || 0;
+    if (!woQty) continue;
+
+    const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code || "M";
+
+    const qtyInM = convertToBaseUOM(
+      Number(ci.quantity || 0),
+      fromUOM,
+      "M"
+    );
+
+    const needed = Number((qtyInM * woQty).toFixed(6));
+
+    demandMap.set(
+      mpnId,
+      Number(((demandMap.get(mpnId) || 0) + needed).toFixed(6))
+    );
+  }
+
+  return demandMap;
+}
+
+
+
+const buildPickedMap = async () => {
+  const workOrders = await WorkOrder.find({
+    isProductionComplete: false,
+  }).lean();
+
+  const pickedMap = new Map();
+
+  for (const wo of workOrders) {
+    for (const ph of wo.processHistory || []) {
+      if (ph.process !== "picking") continue;
+
+      for (const d of ph.details || []) {
+        const mpnId = String(d.mpnId || "");
+        if (!mpnId) continue;
+
+
+
+        const qty = convertToBaseUOM(
+          Number(d.pickedQty || 0),
+          d.uom || "M",
+          "M"
+        );
+
+        // ✅ KEY ONLY mpnId
+        pickedMap.set(
+          mpnId,
+          (pickedMap.get(mpnId) || 0) + qty
+        );
+      }
+    }
+  }
+
+  return pickedMap;
+};
+
+
 export const getTotalMPNNeeded = async (req, res) => {
   try {
     const {
@@ -5143,6 +5245,10 @@ export const getTotalMPNNeeded = async (req, res) => {
       });
     }
 
+
+    const demandMap = await buildDemandMap();
+    const pickedMap = await buildPickedMap();
+
     const drawingIds = filteredDrawings.map((d) => d._id);
 
     // =========================================================
@@ -5151,6 +5257,7 @@ export const getTotalMPNNeeded = async (req, res) => {
 
     const workOrders = await WorkOrder.find({
       drawingId: { $in: drawingIds },
+      isProductionComplete: false
     }).lean();
 
     if (!workOrders.length) {
@@ -5170,6 +5277,14 @@ export const getTotalMPNNeeded = async (req, res) => {
       quoteType: "material",
     })
       .populate("uom", "code")
+      .populate({
+        path: "mpn",
+        select: "MPN Description Manufacturer UOM",
+        populate: {
+          path: "UOM",
+          select: "code symbol",
+        },
+      })
       .lean();
 
     if (!costingItems.length) {
@@ -5213,10 +5328,10 @@ export const getTotalMPNNeeded = async (req, res) => {
       const woQty = Number(wo.quantity || 0);
 
       for (const ci of costingArr) {
-        console.log('----ci',ci)
+        // console.log('----ci', ci)
         if (!ci.mpn) continue;
 
-        const mpnId = String(ci.mpn);
+        const mpnId = String(ci.mpn?._id || ci.mpn);
 
         mpnIds.add(mpnId);
 
@@ -5225,24 +5340,42 @@ export const getTotalMPNNeeded = async (req, res) => {
           ci?.uomCode ||
           "EA";
 
+
+
+
+        const costingUom =
+          ci?.uom?.code ||
+          ci?.mpn?.UOM?.code ||
+          "EA";
+
+        const baseUom =
+          ci?.mpn?.UOM?.code ||
+          costingUom;
+
         const neededQty = convertUom({
           qty: Number(ci.quantity || 0) * woQty,
-          fromUom,
-          toUom: fromUom,
+          fromUom: costingUom,
+          toUom: baseUom,
         });
+
+
+        // console.log('------ggg', {
+        //   workOrder: wo.workOrderNo,
+        //   woQty,
+        //   costingQty: ci.quantity,
+        //   fromUom,
+        //   neededQty,
+        // });
 
         if (!mpnUsageMap.has(mpnId)) {
           mpnUsageMap.set(mpnId, {
             mpnId,
             description: ci.description || "",
             manufacturer: ci.manufacturer || "",
-            uomId: ci.uom || null,
-
             totalNeeded: 0,
-
             drawingIds: new Set(),
-
             workOrders: [],
+            baseUom,
           });
         }
 
@@ -5284,7 +5417,7 @@ export const getTotalMPNNeeded = async (req, res) => {
       mpnDocs.map((m) => [String(m._id), m])
     );
 
-        // =========================================================
+    // =========================================================
     // 7️⃣ LOAD UOMS
     // =========================================================
 
@@ -5308,32 +5441,31 @@ export const getTotalMPNNeeded = async (req, res) => {
     // 8️⃣ INVENTORY
     // =========================================================
 
-  const inventoryDocs = await Inventory.find({
-  mpnId: { $in: mpnObjectIds },
-})
-.populate({
-  path: "mpnId",
-  select: "UOM",
-  populate: {
-    path: "UOM",
-    select: "code",
-  },
-})
-.lean();
+    const inventoryDocs = await Inventory.find({
+      mpnId: { $in: mpnObjectIds },
+    })
+      .populate({
+        path: "mpnId",
+        populate: {
+          path: "UOM",
+          select: "code",
+        },
+      })
+      .lean();
 
-   const inventoryMap = new Map();
+    const inventoryMap = new Map();
 
-for (const inv of inventoryDocs) {
-  const key = String(inv.mpnId._id);
+    for (const inv of inventoryDocs) {
+      const key = String(inv.mpnId._id);
 
-  inventoryMap.set(key, {
-    balanceQuantity:
-      (inventoryMap.get(key)?.balanceQuantity || 0) +
-      Number(inv.balanceQuantity || 0),
+      inventoryMap.set(key, {
+        balanceQuantity:
+          (inventoryMap.get(key)?.balanceQuantity || 0) +
+          Number(inv.balanceQuantity || 0),
 
-    uomCode: inv.mpnId?.UOM?.code || "EA",
-  });
-}
+        uomCode: inv.mpnId?.UOM?.code || "EA",
+      });
+    }
 
     // =========================================================
     // 9️⃣ FINAL RESULT
@@ -5343,41 +5475,47 @@ for (const inv of inventoryDocs) {
 
     for (const row of mpnUsageMap.values()) {
       const mpn = mpnMap.get(row.mpnId);
-      console.log('--inventoryMap',inventoryMap)
+      // console.log('--inventoryMap', inventoryMap)
       const uom = row.uomId
         ? uomMap.get(String(row.uomId?._id))
         : null;
 
       const targetUom = uom?.code || "EA";
 
-     const inventory = inventoryMap.get(row.mpnId);
+      const inventory = inventoryMap.get(row.mpnId);
 
-const stockInMeter = Number(
-  inventory?.balanceQuantity || 0
-);
+      const stockInMeter = Number(
+        inventory?.balanceQuantity || 0
+      );
 
-const convertedStock = convertUom({
-  qty: stockInMeter,
-  fromUom: "M",
-  toUom: inventory?.uomCode || targetUom,
-});
+
+
+      const convertedStock = convertUom({
+        qty: Number(inventory?.balanceQuantity || 0),
+        fromUom: inventory?.uomCode || row.baseUom,
+        toUom: row.baseUom,
+      });
 
       row.workOrders.sort((a, b) =>
         a.workOrderNo.localeCompare(b.workOrderNo)
       );
+      const totalNeeded = Number(row.totalNeeded || 0);
 
-      const totalNeeded = Number(
-        row.totalNeeded.toFixed(4)
-      );
+      const pickedQty = pickedMap.get(row.mpnId) || 0;
+
+      // Remaining demand after picking
+      const remainingDemand = Math.max(0, totalNeeded - pickedQty);
+
+
 
       const shortfall = Math.max(
         0,
-        totalNeeded - convertedStock
+        remainingDemand - convertedStock
       );
 
-      // Material Required
-      // incoming stock ignore karega
-      if (shortfall <= 0) continue;
+      if (shortfall <= 0) {
+        continue;
+      }
 
       const workOrderString = row.workOrders
         .map((x) => x.workOrderNo)
@@ -5425,8 +5563,8 @@ const convertedStock = convertUom({
           mpn?.manufacturer ||
           "",
 
-       currentStock: Number(convertedStock.toFixed(4)),
-uom: inventory?.uomCode || targetUom,
+        currentStock: Number(convertedStock.toFixed(4)),
+        uom: inventory?.uomCode || targetUom,
 
         totalNeeded,
 
