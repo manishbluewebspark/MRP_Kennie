@@ -1106,72 +1106,64 @@ export const getLowStockAlerts = async (req, res) => {
 
           const rows = [];
 
-          for (const row of demandRows) {
-            // Picked quantity pehle demand consume karegi
-            const effectiveDemand = Math.max(
-              0,
-              row.demandQty - remainingPicked
-            );
+        for (const row of demandRows) {
+  const effectiveDemand = Math.max(
+    0,
+    row.demandQty - remainingPicked
+  );
 
-            remainingPicked = Math.max(
-              0,
-              remainingPicked - row.demandQty
-            );
+  remainingPicked = Math.max(
+    0,
+    remainingPicked - row.demandQty
+  );
 
-            availableStock -= effectiveDemand;
+  let shortfall = 0;
 
-            const shortfall = Math.max(0, -availableStock);
+  if (availableStock >= effectiveDemand) {
+    availableStock -= effectiveDemand;
+  } else {
+    shortfall = effectiveDemand - availableStock;
+    availableStock = 0;
+  }
 
-            // Agar shortage nahi hai to next demand check karo
-            if (!shortfall) continue;
+  if (shortfall <= 0) continue;
 
-            const weeksLeft = weeksBetween(
-              new Date(),
-              row.needDate
-            );
+  const weeksLeft = weeksBetween(new Date(), row.needDate);
 
-            let urgency = "normal";
+  let urgency = "normal";
 
-            if (weeksLeft <= criticalWeeksLeft) {
-              urgency = "critical";
-            } else if (weeksLeft <= urgentWeeksLeft) {
-              urgency = "urgent";
-            }
+  if (weeksLeft <= criticalWeeksLeft) {
+    urgency = "critical";
+  } else if (weeksLeft <= urgentWeeksLeft) {
+    urgency = "urgent";
+  }
 
-            const convertedShortfall = await convertFromMeter(
-              shortfall,
-              mpn.UOM?.code
-            );
+  const convertedShortfall = await convertFromMeter(
+    shortfall,
+    mpn.UOM?.code
+  );
 
-            const convertedDemand = await convertFromMeter(
-              effectiveDemand,
-              mpn.UOM?.code
-            );
+  const convertedDemand = await convertFromMeter(
+    effectiveDemand,
+    mpn.UOM?.code
+  );
 
-            rows.push({
-              mpnId: mpn._id,
-              mpnNumber: mpn.MPN,
-              description: mpn.Description,
-              manufacturer: mpn.Manufacturer,
-              uom: mpn.UOM?.code,
-
-              currentStock,
-
-              totalRequired: convertedDemand,
-
-              shortfall: convertedShortfall,
-
-              earliestNeedDate: row.needDate,
-
-              weeksLeft,
-
-              urgency,
-
-              workOrders: row.workOrders,
-
-              lastUpdated: inv.updatedAt,
-            });
-          }
+  rows.push({
+    mpnId: mpn._id,
+    mpnNumber: mpn.MPN,
+    description: mpn.Description,
+    manufacturer: mpn.Manufacturer,
+    uom: mpn.UOM?.code,
+    currentStock,
+    totalRequired: convertedDemand,
+    shortfall: convertedShortfall,
+    earliestNeedDate: row.needDate,
+    weeksLeft,
+    urgency,
+    workOrders: row.workOrders,
+    lastUpdated: inv.updatedAt,
+  });
+}
 
           return rows.length ? rows : null;
         })
