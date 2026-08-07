@@ -403,7 +403,13 @@ const UpdateOutgoingQuantityModal = ({ visible, onCancel, onUpdate, inventoryIte
     }
   }, [visible, inventoryItem, form]);
 
-  const calculateNewBalance = () => fromMeter(currentBalance, uomCode) + Number(adjustmentQuantity || 0);
+  const calculateNewBalance = () =>
+  Number(
+    (
+      fromMeter(currentBalance, uomCode) +
+      Number(adjustmentQuantity || 0)
+    ).toFixed(4)
+  );
 
   const getBalanceColor = (balance) => {
     if (balance < 0) return "red";

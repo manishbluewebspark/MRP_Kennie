@@ -36,7 +36,7 @@
 import mongoose from "mongoose";
 
 
-const round = (num) => Number(num.toFixed(6));
+
 
 const adjustmentLogSchema = new mongoose.Schema({
   adjustmentQuantity: {
@@ -164,6 +164,13 @@ inventorySchema.pre('save', function (next) {
   next();
 });
 
+
+const round = (value, decimals = 6) => {
+  return Number(
+    (Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals)).toFixed(decimals)
+  );
+};
+
 // ✅ Static method to adjust inventory
 inventorySchema.statics.adjustInventory = async function (
   inventoryId,
@@ -180,12 +187,11 @@ inventorySchema.statics.adjustInventory = async function (
     if (!inventory) {
       throw new Error('Inventory item not found');
     }
+    const EPSILON = 0.000001;
 
-const previousBalance = Number(inventory.balanceQuantity || 0);
+const previousBalance = round(Number(inventory.balanceQuantity || 0));
 
-const EPSILON = 0.00001;
-
-let newBalance = previousBalance + adjustmentQuantity;
+let newBalance = round(previousBalance + adjustmentQuantity);
 
 if (Math.abs(newBalance) < EPSILON) {
   newBalance = 0;
@@ -197,7 +203,7 @@ if (newBalance < -EPSILON) {
   );
 }
 
-inventory.balanceQuantity = Number(newBalance.toFixed(6));
+inventory.balanceQuantity = newBalance;
 
     // Add adjustment log
    inventory.adjustmentLogs.push({
@@ -240,26 +246,21 @@ inventorySchema.methods.addAdjustment = function (
   adjustedBy
 ) {
 
-  const previousBalance = Number(this.balanceQuantity || 0);
+ const previousBalance = round(Number(this.balanceQuantity || 0));
 
-  // Round to 6 decimals after calculation
-  let newBalance = Number(
-    (previousBalance + adjustmentQuantity).toFixed(6)
+let newBalance = round(previousBalance + adjustmentQuantity);
+
+if (Math.abs(newBalance) < 0.000001) {
+  newBalance = 0;
+}
+
+if (newBalance < 0) {
+  throw new Error(
+    `Cannot adjust below zero. Current: ${previousBalance}, Adjustment: ${adjustmentQuantity}`
   );
+}
 
-  // Remove floating-point residue
-  if (Math.abs(newBalance) < 0.000001) {
-    newBalance = 0;
-  }
-
-  // Prevent going below zero
-  if (newBalance < 0) {
-    throw new Error(
-      `Cannot adjust below zero. Current: ${previousBalance}, Adjustment: ${adjustmentQuantity}`
-    );
-  }
-
-  this.balanceQuantity = newBalance;
+this.balanceQuantity = newBalance;
 
   // Add to logs
  this.adjustmentLogs.push({

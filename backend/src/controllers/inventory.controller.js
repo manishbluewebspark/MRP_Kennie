@@ -601,7 +601,7 @@ export const getInventoryList = async (req, res) => {
         Storage: mpnData.StorageLocation || "-",
         UOM: mpnData?.UOM?.code || "",
 
-        balanceQuantity: balanceQty.toFixed(4),
+        balanceQuantity: balanceQty.toFixed(6),
         IncomingQty: incomingQty,
         DemandQty: effectiveDemand,
         PickedQty: pickedQty,
