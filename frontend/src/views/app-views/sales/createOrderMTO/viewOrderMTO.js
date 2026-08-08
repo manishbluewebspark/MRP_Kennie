@@ -69,6 +69,7 @@ const DrawingDetails = () => {
     const [costingMaterialData, setCostingMaterialData] = useState({ costingItems: [] });
     const [editingItem, setEditingItem] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
     // per-tab raw subtotals (without markup)
     const [rawTotals, setRawTotals] = useState({ material: 0, manhour: 0, packing: 0 });
@@ -179,8 +180,8 @@ const DrawingDetails = () => {
     useEffect(() => {
         if (!id) return;
         dispatch(fetchAllMpn());
-        dispatch(getAllUOMs({limit:3000}));
-        dispatch(fetchSuppliers({limit:3000}));
+        dispatch(getAllUOMs({ limit: 3000 }));
+        dispatch(fetchSuppliers({ limit: 3000 }));
         dispatch(getAllMarkupParameters());
         fetchProjects();
         fetchCostingItems();
@@ -216,56 +217,218 @@ const DrawingDetails = () => {
     };
 
     const round2 = (n) =>
-  Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+        Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
     // GRAND total across all tabs with their markups
-   const grandTotalWithMarkup = useMemo(() => {
-  // ✅ 1. Backend value ko priority do
-  if (drawing?.totalPriceWithMarkup != null) {
-    return drawing.totalPriceWithMarkup;
-  }
+    const grandTotalWithMarkup = useMemo(() => {
+        // ✅ 1. Backend value ko priority do
+        if (drawing?.totalPriceWithMarkup != null) {
+            return drawing.totalPriceWithMarkup;
+        }
 
-  // ❌ 2. Sirf fallback ke liye frontend calculation
-  const m = Number(drawing?.materialMarkup || 0);
-  const h = Number(drawing?.manhourMarkup || 0);
-  const p = Number(drawing?.packingMarkup || 0);
+        // ❌ 2. Sirf fallback ke liye frontend calculation
+        const m = Number(drawing?.materialMarkup || 0);
+        const h = Number(drawing?.manhourMarkup || 0);
+        const p = Number(drawing?.packingMarkup || 0);
 
-  const materialTotal =
-    rawTotals.material + (rawTotals.material * m) / 100;
+        const materialTotal =
+            rawTotals.material + (rawTotals.material * m) / 100;
 
-  const manhourTotal =
-    rawTotals.manhour + (rawTotals.manhour * h) / 100;
+        const manhourTotal =
+            rawTotals.manhour + (rawTotals.manhour * h) / 100;
 
-  const packingTotal =
-    rawTotals.packing + (rawTotals.packing * p) / 100;
+        const packingTotal =
+            rawTotals.packing + (rawTotals.packing * p) / 100;
 
-  return round2(materialTotal + manhourTotal + packingTotal);
-}, [drawing, rawTotals]);
+        return round2(materialTotal + manhourTotal + packingTotal);
+    }, [drawing, rawTotals]);
 
 
     const triggerFileInput = () => fileInputRef.current && fileInputRef.current.click();
 
+
     const handleFileChange = async (event) => {
         const file = event.target.files?.[0];
+
         if (!file) return;
+
         const fd = new FormData();
         fd.append("file", file);
         fd.append("quoteType", getQuoteTypeFromActiveTab(activeTab));
+
+        setIsImporting(true);
+
         try {
             const res = await DrawingService.importCostingItems(id, fd);
+
+            console.log("--------- Import Response ---------", res);
+
+            // ==========================================
+            // FAILED ROWS
+            // ==========================================
             if (res?.errorCount > 0) {
-                message.error(res?.message);
-            } else {
-                message.success(res?.message);
+    message.error({
+        content: (
+            <div
+                style={{
+                    width: 600,
+                    maxWidth: "calc(100vw - 60px)",
+                    fontSize: 12,
+                }}
+            >
+                <div
+                    style={{
+                        fontWeight: 600,
+                        fontSize: 13,
+                        marginBottom: 4,
+                    }}
+                >
+                    Excel imported with errors
+                </div>
+
+                <div
+                    style={{
+                        fontSize: 11,
+                        fontWeight: 400,
+                        marginBottom: 6,
+                    }}
+                >
+                    {res?.insertedCount || 0} rows imported,{" "}
+                    {res?.errorCount || 0} rows failed.
+                </div>
+
+                {/* Errors */}
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "5px 8px",
+                        maxHeight: 180,
+                        overflowY: "auto",
+                        paddingRight: 3,
+                    }}
+                >
+                    {res?.errors?.map((error, index) => (
+                        <div
+                            key={index}
+                            style={{
+                                padding: "5px 7px",
+                                border: "1px solid #eee",
+                                borderRadius: 3,
+                                background: "#fff",
+                                fontSize: 10,
+                                lineHeight: "14px",
+                            }}
+                        >
+                            <div>
+                                <strong>Row {error.row}</strong>{" "}
+                                <span style={{ color: "#d4380d" }}>
+                                    {error.field}
+                                </span>
+                            </div>
+
+                            {error.value && (
+                                <div>
+                                    <strong>ChildPart:</strong>{" "}
+                                    {error.value}
+                                </div>
+                            )}
+
+                            <div
+                                style={{
+                                    color: "#666",
+                                    whiteSpace: "normal",
+                                }}
+                            >
+                                {error.message}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div
+                    style={{
+                        marginTop: 6,
+                        fontSize: 10,
+                        color: "#666",
+                    }}
+                >
+                    Failed rows Excel is downloading...
+                </div>
+            </div>
+        ),
+        duration: 10,
+    });
+
+    // AUTO DOWNLOAD
+    if (res?.failedFilePath) {
+        const link = document.createElement("a");
+
+        link.href = res.failedFilePath;
+        link.download =
+            res.failedFileName || "failed-costing.xlsx";
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+} else {
+                // ==========================================
+                // FULL SUCCESS
+                // ==========================================
+                message.success({
+                    content:
+                        res?.message || "Excel imported successfully",
+                    duration: 5,
+                });
             }
 
-            fetchCostingItems();
-            getDrawingData();
+            // Refresh data
+            await fetchCostingItems();
+            await getDrawingData();
+
         } catch (error) {
-            console.error(error);
-            message.error("Excel import failed");
+            console.error("Excel import failed:", error);
+
+            const errorMessage =
+                error?.response?.data?.message ||
+                error?.message ||
+                "Excel import failed";
+
+            message.error({
+                content: errorMessage,
+                duration: 8,
+            });
+
+        } finally {
+            setIsImporting(false);
+
+            // Same file dobara select karne ke liye
+            event.target.value = "";
         }
     };
+
+    // const handleFileChange = async (event) => {
+    //     const file = event.target.files?.[0];
+    //     if (!file) return;
+    //     const fd = new FormData();
+    //     fd.append("file", file);
+    //     fd.append("quoteType", getQuoteTypeFromActiveTab(activeTab));
+    //     try {
+    //         const res = await DrawingService.importCostingItems(id, fd);
+    //         if (res?.errorCount > 0) {
+    //             message.error(res?.message);
+    //         } else {
+    //             message.success(res?.message);
+    //         }
+
+    //         fetchCostingItems();
+    //         getDrawingData();
+    //     } catch (error) {
+    //         console.error(error);
+    //         message.error("Excel import failed");
+    //     }
+    // };
 
     const handleAssignProject = async (data) => {
         try {
@@ -321,53 +484,53 @@ const DrawingDetails = () => {
     // };
 
     const handleModalAction = async (type, values, quoteType) => {
-    try {
-        if (!values.extPrice && values.quantity && values.unitPrice) {
-            values.extPrice = Number(values.quantity) * Number(values.unitPrice);
+        try {
+            if (!values.extPrice && values.quantity && values.unitPrice) {
+                values.extPrice = Number(values.quantity) * Number(values.unitPrice);
+            }
+
+            // console.log('------values',values)
+
+            if (editingItem) {
+                await DrawingService.updateCostingItem(
+                    id,
+                    editingItem._id,
+                    { ...values, quoteType }
+                );
+                message.success("Costing item updated successfully");
+            } else {
+                await DrawingService.addCostingItem(
+                    id,
+                    { ...values, quoteType }
+                );
+                message.success("Costing item added successfully");
+            }
+
+            fetchCostingItems();
+            getDrawingData();
+            setCostingModalVisible(false);
+            setEditingItem(null);
+
+        } catch (err) {
+            console.error("Error saving costing item:", err);
+
+            // 🔥 Handle duplicate child part
+            if (
+                err?.response?.data?.error?.includes("E11000") ||
+                err?.response?.data?.error?.includes("childPart")
+            ) {
+                message.error("This Child Part is already added in this Drawing");
+            }
+            // 🔥 Backend custom message
+            else if (err?.response?.data?.message) {
+                message.error(err.response.data.message);
+            }
+            // fallback
+            else {
+                message.error("Something went wrong while saving item");
+            }
         }
-
-        // console.log('------values',values)
-
-        if (editingItem) {
-            await DrawingService.updateCostingItem(
-                id,
-                editingItem._id,
-                { ...values, quoteType }
-            );
-            message.success("Costing item updated successfully");
-        } else {
-            await DrawingService.addCostingItem(
-                id,
-                { ...values, quoteType }
-            );
-            message.success("Costing item added successfully");
-        }
-
-        fetchCostingItems();
-        getDrawingData();
-        setCostingModalVisible(false);
-        setEditingItem(null);
-
-    } catch (err) {
-        console.error("Error saving costing item:", err);
-
-        // 🔥 Handle duplicate child part
-        if (
-            err?.response?.data?.error?.includes("E11000") ||
-            err?.response?.data?.error?.includes("childPart")
-        ) {
-            message.error("This Child Part is already added in this Drawing");
-        } 
-        // 🔥 Backend custom message
-        else if (err?.response?.data?.message) {
-            message.error(err.response.data.message);
-        } 
-        // fallback
-        else {
-            message.error("Something went wrong while saving item");
-        }
-    }
-};
+    };
 
 
     const handleModalClose = () => {
@@ -403,41 +566,41 @@ const DrawingDetails = () => {
         }
     };
 
-const handleUpdateAll = async (ids = []) => {
-  try {
-    if (!Array.isArray(ids) || ids.length === 0) {
-      message.warning("No items to update");
-      return;
-    }
+    const handleUpdateAll = async (ids = []) => {
+        try {
+            if (!Array.isArray(ids) || ids.length === 0) {
+                message.warning("No items to update");
+                return;
+            }
 
-    // single loading message
-    message.loading({
-      content: "Updating latest prices for all items...",
-      key: "bulkUpdate",
-    });
+            // single loading message
+            message.loading({
+                content: "Updating latest prices for all items...",
+                key: "bulkUpdate",
+            });
 
-    await DrawingService.updateLatestPriceBulk({ ids });
+            await DrawingService.updateLatestPriceBulk({ ids });
 
-    // success (replace loading)
-    message.success({
-      content: "All latest prices updated successfully!",
-      key: "bulkUpdate",
-    });
+            // success (replace loading)
+            message.success({
+                content: "All latest prices updated successfully!",
+                key: "bulkUpdate",
+            });
 
-    // ✅ fetch only once
-    fetchCostingItems();
-    getDrawingData();
-  } catch (error) {
-    console.error("Bulk update error:", error);
+            // ✅ fetch only once
+            fetchCostingItems();
+            getDrawingData();
+        } catch (error) {
+            console.error("Bulk update error:", error);
 
-    message.error({
-      content:
-        error.response?.data?.message ||
-        "Failed to update latest prices",
-      key: "bulkUpdate",
-    });
-  }
-};
+            message.error({
+                content:
+                    error.response?.data?.message ||
+                    "Failed to update latest prices",
+                key: "bulkUpdate",
+            });
+        }
+    };
 
 
     const menu = (
@@ -537,6 +700,7 @@ const handleUpdateAll = async (ids = []) => {
                         hasPermission("sales.mto:add_material") && (
                             <Button
                                 icon={<FileExcelOutlined />}
+                                loading={isImporting}
                                 onClick={triggerFileInput}
                                 style={{ marginLeft: "auto" }}
                             >

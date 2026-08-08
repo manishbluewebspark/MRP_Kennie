@@ -870,54 +870,67 @@ export const updateWorkOrder = async (req, res) => {
     const body = { ...(req.body || {}) };
 
     // ❌ New schema me items array ka koi concept nahi
-    // agar front-end galti se bhej de to ignore kar do
     if (Array.isArray(body.items)) {
       delete body.items;
     }
 
-    // 🔹 1) Agar drawingId aa rahi hai ya change karni ho → Drawing se projectId/projectType nikalo
+    // ❌ Update ke time status ko frontend se change nahi hone dena
+    delete body.status;
+
+    // 🔹 Drawing se projectId/projectType
     if (body.drawingId) {
       try {
         const drawing = await Drawing.findById(body.drawingId).lean();
 
         if (drawing) {
-          // Drawing se projectId
           if (drawing.projectId) {
             body.projectId = drawing.projectId;
           }
 
-          // Drawing se projectType / quoteType
           const rawProjectType =
-            body.projectType || drawing.projectType || drawing.quoteType;
+            body.projectType ||
+            drawing.projectType ||
+            drawing.quoteType;
 
           body.projectType = normalizeProjectType(rawProjectType);
         }
       } catch (e) {
-        console.error("Drawing lookup failed in updateWorkOrder:", e);
-        // fail mat karo, sirf log rakho
+        console.error(
+          "Drawing lookup failed in updateWorkOrder:",
+          e
+        );
       }
     } else if (body.projectType) {
-      // Sirf projectType aaya ho to bhi normalize kar do
       body.projectType = normalizeProjectType(body.projectType);
     }
 
-    // 🔹 2) DATE NORMALIZATION
-    if (body.commitDate) body.commitDate = new Date(body.commitDate);
-    if (body.needDate) body.needDate = new Date(body.needDate);
+    // 🔹 DATE NORMALIZATION
+    if (body.commitDate) {
+      body.commitDate = new Date(body.commitDate);
+    }
 
-    // needDate agar missing ho & commitDate hai → auto backfill
+    if (body.needDate) {
+      body.needDate = new Date(body.needDate);
+    }
+
+    // needDate missing + commitDate available
     backfillNeedDate(body);
 
-    // 🔹 3) FINAL UPDATE (single flat WorkOrder document)
-    const updated = await WorkOrder.findByIdAndUpdate(id, body, {
-      new: true,
-      runValidators: true,
-    });
+    // 🔹 FINAL UPDATE
+    const updated = await WorkOrder.findByIdAndUpdate(
+      id,
+      body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
 
     if (!updated) {
-      return res
-        .status(404)
-        .json({ success: false, message: "WorkOrder not found" });
+      return res.status(404).json({
+        success: false,
+        message: "WorkOrder not found",
+      });
     }
 
     return res.status(200).json({
@@ -927,9 +940,11 @@ export const updateWorkOrder = async (req, res) => {
     });
   } catch (error) {
     console.error("Update WorkOrder Error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: error.message });
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 

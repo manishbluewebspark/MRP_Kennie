@@ -102,55 +102,129 @@ const CreateWorkOrderModal = ({
     return `WO${year}${month}-${seqStr}`;
   };
 
-  const fetchDrawings = async (params = {}) => {
-    setLoading(true);
-    try {
-      const response = await DrawingService.getAllDrawings({ ...params,limit:20, showOnlyQuoted: true });
-      if (!response?.success) {
-        message.error("Failed to fetch drawings");
-        setAllRows([]);
-        return;
-      }
+ const fetchDrawings = async (params = {}) => {
+  setLoading(true);
 
-      const formatted = (response.data || []).map((drawing, index) => {
-        const drawingId = drawing._id ? String(drawing._id) : String(index);
+  try {
+    const response = await DrawingService.getAllDrawings({
+      ...params,
+      limit: 20,
+      showOnlyQuoted: true,
+    });
 
-        const qty = Number(drawing.qty || 0);
-        const unitPriceNum = Number(drawing?.totalPriceWithMarkup ?? 0);
-        const totalPriceNum = qty * drawing?.totalPriceWithMarkup;
-
-        return {
-          key: drawingId,
-          drawingId,
-          drawingNo: drawing.drawingNo || "-",
-          project: drawing.projectId?.projectName || drawing.projectName || "-",
-          projectId: drawing.projectId?._id || null,
-          customer: drawing.customerId?.companyName || drawing.customerName || "-",
-          qty,
-          unitPriceNum,
-          totalPriceNum,
-          currency: drawing?.currency?.symbol,
-          unitPrice: `${drawing?.currency?.symbol} ${unitPriceNum}`,
-          totalPrice: `${drawing?.currency?.symbol}  ${totalPriceNum}`,
-          quotedDate: drawing.quotedDate ? dayjs(drawing.quotedDate).format("DD/MM/YYYY") : "-",
-          // editable fields
-          posNo: drawing.posNumber || "",
-          workOrderQty: qty || 0,
-          uom: drawing.uom || "PCS",
-          remarks: drawing.remarks || "",
-          status: drawing.quoteStatus || "draft",
-        };
-      });
-
-      setAllRows(formatted);
-    } catch (err) {
-      console.error(err);
+    if (!response?.success) {
       message.error("Failed to fetch drawings");
       setAllRows([]);
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    const formatted = (response.data || []).map((drawing, index) => {
+      const drawingId = drawing._id
+        ? String(drawing._id)
+        : String(index);
+
+      const qty = Number(drawing.qty || 0);
+
+      const isEditingThisRow =
+        isEditMode &&
+        editDrawingId &&
+        String(drawingId) === String(editDrawingId);
+
+      // IMPORTANT:
+      // Edit mode mein WorkOrder ki quantity use hogi.
+      // Create mode mein Drawing ki qty use hogi.
+      const editQuantity = Number(editingWorkOrder?.quantity);
+
+      const workOrderQty =
+        isEditingThisRow && Number.isFinite(editQuantity)
+          ? editQuantity
+          : qty;
+
+      return {
+        key: drawingId,
+        drawingId,
+
+        drawingNo: drawing.drawingNo || "-",
+
+        project:
+          drawing.projectId?.projectName ||
+          drawing.projectName ||
+          "-",
+
+        projectId:
+          drawing.projectId?._id ||
+          drawing.projectId ||
+          null,
+
+        customer:
+          drawing.customerId?.companyName ||
+          drawing.customerName ||
+          "-",
+
+        qty,
+
+        unitPriceNum: Number(
+          drawing?.totalPriceWithMarkup ?? 0
+        ),
+
+        totalPriceNum:
+          qty *
+          Number(drawing?.totalPriceWithMarkup ?? 0),
+
+        currency: drawing?.currency?.symbol,
+
+        quotedDate: drawing.quotedDate
+          ? dayjs(drawing.quotedDate).format("DD/MM/YYYY")
+          : "-",
+
+        // Edit mode
+        posNo: isEditingThisRow
+          ? String(editingWorkOrder?.posNo ?? "")
+          : String(drawing.posNumber ?? ""),
+
+        // ⭐ THIS WILL REMAIN 5
+        workOrderQty,
+
+        uom: isEditingThisRow
+          ? editingWorkOrder?.uom || drawing.uom || "PCS"
+          : drawing.uom || "PCS",
+
+        remarks: isEditingThisRow
+          ? editingWorkOrder?.remarks ?? drawing.remarks ?? ""
+          : drawing.remarks || "",
+
+        status: drawing.quoteStatus || "draft",
+      };
+    });
+
+    console.log("FINAL FETCHED ROWS:", formatted);
+
+    setAllRows(formatted);
+
+    // Edit mode mein drawing automatically selected
+    if (isEditMode && editDrawingId) {
+      setSelectedDrawingIds([editDrawingId]);
+
+      form.setFieldsValue({
+        workOrderNo: editingWorkOrder?.workOrderNo || "",
+        poNumber: editingWorkOrder?.poNumber || "",
+        projectNo: editingWorkOrder?.projectNo || "",
+        needDate: editingWorkOrder?.needDate
+          ? dayjs(editingWorkOrder.needDate)
+          : null,
+        commitDate: editingWorkOrder?.commitDate
+          ? dayjs(editingWorkOrder.commitDate)
+          : null,
+      });
+    }
+  } catch (err) {
+    console.error("fetchDrawings error:", err);
+    message.error("Failed to fetch drawings");
+    setAllRows([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ✅ edit-mode me sirf selected drawing row show
   const tableRows = useMemo(() => {
@@ -281,7 +355,7 @@ const CreateWorkOrderModal = ({
             onChange={(e) =>
               handleRowChange(record.drawingId, "posNo", e.target.value)
             }
-            disabled={isEditMode}
+            disabled={canEdit}
           />
         ),
       }
@@ -301,7 +375,7 @@ const CreateWorkOrderModal = ({
         ),
       },
     ];
-  }, [selectedDrawingIds, isEditMode]);
+ }, [selectedDrawingIds, isEditMode, canEdit]);
 
   const handleSearch = (value) => {
     setSearchQuery(value);
@@ -336,16 +410,7 @@ const CreateWorkOrderModal = ({
   // ✅ open modal => fetch drawings
   useEffect(() => {
     if (!visible) return;
-
-    // fetch first
     fetchDrawings();
-
-    // set form defaults
-    // if (!isEditMode) {
-    //   form.setFieldsValue({
-    //     workOrderNo: generateWorkOrderNumber(lastWorkOrderNo),
-    //   });
-    // }
   }, [visible]); // ✅ only depends on visible
 
   // ✅ when edit data + rows loaded => patch once
@@ -382,92 +447,176 @@ const CreateWorkOrderModal = ({
   //   }
   // }, [visible, isEditMode, editDrawingId, editingWorkOrder, form]);
 
-  useEffect(() => {
-    if (!visible) return;
-    if (!isEditMode || !editingWorkOrder) return;
-    if (!allRows.length) return; // 🔥 WAIT for data
+  // useEffect(() => {
+  //   if (!visible) return;
+  //   if (!isEditMode || !editingWorkOrder) return;
+  //   if (!allRows.length) return; // 🔥 WAIT for data
 
-    if (editDrawingId) {
-      setSelectedDrawingIds([editDrawingId]);
+  //   if (editDrawingId) {
+  //     setSelectedDrawingIds([editDrawingId]);
 
-      form.setFieldsValue({
-        workOrderNo: editingWorkOrder.workOrderNo,
-        poNumber: editingWorkOrder.poNumber,
-        projectNo: editingWorkOrder.projectNo,
-        needDate: editingWorkOrder.needDate ? dayjs(editingWorkOrder.needDate) : null,
-        commitDate: editingWorkOrder.commitDate ? dayjs(editingWorkOrder.commitDate) : null,
-      });
+  //     form.setFieldsValue({
+  //       workOrderNo: editingWorkOrder.workOrderNo,
+  //       poNumber: editingWorkOrder.poNumber,
+  //       projectNo: editingWorkOrder.projectNo,
+  //       needDate: editingWorkOrder.needDate ? dayjs(editingWorkOrder.needDate) : null,
+  //       commitDate: editingWorkOrder.commitDate ? dayjs(editingWorkOrder.commitDate) : null,
+  //     });
 
-      setAllRows((prev) =>
-        prev.map((r) => {
-          if (String(r.drawingId) !== String(editDrawingId)) return r;
+  //     setAllRows((prev) =>
+  //       prev.map((r) => {
+  //         if (String(r.drawingId) !== String(editDrawingId)) return r;
 
-          return {
-            ...r,
-            posNo: editingWorkOrder.posNo ?? "",
-            workOrderQty:
-              typeof editingWorkOrder.quantity === "number"
-                ? editingWorkOrder.quantity
-                : r.workOrderQty,
-            uom: editingWorkOrder.uom || r.uom || "PCS",
-            remarks: editingWorkOrder.remarks ?? r.remarks ?? "",
-          };
-        })
-      );
+  //         return {
+  //           ...r,
+  //           posNo: editingWorkOrder.posNo ?? "",
+  //           workOrderQty:
+  //             typeof editingWorkOrder.quantity === "number"
+  //               ? editingWorkOrder.quantity
+  //               : r.workOrderQty,
+  //           uom: editingWorkOrder.uom || r.uom || "PCS",
+  //           remarks: editingWorkOrder.remarks ?? r.remarks ?? "",
+  //         };
+  //       })
+  //     );
+  //   }
+  // }, [visible, isEditMode, editDrawingId, editingWorkOrder, allRows]);
+
+const handleCreateOrder = async (values) => {
+  try {
+    if (!selectedDrawingIds.length) {
+      message.error("Please select at least one drawing");
+      return;
     }
-  }, [visible, isEditMode, editDrawingId, editingWorkOrder, allRows]);
 
-  const handleCreateOrder = async (values) => {
-    try {
-      if (!selectedDrawingIds.length) {
-        message.error("Please select at least one drawing");
-        return;
-      }
+    const selectedRows = selectedDrawingIds
+      .map((id) =>
+        allRows.find(
+          (r) => String(r.drawingId) === String(id)
+        )
+      )
+      .filter(Boolean);
 
-      const invalidRow = selectedDrawingIds
-        .map((id) => allRows.find((r) => String(r.drawingId) === String(id)))
-        .find((row) => !row?.posNo || row.posNo.trim() === "");
+    const invalidRow = selectedRows.find(
+      (row) =>
+        row.posNo === undefined ||
+        row.posNo === null ||
+        String(row.posNo).trim() === ""
+    );
 
-      if (invalidRow) {
-        message.error("POS No is mandatory for all selected drawings");
-        return;
-      }
+    if (invalidRow) {
+      message.error("POS No is mandatory for all selected drawings");
+      return;
+    }
 
-      const items = selectedDrawingIds
-        .map((drawingId) => allRows.find((r) => String(r.drawingId) === String(drawingId)))
-        .filter(Boolean)
-        .map((row) => ({
-          drawingId: row.drawingId,
-          posNo: row.posNo || "",
-          quantity: Number(row.workOrderQty || 0),
-          uom: row.uom || "PCS",
-          remarks: row.remarks || "",
-        }));
-
-      const firstRow = items[0];
-      const firstDrawing = allRows.find((r) => String(r.drawingId) === String(firstRow?.drawingId));
+    // =====================================================
+    // EDIT
+    // =====================================================
+    if (isEditMode) {
+      const row = selectedRows[0];
 
       const workOrderData = {
         workOrderNo: values.workOrderNo,
-        projectId: firstDrawing?.projectId || null,
+        drawingId: row.drawingId,
+
+        projectId:
+          row.projectId ||
+          editingWorkOrder?.projectId ||
+          null,
+
         poNumber: values.poNumber,
         projectNo: values.projectNo,
-        needDate: values.needDate ? values.needDate.format("YYYY-MM-DD") : null,
-        commitDate: values.commitDate ? values.commitDate.format("YYYY-MM-DD") : null,
-        status: values.status || "on_hold",
-        isTriggered: false,
-        items,
-        // ✅ if edit save also needed, you can add _id
-        ...(isEditMode ? { _id: editingWorkOrder?._id } : {}),
+
+        posNo: String(row.posNo ?? ""),
+
+        quantity: Number(row.workOrderQty ?? 0),
+
+        uom:
+          row.uom ||
+          editingWorkOrder?.uom ||
+          "PCS",
+
+        remarks:
+          row.remarks ??
+          editingWorkOrder?.remarks ??
+          "",
+
+        needDate: values.needDate
+          ? values.needDate.format("YYYY-MM-DD")
+          : null,
+
+        commitDate: values.commitDate
+          ? values.commitDate.format("YYYY-MM-DD")
+          : null,
+
+        isTriggered:
+          editingWorkOrder?.isTriggered ?? false,
+
+        _id: editingWorkOrder._id,
       };
 
+      console.log("UPDATE WORK ORDER:", workOrderData);
+
       await onCreate(workOrderData);
+
       resetAll();
-    } catch (err) {
-      console.error(err);
-      message.error("Failed to create/update work order");
+      return;
     }
-  };
+
+    // =====================================================
+    // CREATE
+    // =====================================================
+
+    const items = selectedRows.map((row) => ({
+      drawingId: row.drawingId,
+      posNo: String(row.posNo ?? ""),
+      quantity: Number(row.workOrderQty ?? 0),
+      uom: row.uom || "PCS",
+      remarks: row.remarks || "",
+    }));
+
+    const firstRow = items[0];
+
+    const firstDrawing = allRows.find(
+      (r) =>
+        String(r.drawingId) ===
+        String(firstRow.drawingId)
+    );
+
+    const workOrderData = {
+      workOrderNo: values.workOrderNo,
+
+      projectId:
+        firstDrawing?.projectId || null,
+
+      poNumber: values.poNumber,
+      projectNo: values.projectNo,
+
+      needDate: values.needDate
+        ? values.needDate.format("YYYY-MM-DD")
+        : null,
+
+      commitDate: values.commitDate
+        ? values.commitDate.format("YYYY-MM-DD")
+        : null,
+
+      status: "on_hold",
+
+      isTriggered: false,
+
+      items,
+    };
+
+    console.log("CREATE WORK ORDER:", workOrderData);
+
+    await onCreate(workOrderData);
+
+    resetAll();
+  } catch (err) {
+    console.error(err);
+    message.error("Failed to create/update work order");
+  }
+};
 
   return (
     <Modal

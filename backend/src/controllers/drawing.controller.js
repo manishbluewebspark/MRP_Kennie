@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 import XLSX from "xlsx";
+import path from 'path';
+import fs from "fs/promises";
+import os from "os";
 import Drawing from "../models/Drwaing.js";
 import Project from "../models/Project.js";
 import CostingItems from "../models/CostingItem.js";
@@ -1909,7 +1912,7 @@ export const updateCostingItem = async (req, res) => {
       matBurden: req.body.matBurden ?? existingItem.matBurden,
       freightPercent: req.body.freightPercent ?? existingItem.freightPercent,
       freightCost: req.body.freightCost ?? existingItem.freightCost,
-      childPart:req.body.childPart ?? existingItem.childPart,
+      childPart: req.body.childPart ?? existingItem.childPart,
       currency: drawingCurrency,
       sourceCurrency,
       remarks: req.body.remarks,
@@ -1917,7 +1920,7 @@ export const updateCostingItem = async (req, res) => {
       unitPrice: finalUnitPrice,
       extPrice: finalExtPrice,       // ✅ FIX
       salesPrice: finalSalesPrice,   // ✅ FIX
-      description : req.body.description ?? existingItem.description,
+      description: req.body.description ?? existingItem.description,
       lastEditedBy: req.user?._id,
       updatedAt: new Date(),
     };
@@ -2621,28 +2624,46 @@ export const importCostingItems = async (req, res) => {
     const { quoteType } = req.body;
     const file = req.file;
 
+    // ============================================================
+    // 1. FILE VALIDATION
+    // ============================================================
+
     if (!file) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No file uploaded" });
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
     }
+
     filePath = file.path;
 
     if (!mongoose.Types.ObjectId.isValid(drawingId)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid drawingId" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid drawingId",
+      });
     }
 
-    const drawing = await Drawing.findById(drawingId).populate("currency", "code symbol")
+    // ============================================================
+    // 2. DRAWING
+    // ============================================================
+
+    const drawing = await Drawing.findById(drawingId)
+      .populate("currency", "code symbol");
+
     if (!drawing) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Drawing not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Drawing not found",
+      });
     }
 
-    // ✅ Currency settings (ONE TIME)
+    // ============================================================
+    // 3. CURRENCY SETTINGS
+    // ============================================================
+
     const settings = await SystemSettings.findOne({}).lean();
+
     if (!settings?.currencySettings) {
       return res.status(500).json({
         success: false,
@@ -2650,40 +2671,106 @@ export const importCostingItems = async (req, res) => {
       });
     }
 
-    const drawingCurrency = (drawing.currency?.code || "SGD").toUpperCase();
-    // file/MPN currency default (mostly USD)
-    const defaultSourceCurrency = (req.body.sourceCurrency || "USD").toUpperCase();
+    const drawingCurrency = (
+      drawing.currency?.code || "SGD"
+    ).toUpperCase();
+
+    const defaultSourceCurrency = (
+      req.body.sourceCurrency || "USD"
+    ).toUpperCase();
+
+    // ============================================================
+    // 4. READ EXCEL
+    // ============================================================
 
     const workbook = XLSX.readFile(filePath);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }); // defval important
 
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
 
-    // console.log('------rows', rows)
-    const lastItem = await CostingItems.findOne({ drawingId, quoteType })
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      defval: "",
+    });
+
+    // ============================================================
+    // 5. KEEP ORIGINAL EXCEL HEADERS
+    // ============================================================
+
+    const originalHeaders = [];
+
+    if (rows.length > 0) {
+      Object.keys(rows[0]).forEach((key) => {
+        originalHeaders.push(key);
+      });
+    }
+
+    // Failed rows will be returned in SAME EXCEL FORMAT
+    const failedRows = [];
+
+    // ============================================================
+    // 6. LAST ITEM NUMBER
+    // ============================================================
+
+    const lastItem = await CostingItems.findOne({
+      drawingId,
+      quoteType,
+    })
       .sort({ itemNumber: -1 })
       .lean();
 
-    let nextItemNumber = lastItem ? Number(lastItem.itemNumber) + 1 : 1;
+    let nextItemNumber = lastItem
+      ? Number(lastItem.itemNumber) + 1
+      : 1;
+
+    // ============================================================
+    // 7. ARRAYS
+    // ============================================================
 
     const newItems = [];
     const errors = [];
+
     let rowIndex = 0;
+
+    // ============================================================
+    // 8. PROCESS EACH EXCEL ROW
+    // ============================================================
 
     for (const row of rows) {
       rowIndex += 1;
-      const rowNumber = rowIndex + 1; // header = row 1
+
+      // Excel row number.
+      // Header = row 1
+      const rowNumber = rowIndex + 1;
 
       let newItem = null;
 
       try {
-        // ================= PACKING =================
+        // ========================================================
+        // PACKING
+        // ========================================================
+
         if (quoteType === "packing") {
-          const mpnName = (row["MPN Name"] ?? "").toString().trim();
-          const descriptionIn = (row["Description"] ?? row.Description ?? "")
+          const mpnName = (
+            row["MPN Name"] ?? ""
+          )
             .toString()
             .trim();
-          const uomCode = (row["UOM"] ?? row.UOM ?? "").toString().trim();
+
+          const descriptionIn = (
+            row["Description"] ??
+            row.Description ??
+            ""
+          )
+            .toString()
+            .trim();
+
+          const uomCode = (
+            row["UOM"] ??
+            row.UOM ??
+            ""
+          )
+            .toString()
+            .trim();
 
           const quantity = toNum(row["Quantity"]);
           const unitPriceRaw = toNum(row["Unit Price"]);
@@ -2691,66 +2778,134 @@ export const importCostingItems = async (req, res) => {
           const matBurden = toNum(row["Max Burden %"]);
           const freightPercent = toNum(row["Freight %"]);
 
+          // ------------------------------------------------------
+          // MPN NAME
+          // ------------------------------------------------------
+
           if (!mpnName) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "packing",
               field: "MPN Name",
               value: mpnName,
               message: "MPN Name is required",
+            };
+
+            errors.push(error);
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
+
+          // ------------------------------------------------------
+          // UOM
+          // ------------------------------------------------------
+
           if (!uomCode) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "packing",
               field: "UOM",
               value: uomCode,
               message: "UOM is required",
+            };
+
+            errors.push(error);
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
+
+          // ------------------------------------------------------
+          // QUANTITY
+          // ------------------------------------------------------
+
           if (!(quantity > 0)) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "packing",
               field: "Quantity",
               value: row["Quantity"],
               message: "Quantity must be > 0",
+            };
+
+            errors.push(error);
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          const mpn = await MPN.findOne({ MPN: mpnName })
+          // ------------------------------------------------------
+          // FIND MPN
+          // ------------------------------------------------------
+
+          const mpn = await MPN.findOne({
+            MPN: mpnName,
+          })
             .select("_id Description Manufacturer")
             .lean();
+
           if (!mpn) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "packing",
               field: "MPN Name",
               value: mpnName,
               message: `MPN not found: ${mpnName}`,
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          const uomDoc = await UOM.findOne({ code: uomCode })
+          // ------------------------------------------------------
+          // FIND UOM
+          // ------------------------------------------------------
+
+          const uomDoc = await UOM.findOne({
+            code: uomCode,
+          })
             .select("_id code")
             .lean();
+
           if (!uomDoc) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "packing",
               field: "UOM",
               value: uomCode,
               message: `UOM not found: ${uomCode}`,
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          // ✅ Currency conversion for Packing unit price
+          // ------------------------------------------------------
+          // CURRENCY
+          // ------------------------------------------------------
+
           const rowCurrency = (
             row["Currency"] ||
             row["CUR"] ||
@@ -2764,272 +2919,576 @@ export const importCostingItems = async (req, res) => {
           const unitPrice =
             rowCurrency === drawingCurrency
               ? round2(unitPriceRaw)
-              : convertCurrency(unitPriceRaw, rowCurrency, drawingCurrency, settings, {
-                decimals: 2,
-              });
+              : convertCurrency(
+                unitPriceRaw,
+                rowCurrency,
+                drawingCurrency,
+                settings,
+                {
+                  decimals: 2,
+                }
+              );
 
-          const extPrice = round2(quantity * unitPrice);
-          const upliftPct = (sgaPercent + matBurden + freightPercent) / 100;
-          const salesPrice = round2(extPrice * (1 + upliftPct));
+          const extPrice = round2(
+            quantity * unitPrice
+          );
+
+          const upliftPct =
+            (sgaPercent +
+              matBurden +
+              freightPercent) /
+            100;
+
+          const salesPrice = round2(
+            extPrice * (1 + upliftPct)
+          );
 
           newItem = {
             drawingId,
             quoteType,
-            itemNumber: String(nextItemNumber).padStart(4, "0"),
+            itemNumber: String(
+              nextItemNumber
+            ).padStart(4, "0"),
+
             mpn: mpn._id,
-            description: descriptionIn || (mpn.Description ?? ""),
-            manufacturer: mpn.Manufacturer ?? "",
+
+            description:
+              descriptionIn ||
+              mpn.Description ||
+              "",
+
+            manufacturer:
+              mpn.Manufacturer || "",
+
             uom: uomDoc._id,
+
             quantity,
-            unitPrice, // ✅ converted
-            sourceUnitPrice: round2(unitPriceRaw),
+
+            unitPrice,
+
+            sourceUnitPrice:
+              round2(unitPriceRaw),
+
             sourceCurrency: rowCurrency,
+
             currency: drawingCurrency,
+
             sgaPercent,
             matBurden,
             freightPercent,
+
             extPrice,
             salesPrice,
+
             moq: 0,
             tolerance: 0,
             actualQty: quantity,
-            lastEditedBy: req.user?._id || null,
+
+            lastEditedBy:
+              req.user?._id || null,
           };
         }
 
-        // ================= MANHOUR =================
-        else if (quoteType === "manhour") {
-          const skillName = (row["Skill Level"] ?? "").toString().trim();
-          const remarks = (row["Remarks"] ?? "").toString().trim();
-          const quantity = toNum(row["Quantity"]);
+        // ========================================================
+        // MANHOUR
+        // ========================================================
 
-          if (!skillName) continue; // empty row skip
+        else if (quoteType === "manhour") {
+          const skillName = (
+            row["Skill Level"] ?? ""
+          )
+            .toString()
+            .trim();
+
+          const remarks = (
+            row["Remarks"] ?? ""
+          )
+            .toString()
+            .trim();
+
+          const quantity = toNum(
+            row["Quantity"]
+          );
+
+          // Empty row skip
+          if (!skillName) {
+            continue;
+          }
 
           if (!(quantity > 0)) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "manhour",
               field: "Quantity",
               value: row["Quantity"],
               message: "Quantity must be > 0",
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          const skillLevel = await SkillLevelCosting.findOne({
-            skillLevelName: skillName,
-          }).populate("type");
+          // ------------------------------------------------------
+          // FIND SKILL LEVEL
+          // ------------------------------------------------------
+
+          const skillLevel =
+            await SkillLevelCosting.findOne({
+              skillLevelName: skillName,
+            }).populate("type");
 
           if (!skillLevel) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "manhour",
               field: "Skill Level",
               value: skillName,
               message: `Skill Level not found: ${skillName}`,
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          // ⚠️ Assuming skillLevel prices are already in drawing currency
-          // If not, you can convert similarly using settings
-          const unitPrice = toNum(skillLevel.unitPrice ?? skillLevel.rate);
-          const extPrice = round2(unitPrice * quantity);
+          const unitPrice = toNum(
+            skillLevel.unitPrice ??
+            skillLevel.rate
+          );
+
+          const extPrice = round2(
+            unitPrice * quantity
+          );
+
           const salesPrice = extPrice;
 
           newItem = {
             drawingId,
             quoteType,
-            itemNumber: String(nextItemNumber).padStart(4, "0"),
-            description: skillLevel.skillLevelName,
-            uom: skillLevel.type?._id || null,
-            skillLevel: skillLevel._id,
+
+            itemNumber: String(
+              nextItemNumber
+            ).padStart(4, "0"),
+
+            description:
+              skillLevel.skillLevelName,
+
+            uom:
+              skillLevel.type?._id ||
+              null,
+
+            skillLevel:
+              skillLevel._id,
+
             quantity,
+
             remarks,
+
             unitPrice,
-            currency: drawingCurrency,
+
+            currency:
+              drawingCurrency,
+
             salesPrice,
             extPrice,
-            lastEditedBy: req.user?._id || null,
+
+            lastEditedBy:
+              req.user?._id || null,
           };
         }
 
-        // ================= MATERIAL =================
-        // ================= MATERIAL =================
+        // ========================================================
+        // MATERIAL
+        // ========================================================
+
         else if (quoteType === "material") {
-          const childKey = (row["ChildPart"] ?? row["Part Number"] ?? "")
+          const childKey = (
+            row["ChildPart"] ??
+            row["Part Number"] ??
+            ""
+          )
             .toString()
             .trim();
 
+          // ------------------------------------------------------
+          // CHILD PART REQUIRED
+          // ------------------------------------------------------
+
           if (!childKey) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "material",
-              field: "ChildPart / Part Number",
+              field:
+                "ChildPart / Part Number",
               value: "",
-              message: "ChildPart / Part Number is required",
+              message:
+                "ChildPart / Part Number is required",
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          const childPart = await Child.findOne({
-            ChildPartNo: childKey,
-          }).populate({
-            path: "mpn",
-            populate: [
-              { path: "currency", select: "code" },   // currency ka code
-              { path: "UOM", select: "code" },        // UOM ka code
-            ],
-          });
+          // ------------------------------------------------------
+          // FIND CHILD PART + MPN
+          // ------------------------------------------------------
 
+          const childPart =
+            await Child.findOne({
+              ChildPartNo: childKey,
+            }).populate({
+              path: "mpn",
+              populate: [
+                {
+                  path: "currency",
+                  select: "code",
+                },
+                {
+                  path: "UOM",
+                  select: "code",
+                },
+              ],
+            });
 
-          // console.log('------childPart', childPart)
-
+          // ------------------------------------------------------
+          // CHILD PART / MPN NOT FOUND
+          // ------------------------------------------------------
 
           if (!childPart || !childPart.mpn) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "material",
               field: "ChildPart",
               value: childKey,
               message: `MPN not found for ChildPart: ${childKey}`,
+            };
+
+            errors.push(error);
+
+            // 🔥 ORIGINAL EXCEL ROW RETURN
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          // 🔒 Duplicate check
-          const alreadyExists = await CostingItems.findOne({
-            drawingId,
-            quoteType: "material",
-            childPart: childPart._id,
-          }).lean();
+          // ------------------------------------------------------
+          // DUPLICATE CHECK
+          // ------------------------------------------------------
+
+          const alreadyExists =
+            await CostingItems.findOne({
+              drawingId,
+              quoteType: "material",
+              childPart:
+                childPart._id,
+            }).lean();
 
           if (alreadyExists) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "material",
               field: "ChildPart",
               value: childKey,
               message: `Child Part ${childKey} already added in this Drawing`,
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          const uomRaw = (row["UOM"] ?? "").toString().trim() || childPart?.mpn?.UOM?.code?.trim();
-          const uomId = await getUomId(uomRaw);
+          // ------------------------------------------------------
+          // UOM
+          // ------------------------------------------------------
 
+          const uomRaw = (
+            row["UOM"] ??
+            ""
+          )
+            .toString()
+            .trim() ||
+            childPart?.mpn?.UOM?.code?.trim();
 
-          const quantity = toNum(row["Qty"]);
+          let uomId;
+
+          try {
+            uomId = await getUomId(
+              uomRaw
+            );
+          } catch (uomErr) {
+            const error = {
+              row: rowNumber,
+              type: "material",
+              field: "UOM",
+              value: uomRaw,
+              message:
+                uomErr.message ||
+                "UOM not found",
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
+            });
+
+            continue;
+          }
+
+          // ------------------------------------------------------
+          // QUANTITY
+          // ------------------------------------------------------
+
+          const quantity = toNum(
+            row["Qty"]
+          );
+
           if (!(quantity > 0)) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "material",
               field: "Qty",
               value: row["Qty"],
               message: "Qty must be > 0",
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          const unitPriceRaw = toNum(childPart.mpn.RFQUnitPrice);
+          // ------------------------------------------------------
+          // RFQ PRICE
+          // ------------------------------------------------------
+
+          const unitPriceRaw = toNum(
+            childPart.mpn.RFQUnitPrice
+          );
+
           if (!(unitPriceRaw > 0)) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "material",
               field: "RFQ Unit Price",
               value: unitPriceRaw,
-              message: "RFQ Unit Price missing or 0 for this MPN",
+              message:
+                "RFQ Unit Price missing or 0 for this MPN",
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
-          // ================= CURRENCY LOGIC (FINAL) =================
+          // ------------------------------------------------------
+          // CURRENCY
+          // ------------------------------------------------------
 
-          // ✅ Source currency from MPN (ObjectId → code)
           const mpnCurrencyCode = (
-            childPart.mpn.currency?.code || "USD"
+            childPart.mpn.currency?.code ||
+            "USD"
           ).toUpperCase();
 
-          // ✅ Target currency from Drawing (ObjectId → code)
           const drawingCurrencyCode = (
-            drawing.currency?.code || "USD"
+            drawing.currency?.code ||
+            "USD"
           ).toUpperCase();
 
-          // ✅ Convert ONLY if needed
-
+          // ------------------------------------------------------
+          // UOM PRICE CONVERSION
+          // ------------------------------------------------------
 
           let newPrice;
-          let masterUomId = childPart.mpn?.UOM
+
           try {
-            newPrice = await convertLengthUnitPrice(
-              unitPriceRaw,
-              childPart?.mpn?.UOM?.code,
-              uomRaw,
-            );
+            newPrice =
+              await convertLengthUnitPrice(
+                unitPriceRaw,
+                childPart?.mpn?.UOM?.code,
+                uomRaw
+              );
           } catch (convErr) {
-            errors.push({
+            const error = {
               row: rowNumber,
               type: "material",
               field: "UOM conversion",
-              value: `${uomRaw}`,
-              message: convErr.message || "UOM conversion failed",
+              value: uomRaw,
+              message:
+                convErr.message ||
+                "UOM conversion failed",
+            };
+
+            errors.push(error);
+
+            failedRows.push({
+              ...row,
+              "Import Error": error.message,
             });
+
             continue;
           }
 
+          // ------------------------------------------------------
+          // CURRENCY CONVERSION
+          // ------------------------------------------------------
+
           const unitPrice =
-            mpnCurrencyCode === drawingCurrencyCode
+            mpnCurrencyCode ===
+              drawingCurrencyCode
               ? round2(newPrice)
               : convertCurrency(
                 newPrice,
                 mpnCurrencyCode,
                 drawingCurrencyCode,
                 settings,
-                { decimals: 2 }
+                {
+                  decimals: 2,
+                }
               );
 
+          // ------------------------------------------------------
+          // MARKUP
+          // ------------------------------------------------------
 
-          // ==========================================================
+          const tolerance = toNum(
+            row["Tolerance"]
+          );
 
-          const tolerance = toNum(row["Tolerance"]);
-          const sgaPercent = toNum(row["SGA %"]);
-          const matBurden = toNum(row["Mat Burden %"] || 0);
-          const freightPercent = toNum(row["Freight Cost %"] || 0);
-          const fixedFreightCost = toNum(row["Fixed Freight Cost"] || 0);
+          const sgaPercent = toNum(
+            row["SGA %"]
+          );
 
-          const actualQty = round2(quantity + (quantity * tolerance) / 100);
-          const extPrice = round2(quantity * unitPrice);
+          const matBurden = toNum(
+            row["Mat Burden %"] || 0
+          );
+
+          const freightPercent = toNum(
+            row["Freight Cost %"] || 0
+          );
+
+          const fixedFreightCost = toNum(
+            row["Fixed Freight Cost"] || 0
+          );
+
+          const actualQty = round2(
+            quantity +
+            (quantity * tolerance) /
+            100
+          );
+
+          const extPrice = round2(
+            quantity * unitPrice
+          );
+
           const salesPrice = round2(
-            extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) +
+            extPrice *
+            (
+              1 +
+              (
+                sgaPercent +
+                matBurden +
+                freightPercent
+              ) /
+              100
+            ) +
             fixedFreightCost
           );
+
+          // ------------------------------------------------------
+          // NEW ITEM
+          // ------------------------------------------------------
 
           newItem = {
             drawingId,
             quoteType,
-            itemNumber: String(nextItemNumber).padStart(4, "0"),
 
-            childPart: childPart._id,
-            mpn: childPart.mpn._id,
+            itemNumber: String(
+              nextItemNumber
+            ).padStart(4, "0"),
 
-            description: String(childPart.mpn.Description || "").trim(),
-            manufacturer: childPart.mpn.Manufacturer || "",
+            childPart:
+              childPart._id,
+
+            mpn:
+              childPart.mpn._id,
+
+            description:
+              String(
+                childPart.mpn.Description ||
+                ""
+              ).trim(),
+
+            manufacturer:
+              childPart.mpn.Manufacturer ||
+              "",
 
             uom: uomId,
-            moq: toNum(childPart.mpn.MOQ),
-            leadTime: toNum(childPart.mpn.LeadTime_WK),
-            rfqDate: childPart.mpn.RFQDate,
-            supplier: childPart.mpn.Supplier,
 
-            // ✅ Currency fields (ObjectId saved)
+            moq: toNum(
+              childPart.mpn.MOQ
+            ),
+
+            leadTime: toNum(
+              childPart.mpn.LeadTime_WK
+            ),
+
+            rfqDate:
+              childPart.mpn.RFQDate,
+
+            supplier:
+              childPart.mpn.Supplier,
+
             unitPrice,
-            sourceUnitPrice: round2(unitPriceRaw),
-            sourceCurrency: childPart.mpn.currency?._id, // ✅ MPN currency ObjectId
-            currency: drawing.currency?._id,              // ✅ Drawing currency ObjectId
+
+            sourceUnitPrice:
+              round2(unitPriceRaw),
+
+            sourceCurrency:
+              childPart.mpn.currency?._id,
+
+            currency:
+              drawing.currency?._id,
 
             quantity,
             tolerance,
             actualQty,
+
             sgaPercent,
             matBurden,
             freightPercent,
@@ -3038,9 +3497,15 @@ export const importCostingItems = async (req, res) => {
             extPrice,
             salesPrice,
 
-            lastEditedBy: req.user?._id || null,
+            lastEditedBy:
+              req.user?._id || null,
           };
         }
+
+        // ========================================================
+        // INVALID QUOTE TYPE
+        // ========================================================
+
         else {
           return res.status(400).json({
             success: false,
@@ -3048,26 +3513,41 @@ export const importCostingItems = async (req, res) => {
           });
         }
       } catch (rowErr) {
-        // hide mongo ugly stuff
+        // ========================================================
+        // ROW LEVEL ERROR
+        // ========================================================
+
+        let errorMessage =
+          rowErr.message ||
+          "Unexpected error";
+
         if (rowErr?.code === 11000) {
-          errors.push({
-            row: rowNumber,
-            type: quoteType,
-            field: "duplicate",
-            value: "",
-            message: "Duplicate row (already exists)",
-          });
-        } else {
-          errors.push({
-            row: rowNumber,
-            type: quoteType,
-            field: "row",
-            value: "",
-            message: rowErr.message || "Unexpected error",
-          });
+          errorMessage =
+            "Duplicate row (already exists)";
         }
+
+        const error = {
+          row: rowNumber,
+          type: quoteType,
+          field: "row",
+          value: "",
+          message: errorMessage,
+        };
+
+        errors.push(error);
+
+        // 🔥 ORIGINAL ROW + ERROR
+        failedRows.push({
+          ...row,
+          "Import Error": errorMessage,
+        });
+
         continue;
       }
+
+      // ========================================================
+      // ADD VALID ITEM
+      // ========================================================
 
       if (newItem) {
         newItems.push(newItem);
@@ -3075,128 +3555,925 @@ export const importCostingItems = async (req, res) => {
       }
     }
 
-    // ✅ Insert valid rows (even if errors exist)
+    // ============================================================
+    // 9. INSERT VALID ITEMS
+    // ============================================================
+
     let insertedDocs = [];
+
     if (newItems.length > 0) {
-      insertedDocs = await CostingItems.insertMany(newItems, { ordered: false }); // best effort
+      insertedDocs = await CostingItems.insertMany(
+        newItems,
+        {
+          ordered: false,
+        }
+      );
     }
 
-    // ✅ Recompute totals if anything inserted
-    if (insertedDocs.length > 0) {
-      const oid = new mongoose.Types.ObjectId(drawingId);
-      const grouped = await CostingItems.aggregate([
-        { $match: { drawingId: oid } },
-        {
-          $group: {
-            _id: "$quoteType",
-            bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
-          },
-        },
-      ]);
+    // ============================================================
+    // 10. RECALCULATE DRAWING TOTALS
+    // ============================================================
 
-      let materialTotal = 0,
-        manhourTotal = 0,
-        packingTotal = 0;
+    if (insertedDocs.length > 0) {
+      const oid =
+        new mongoose.Types.ObjectId(
+          drawingId
+        );
+
+      const grouped =
+        await CostingItems.aggregate([
+          {
+            $match: {
+              drawingId: oid,
+            },
+          },
+          {
+            $group: {
+              _id: "$quoteType",
+
+              bucketTotal: {
+                $sum: {
+                  $toDouble:
+                    "$salesPrice",
+                },
+              },
+            },
+          },
+        ]);
+
+      let materialTotal = 0;
+      let manhourTotal = 0;
+      let packingTotal = 0;
 
       for (const g of grouped) {
-        const t = toNum(g.bucketTotal);
-        switch ((g._id || "").toLowerCase()) {
+        const t = toNum(
+          g.bucketTotal
+        );
+
+        switch (
+        (g._id || "").toLowerCase()
+        ) {
           case "material":
             materialTotal = t;
             break;
+
           case "manhour":
             manhourTotal = t;
             break;
+
           case "packing":
             packingTotal = t;
             break;
+
           default:
             break;
         }
       }
 
-      const materialMarkup = toNum(drawing.materialMarkup);
-      const manhourMarkup = toNum(drawing.manhourMarkup);
-      const packingMarkup = toNum(drawing.packingMarkup);
-
-      const materialWithMarkup = round2(
-        materialTotal + (materialTotal * materialMarkup) / 100
-      );
-      const manhourWithMarkup = round2(
-        manhourTotal + (manhourTotal * manhourMarkup) / 100
-      );
-      const packingWithMarkup = round2(
-        packingTotal + (packingTotal * packingMarkup) / 100
+      const materialMarkup = toNum(
+        drawing.materialMarkup
       );
 
-      drawing.materialTotal = round2(materialTotal);
-      drawing.manhourTotal = round2(manhourTotal);
-      drawing.packingTotal = round2(packingTotal);
-      drawing.totalPrice = round2(materialTotal + manhourTotal + packingTotal);
-      drawing.totalPriceWithMarkup = round2(
-        materialWithMarkup + manhourWithMarkup + packingWithMarkup
+      const manhourMarkup = toNum(
+        drawing.manhourMarkup
       );
 
-      const importedMaxLTW = Math.max(
-        0,
-        ...newItems.map((x) => toNum(x.leadTime ?? x.leadTimeWeeks))
+      const packingMarkup = toNum(
+        drawing.packingMarkup
       );
-      drawing.leadTimeWeeks = Math.max(toNum(drawing.leadTimeWeeks), importedMaxLTW);
 
-      drawing.lastEditedBy = req?.user?._id || drawing.lastEditedBy;
+      const materialWithMarkup =
+        round2(
+          materialTotal +
+          (materialTotal *
+            materialMarkup) /
+          100
+        );
 
-      // ✅ keep drawing currency consistent
-      drawing.currency = drawing?.currency?._id;
+      const manhourWithMarkup =
+        round2(
+          manhourTotal +
+          (manhourTotal *
+            manhourMarkup) /
+          100
+        );
+
+      const packingWithMarkup =
+        round2(
+          packingTotal +
+          (packingTotal *
+            packingMarkup) /
+          100
+        );
+
+      drawing.materialTotal =
+        round2(materialTotal);
+
+      drawing.manhourTotal =
+        round2(manhourTotal);
+
+      drawing.packingTotal =
+        round2(packingTotal);
+
+      drawing.totalPrice =
+        round2(
+          materialTotal +
+          manhourTotal +
+          packingTotal
+        );
+
+      drawing.totalPriceWithMarkup =
+        round2(
+          materialWithMarkup +
+          manhourWithMarkup +
+          packingWithMarkup
+        );
+
+      const importedMaxLTW =
+        Math.max(
+          0,
+          ...newItems.map((x) =>
+            toNum(
+              x.leadTime ??
+              x.leadTimeWeeks
+            )
+          )
+        );
+
+      drawing.leadTimeWeeks =
+        Math.max(
+          toNum(
+            drawing.leadTimeWeeks
+          ),
+          importedMaxLTW
+        );
+
+      drawing.lastEditedBy =
+        req?.user?._id ||
+        drawing.lastEditedBy;
+
+      drawing.currency =
+        drawing?.currency?._id;
 
       await drawing.save();
     }
 
-    // ✅ Build message
-    const errorMessage = formatCostingImportErrors(errors);
+    // ============================================================
+    // 11. NO ERRORS
+    // ============================================================
 
-    // If nothing inserted & errors exist => fail
-    if (insertedDocs.length === 0 && errors.length > 0) {
+    if (failedRows.length === 0) {
+      return res.status(200).json({
+        success: true,
+        insertedCount:
+          insertedDocs.length,
+        errorCount: 0,
+        message: `✅ ${quoteType} import successful`,
+      });
+    }
+
+    // ============================================================
+    // 12. CREATE FAILED EXCEL
+    // ============================================================
+
+    // Preserve original Excel columns
+    // + add Import Error column
+    const failedExcelRows =
+      failedRows.map((row) => {
+        const formattedRow = {};
+
+        // Original columns first
+        originalHeaders.forEach(
+          (header) => {
+            formattedRow[header] =
+              row[header] ?? "";
+          }
+        );
+
+        // Error at the end
+        formattedRow["Import Error"] =
+          row["Import Error"] || "";
+
+        return formattedRow;
+      });
+
+    const failedWorkbook =
+      XLSX.utils.book_new();
+
+
+    const failedDir = path.join(
+      process.cwd(),
+      "uploads",
+      "temp"
+    );
+
+    // Folder create karo agar exist nahi karta
+    await fs.mkdir(failedDir, {
+      recursive: true,
+    });
+
+    const failedFileName = `failed-costing-${Date.now()}.xlsx`;
+
+    const failedFilePath = path.join(
+      failedDir,
+      failedFileName
+    );
+
+    // Failed rows ka Excel
+    const failedSheet = XLSX.utils.json_to_sheet(failedRows);
+
+    // const failedWorkbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+      failedWorkbook,
+      failedSheet,
+      "Failed Rows"
+    );
+
+    // Ab file create hogi
+    XLSX.writeFile(
+      failedWorkbook,
+      failedFilePath
+    );
+
+    const failedFileUrl =
+      `${process.env.BACKEND_API_URL}/uploads/temp/${failedFileName}`;
+
+
+    XLSX.writeFile(
+      failedWorkbook,
+      failedFilePath
+    );
+
+    // ============================================================
+    // 14. RESPONSE
+    // ============================================================
+
+    const errorMessage =
+      formatCostingImportErrors(
+        errors
+      );
+
+    // ------------------------------------------------------------
+    // ALL FAILED
+    // ------------------------------------------------------------
+
+    if (
+      insertedDocs.length === 0 &&
+      errors.length > 0
+    ) {
       return res.status(400).json({
         success: false,
         insertedCount: 0,
         errorCount: errors.length,
-        message: errorMessage,
+        message:
+          errorMessage ||
+          "Import failed. Please check the failed rows Excel.",
         errors,
+
+        // Frontend can use this information
+        failedFileName,
+        failedFilePath,
       });
     }
 
-    // Partial success => 207
-    if (errors.length > 0) {
-      return res.status(207).json({
-        success: true,
-        insertedCount: insertedDocs.length,
-        errorCount: errors.length,
-        message: `Imported ${insertedDocs.length} rows, some rows failed:\n\n${errorMessage}`,
-        errors,
-      });
-    }
+    // ------------------------------------------------------------
+    // PARTIAL SUCCESS
+    // ------------------------------------------------------------
 
-    // Full success
-    return res.status(200).json({
+    return res.status(207).json({
       success: true,
-      insertedCount: insertedDocs.length,
-      message: `✅ ${quoteType} import successful`,
+
+      insertedCount:
+        insertedDocs.length,
+
+      errorCount:
+        errors.length,
+
+      message:
+        `Imported ${insertedDocs.length} rows, ` +
+        `${errors.length} rows failed. ` +
+        `Failed rows Excel is available.`,
+
+      errors,
+
+      failedFileName,
+      failedFilePath: failedFileUrl,
     });
   } catch (error) {
-    console.error("❌ Import Error:", error);
+    console.error(
+      "❌ Import Error:",
+      error
+    );
+
     return res.status(500).json({
       success: false,
-      message: "Failed to import costing items",
+      message:
+        "Failed to import costing items",
       error: error.message,
     });
   } finally {
+    // ============================================================
+    // ORIGINAL UPLOADED FILE DELETE
+    // ============================================================
+
     if (filePath) {
       try {
         await fs.unlink(filePath);
-      } catch { }
+      } catch (err) {
+        console.error(
+          "Failed to delete uploaded file:",
+          err.message
+        );
+      }
     }
   }
 };
+
+// export const importCostingItems = async (req, res) => {
+//   let filePath = null;
+
+//   try {
+//     const { drawingId } = req.params;
+//     const { quoteType } = req.body;
+//     const file = req.file;
+
+//     if (!file) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "No file uploaded" });
+//     }
+//     filePath = file.path;
+
+//     if (!mongoose.Types.ObjectId.isValid(drawingId)) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "Invalid drawingId" });
+//     }
+
+//     const drawing = await Drawing.findById(drawingId).populate("currency", "code symbol")
+//     if (!drawing) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Drawing not found" });
+//     }
+
+//     // ✅ Currency settings (ONE TIME)
+//     const settings = await SystemSettings.findOne({}).lean();
+//     if (!settings?.currencySettings) {
+//       return res.status(500).json({
+//         success: false,
+//         message: "Currency settings missing in SystemSettings",
+//       });
+//     }
+
+//     const drawingCurrency = (drawing.currency?.code || "SGD").toUpperCase();
+//     // file/MPN currency default (mostly USD)
+//     const defaultSourceCurrency = (req.body.sourceCurrency || "USD").toUpperCase();
+
+//     const workbook = XLSX.readFile(filePath);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }); // defval important
+
+
+//     // console.log('------rows', rows)
+//     const lastItem = await CostingItems.findOne({ drawingId, quoteType })
+//       .sort({ itemNumber: -1 })
+//       .lean();
+
+//     let nextItemNumber = lastItem ? Number(lastItem.itemNumber) + 1 : 1;
+
+//     const newItems = [];
+//     const errors = [];
+//     let rowIndex = 0;
+
+//     for (const row of rows) {
+//       rowIndex += 1;
+//       const rowNumber = rowIndex + 1; // header = row 1
+
+//       let newItem = null;
+
+//       try {
+//         // ================= PACKING =================
+//         if (quoteType === "packing") {
+//           const mpnName = (row["MPN Name"] ?? "").toString().trim();
+//           const descriptionIn = (row["Description"] ?? row.Description ?? "")
+//             .toString()
+//             .trim();
+//           const uomCode = (row["UOM"] ?? row.UOM ?? "").toString().trim();
+
+//           const quantity = toNum(row["Quantity"]);
+//           const unitPriceRaw = toNum(row["Unit Price"]);
+//           const sgaPercent = toNum(row["SGA %"]);
+//           const matBurden = toNum(row["Max Burden %"]);
+//           const freightPercent = toNum(row["Freight %"]);
+
+//           if (!mpnName) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "MPN Name",
+//               value: mpnName,
+//               message: "MPN Name is required",
+//             });
+//             continue;
+//           }
+//           if (!uomCode) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "UOM",
+//               value: uomCode,
+//               message: "UOM is required",
+//             });
+//             continue;
+//           }
+//           if (!(quantity > 0)) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "Quantity",
+//               value: row["Quantity"],
+//               message: "Quantity must be > 0",
+//             });
+//             continue;
+//           }
+
+//           const mpn = await MPN.findOne({ MPN: mpnName })
+//             .select("_id Description Manufacturer")
+//             .lean();
+//           if (!mpn) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "MPN Name",
+//               value: mpnName,
+//               message: `MPN not found: ${mpnName}`,
+//             });
+//             continue;
+//           }
+
+//           const uomDoc = await UOM.findOne({ code: uomCode })
+//             .select("_id code")
+//             .lean();
+//           if (!uomDoc) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "packing",
+//               field: "UOM",
+//               value: uomCode,
+//               message: `UOM not found: ${uomCode}`,
+//             });
+//             continue;
+//           }
+
+//           // ✅ Currency conversion for Packing unit price
+//           const rowCurrency = (
+//             row["Currency"] ||
+//             row["CUR"] ||
+//             defaultSourceCurrency ||
+//             "USD"
+//           )
+//             .toString()
+//             .trim()
+//             .toUpperCase();
+
+//           const unitPrice =
+//             rowCurrency === drawingCurrency
+//               ? round2(unitPriceRaw)
+//               : convertCurrency(unitPriceRaw, rowCurrency, drawingCurrency, settings, {
+//                 decimals: 2,
+//               });
+
+//           const extPrice = round2(quantity * unitPrice);
+//           const upliftPct = (sgaPercent + matBurden + freightPercent) / 100;
+//           const salesPrice = round2(extPrice * (1 + upliftPct));
+
+//           newItem = {
+//             drawingId,
+//             quoteType,
+//             itemNumber: String(nextItemNumber).padStart(4, "0"),
+//             mpn: mpn._id,
+//             description: descriptionIn || (mpn.Description ?? ""),
+//             manufacturer: mpn.Manufacturer ?? "",
+//             uom: uomDoc._id,
+//             quantity,
+//             unitPrice, // ✅ converted
+//             sourceUnitPrice: round2(unitPriceRaw),
+//             sourceCurrency: rowCurrency,
+//             currency: drawingCurrency,
+//             sgaPercent,
+//             matBurden,
+//             freightPercent,
+//             extPrice,
+//             salesPrice,
+//             moq: 0,
+//             tolerance: 0,
+//             actualQty: quantity,
+//             lastEditedBy: req.user?._id || null,
+//           };
+//         }
+
+//         // ================= MANHOUR =================
+//         else if (quoteType === "manhour") {
+//           const skillName = (row["Skill Level"] ?? "").toString().trim();
+//           const remarks = (row["Remarks"] ?? "").toString().trim();
+//           const quantity = toNum(row["Quantity"]);
+
+//           if (!skillName) continue; // empty row skip
+
+//           if (!(quantity > 0)) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "manhour",
+//               field: "Quantity",
+//               value: row["Quantity"],
+//               message: "Quantity must be > 0",
+//             });
+//             continue;
+//           }
+
+//           const skillLevel = await SkillLevelCosting.findOne({
+//             skillLevelName: skillName,
+//           }).populate("type");
+
+//           if (!skillLevel) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "manhour",
+//               field: "Skill Level",
+//               value: skillName,
+//               message: `Skill Level not found: ${skillName}`,
+//             });
+//             continue;
+//           }
+
+//           // ⚠️ Assuming skillLevel prices are already in drawing currency
+//           // If not, you can convert similarly using settings
+//           const unitPrice = toNum(skillLevel.unitPrice ?? skillLevel.rate);
+//           const extPrice = round2(unitPrice * quantity);
+//           const salesPrice = extPrice;
+
+//           newItem = {
+//             drawingId,
+//             quoteType,
+//             itemNumber: String(nextItemNumber).padStart(4, "0"),
+//             description: skillLevel.skillLevelName,
+//             uom: skillLevel.type?._id || null,
+//             skillLevel: skillLevel._id,
+//             quantity,
+//             remarks,
+//             unitPrice,
+//             currency: drawingCurrency,
+//             salesPrice,
+//             extPrice,
+//             lastEditedBy: req.user?._id || null,
+//           };
+//         }
+
+//         // ================= MATERIAL =================
+//         // ================= MATERIAL =================
+//         else if (quoteType === "material") {
+//           const childKey = (row["ChildPart"] ?? row["Part Number"] ?? "")
+//             .toString()
+//             .trim();
+
+//           if (!childKey) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "ChildPart / Part Number",
+//               value: "",
+//               message: "ChildPart / Part Number is required",
+//             });
+//             continue;
+//           }
+
+//           const childPart = await Child.findOne({
+//             ChildPartNo: childKey,
+//           }).populate({
+//             path: "mpn",
+//             populate: [
+//               { path: "currency", select: "code" },   // currency ka code
+//               { path: "UOM", select: "code" },        // UOM ka code
+//             ],
+//           });
+
+
+//           // console.log('------childPart', childPart)
+
+
+//           if (!childPart || !childPart.mpn) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "ChildPart",
+//               value: childKey,
+//               message: `MPN not found for ChildPart: ${childKey}`,
+//             });
+//             continue;
+//           }
+
+//           // 🔒 Duplicate check
+//           const alreadyExists = await CostingItems.findOne({
+//             drawingId,
+//             quoteType: "material",
+//             childPart: childPart._id,
+//           }).lean();
+
+//           if (alreadyExists) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "ChildPart",
+//               value: childKey,
+//               message: `Child Part ${childKey} already added in this Drawing`,
+//             });
+//             continue;
+//           }
+
+//           const uomRaw = (row["UOM"] ?? "").toString().trim() || childPart?.mpn?.UOM?.code?.trim();
+//           const uomId = await getUomId(uomRaw);
+
+
+//           const quantity = toNum(row["Qty"]);
+//           if (!(quantity > 0)) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "Qty",
+//               value: row["Qty"],
+//               message: "Qty must be > 0",
+//             });
+//             continue;
+//           }
+
+//           const unitPriceRaw = toNum(childPart.mpn.RFQUnitPrice);
+//           if (!(unitPriceRaw > 0)) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "RFQ Unit Price",
+//               value: unitPriceRaw,
+//               message: "RFQ Unit Price missing or 0 for this MPN",
+//             });
+//             continue;
+//           }
+
+//           // ================= CURRENCY LOGIC (FINAL) =================
+
+//           // ✅ Source currency from MPN (ObjectId → code)
+//           const mpnCurrencyCode = (
+//             childPart.mpn.currency?.code || "USD"
+//           ).toUpperCase();
+
+//           // ✅ Target currency from Drawing (ObjectId → code)
+//           const drawingCurrencyCode = (
+//             drawing.currency?.code || "USD"
+//           ).toUpperCase();
+
+//           // ✅ Convert ONLY if needed
+
+
+//           let newPrice;
+//           let masterUomId = childPart.mpn?.UOM
+//           try {
+//             newPrice = await convertLengthUnitPrice(
+//               unitPriceRaw,
+//               childPart?.mpn?.UOM?.code,
+//               uomRaw,
+//             );
+//           } catch (convErr) {
+//             errors.push({
+//               row: rowNumber,
+//               type: "material",
+//               field: "UOM conversion",
+//               value: `${uomRaw}`,
+//               message: convErr.message || "UOM conversion failed",
+//             });
+//             continue;
+//           }
+
+//           const unitPrice =
+//             mpnCurrencyCode === drawingCurrencyCode
+//               ? round2(newPrice)
+//               : convertCurrency(
+//                 newPrice,
+//                 mpnCurrencyCode,
+//                 drawingCurrencyCode,
+//                 settings,
+//                 { decimals: 2 }
+//               );
+
+
+//           // ==========================================================
+
+//           const tolerance = toNum(row["Tolerance"]);
+//           const sgaPercent = toNum(row["SGA %"]);
+//           const matBurden = toNum(row["Mat Burden %"] || 0);
+//           const freightPercent = toNum(row["Freight Cost %"] || 0);
+//           const fixedFreightCost = toNum(row["Fixed Freight Cost"] || 0);
+
+//           const actualQty = round2(quantity + (quantity * tolerance) / 100);
+//           const extPrice = round2(quantity * unitPrice);
+//           const salesPrice = round2(
+//             extPrice * (1 + (sgaPercent + matBurden + freightPercent) / 100) +
+//             fixedFreightCost
+//           );
+
+//           newItem = {
+//             drawingId,
+//             quoteType,
+//             itemNumber: String(nextItemNumber).padStart(4, "0"),
+
+//             childPart: childPart._id,
+//             mpn: childPart.mpn._id,
+
+//             description: String(childPart.mpn.Description || "").trim(),
+//             manufacturer: childPart.mpn.Manufacturer || "",
+
+//             uom: uomId,
+//             moq: toNum(childPart.mpn.MOQ),
+//             leadTime: toNum(childPart.mpn.LeadTime_WK),
+//             rfqDate: childPart.mpn.RFQDate,
+//             supplier: childPart.mpn.Supplier,
+
+//             // ✅ Currency fields (ObjectId saved)
+//             unitPrice,
+//             sourceUnitPrice: round2(unitPriceRaw),
+//             sourceCurrency: childPart.mpn.currency?._id, // ✅ MPN currency ObjectId
+//             currency: drawing.currency?._id,              // ✅ Drawing currency ObjectId
+
+//             quantity,
+//             tolerance,
+//             actualQty,
+//             sgaPercent,
+//             matBurden,
+//             freightPercent,
+//             fixedFreightCost,
+
+//             extPrice,
+//             salesPrice,
+
+//             lastEditedBy: req.user?._id || null,
+//           };
+//         }
+//         else {
+//           return res.status(400).json({
+//             success: false,
+//             message: `Unsupported quoteType: ${quoteType}`,
+//           });
+//         }
+//       } catch (rowErr) {
+//         // hide mongo ugly stuff
+//         if (rowErr?.code === 11000) {
+//           errors.push({
+//             row: rowNumber,
+//             type: quoteType,
+//             field: "duplicate",
+//             value: "",
+//             message: "Duplicate row (already exists)",
+//           });
+//         } else {
+//           errors.push({
+//             row: rowNumber,
+//             type: quoteType,
+//             field: "row",
+//             value: "",
+//             message: rowErr.message || "Unexpected error",
+//           });
+//         }
+//         continue;
+//       }
+
+//       if (newItem) {
+//         newItems.push(newItem);
+//         nextItemNumber++;
+//       }
+//     }
+
+//     // ✅ Insert valid rows (even if errors exist)
+//     let insertedDocs = [];
+//     if (newItems.length > 0) {
+//       insertedDocs = await CostingItems.insertMany(newItems, { ordered: false }); // best effort
+//     }
+
+//     // ✅ Recompute totals if anything inserted
+//     if (insertedDocs.length > 0) {
+//       const oid = new mongoose.Types.ObjectId(drawingId);
+//       const grouped = await CostingItems.aggregate([
+//         { $match: { drawingId: oid } },
+//         {
+//           $group: {
+//             _id: "$quoteType",
+//             bucketTotal: { $sum: { $toDouble: "$salesPrice" } },
+//           },
+//         },
+//       ]);
+
+//       let materialTotal = 0,
+//         manhourTotal = 0,
+//         packingTotal = 0;
+
+//       for (const g of grouped) {
+//         const t = toNum(g.bucketTotal);
+//         switch ((g._id || "").toLowerCase()) {
+//           case "material":
+//             materialTotal = t;
+//             break;
+//           case "manhour":
+//             manhourTotal = t;
+//             break;
+//           case "packing":
+//             packingTotal = t;
+//             break;
+//           default:
+//             break;
+//         }
+//       }
+
+//       const materialMarkup = toNum(drawing.materialMarkup);
+//       const manhourMarkup = toNum(drawing.manhourMarkup);
+//       const packingMarkup = toNum(drawing.packingMarkup);
+
+//       const materialWithMarkup = round2(
+//         materialTotal + (materialTotal * materialMarkup) / 100
+//       );
+//       const manhourWithMarkup = round2(
+//         manhourTotal + (manhourTotal * manhourMarkup) / 100
+//       );
+//       const packingWithMarkup = round2(
+//         packingTotal + (packingTotal * packingMarkup) / 100
+//       );
+
+//       drawing.materialTotal = round2(materialTotal);
+//       drawing.manhourTotal = round2(manhourTotal);
+//       drawing.packingTotal = round2(packingTotal);
+//       drawing.totalPrice = round2(materialTotal + manhourTotal + packingTotal);
+//       drawing.totalPriceWithMarkup = round2(
+//         materialWithMarkup + manhourWithMarkup + packingWithMarkup
+//       );
+
+//       const importedMaxLTW = Math.max(
+//         0,
+//         ...newItems.map((x) => toNum(x.leadTime ?? x.leadTimeWeeks))
+//       );
+//       drawing.leadTimeWeeks = Math.max(toNum(drawing.leadTimeWeeks), importedMaxLTW);
+
+//       drawing.lastEditedBy = req?.user?._id || drawing.lastEditedBy;
+
+//       // ✅ keep drawing currency consistent
+//       drawing.currency = drawing?.currency?._id;
+
+//       await drawing.save();
+//     }
+
+//     // ✅ Build message
+//     const errorMessage = formatCostingImportErrors(errors);
+
+//     // If nothing inserted & errors exist => fail
+//     if (insertedDocs.length === 0 && errors.length > 0) {
+//       return res.status(400).json({
+//         success: false,
+//         insertedCount: 0,
+//         errorCount: errors.length,
+//         message: errorMessage,
+//         errors,
+//       });
+//     }
+
+//     // Partial success => 207
+//     if (errors.length > 0) {
+//       return res.status(207).json({
+//         success: true,
+//         insertedCount: insertedDocs.length,
+//         errorCount: errors.length,
+//         message: `Imported ${insertedDocs.length} rows, some rows failed:\n\n${errorMessage}`,
+//         errors,
+//       });
+//     }
+
+//     // Full success
+//     return res.status(200).json({
+//       success: true,
+//       insertedCount: insertedDocs.length,
+//       message: `✅ ${quoteType} import successful`,
+//     });
+//   } catch (error) {
+//     console.error("❌ Import Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to import costing items",
+//       error: error.message,
+//     });
+//   } finally {
+//     if (filePath) {
+//       try {
+//         await fs.unlink(filePath);
+//       } catch { }
+//     }
+//   }
+// };
 
 
 // old
@@ -5207,6 +6484,7 @@ export const importDrawings = async (req, res) => {
 
     const results = { drawingsAdded: [], itemsAdded: 0, manhourAdded: 0, errors: [] };
 
+    const failedRows = [];
     // 4) Group rows by Drawing no
     const groupRowsByDrawing = (rows) => {
       const groups = new Map();
@@ -5334,28 +6612,101 @@ export const importDrawings = async (req, res) => {
           });
 
           if (!childPart) {
-            results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "Child Part", value: childParts, message: `Child Part not found in system: ${childParts}` });
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "Child Part",
+              value: childParts,
+              message: `Child Part not found in system: ${childParts}`,
+            });
+
+            failedRows.push({
+              ...r,
+              "Import Error": `Child Part not found in system: ${childParts}`,
+            });
+
             materialHasError = true;
           } else if (!childPart.mpn) {
-            results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "MPN", value: childParts, message: `No MPN linked to Child Part: ${childParts}` });
+            const errorMessage = `No MPN linked to Child Part: ${childParts}`;
+
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "MPN",
+              value: childParts,
+              message: errorMessage,
+            });
+
+            failedRows.push({
+              ...r,
+              "Import Error": errorMessage,
+            });
+
             materialHasError = true;
           }
 
           const uomCell = toStr(pick(r, "UOM", "uom"));
           if (!uomCell) {
-            results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "UOM", value: "", message: "UOM is required for material line" });
+            const errorMessage = "UOM is required for material line";
+
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "UOM",
+              value: "",
+              message: errorMessage,
+            });
+
+            failedRows.push({
+              ...r,
+              "Import Error": errorMessage,
+            });
+
             materialHasError = true;
           }
 
           const uomId = uomCell ? await getUomId(uomCell) : null;
           if (uomCell && !uomId) {
-            results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "UOM", value: uomCell, message: `UOM not found: ${uomCell}` });
+            const errorMessage = `UOM not found: ${uomCell}`;
+
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "UOM",
+              value: uomCell,
+              message: errorMessage,
+            });
+
+            failedRows.push({
+              ...r,
+              "Import Error": errorMessage,
+            });
+
             materialHasError = true;
           }
 
           const ChildQty = toNum(pick(r, "Child Qty", "child qty"), 0);
           if (!(ChildQty > 0)) {
-            results.errors.push({ drawingNo, row: rowIndex, type: "material", field: "Child Qty", value: ChildQty, message: "Child Qty must be > 0" });
+            const errorMessage = "Child Qty must be > 0";
+
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "material",
+              field: "Child Qty",
+              value: ChildQty,
+              message: errorMessage,
+            });
+
+            failedRows.push({
+              ...r,
+              "Import Error": errorMessage,
+            });
+
             materialHasError = true;
           }
 
@@ -5379,8 +6730,25 @@ export const importDrawings = async (req, res) => {
                 uomCell
               );
             } catch (convErr) {
-              results.errors.push({ row: rowIndex, message: "UOM conversion failed" });
-              continue;
+              const errorMessage =
+                convErr?.message || "UOM conversion failed";
+
+              results.errors.push({
+                drawingNo,
+                row: rowIndex,
+                type: "material",
+                field: "UOM conversion",
+                value: uomCell,
+                message: errorMessage,
+              });
+
+              failedRows.push({
+                ...r,
+                "Import Error": errorMessage,
+              });
+
+              materialHasError = true;
+              // continue;
             }
 
             const rowCurrency = childPart?.mpn?.currency?.code || "USD";
@@ -5455,13 +6823,43 @@ export const importDrawings = async (req, res) => {
           let labourHasError = false;
 
           if (!labourUomTx) {
-            results.errors.push({ drawingNo, row: rowIndex, type: "manhour", field: "Labour UOM", value: "", message: "Labour UOM is required" });
+            const errorMessage = "Labour UOM is required";
+
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "manhour",
+              field: "Labour UOM",
+              value: "",
+              message: errorMessage,
+            });
+
+            failedRows.push({
+              ...r,
+              "Import Error": errorMessage,
+            });
+
             labourHasError = true;
           }
 
           const labourUomId = labourUomTx ? await getUomId(labourUomTx) : null;
           if (labourUomTx && !labourUomId) {
-            results.errors.push({ drawingNo, row: rowIndex, type: "manhour", field: "Labour UOM", value: labourUomTx, message: `Labour UOM not found: ${labourUomTx}` });
+            const errorMessage = `Labour UOM not found: ${labourUomTx}`;
+
+            results.errors.push({
+              drawingNo,
+              row: rowIndex,
+              type: "manhour",
+              field: "Labour UOM",
+              value: labourUomTx,
+              message: errorMessage,
+            });
+
+            failedRows.push({
+              ...r,
+              "Import Error": errorMessage,
+            });
+
             labourHasError = true;
           }
 
@@ -5474,7 +6872,23 @@ export const importDrawings = async (req, res) => {
               .lean();
 
             if (!skillLevel) {
-              results.errors.push({ drawingNo, row: rowIndex, type: "manhour", field: "Labour Skill Level", value: labourSkill, message: `Skill Level not found: ${labourSkill}` });
+              const errorMessage =
+                `Skill Level not found: ${labourSkill}`;
+
+              results.errors.push({
+                drawingNo,
+                row: rowIndex,
+                type: "manhour",
+                field: "Labour Skill Level",
+                value: labourSkill,
+                message: errorMessage,
+              });
+
+              failedRows.push({
+                ...r,
+                "Import Error": errorMessage,
+              });
+
               labourHasError = true;
             }
           }
@@ -5539,10 +6953,70 @@ export const importDrawings = async (req, res) => {
 
       results.drawingsAdded.push(drawingNo);
     }
+    let failedFileName = null;
+    let failedFilePath = null;
+    let failedFileUrl = null;
 
-    try { fs.unlinkSync(filePath); } catch { }
+    if (failedRows.length > 0) {
+      const failedDir = path.join(
+        process.cwd(),
+        "uploads",
+        "temp"
+      );
 
-    return res.json({ success: true, results });
+      // uploads/temp create karo
+      await fs.mkdir(failedDir, {
+        recursive: true,
+      });
+
+      failedFileName = `failed-drawings-${Date.now()}.xlsx`;
+
+      // SERVER PAR ACTUAL FILE PATH
+      failedFilePath = path.join(
+        failedDir,
+        failedFileName
+      );
+
+      // CLIENT KO YE URL MILEGA
+      failedFileUrl =
+        `${process.env.BACKEND_API_URL}/uploads/temp/${failedFileName}`;
+
+      const failedWorkbook = XLSX.utils.book_new();
+
+      const failedSheet =
+        XLSX.utils.json_to_sheet(failedRows);
+
+      XLSX.utils.book_append_sheet(
+        failedWorkbook,
+        failedSheet,
+        "Failed Rows"
+      );
+
+      // IMPORTANT:
+      // Yahan URL nahi, local path dena hai
+      XLSX.writeFile(
+        failedWorkbook,
+        failedFilePath
+      );
+    }
+
+    // Original uploaded file delete
+    try {
+      fs.unlinkSync(filePath);
+    } catch { }
+
+    return res.json({
+      success: true,
+      results,
+      errorCount: results.errors.length,
+      failedFileName,
+      failedFilePath: failedFileUrl,
+
+      message:
+        results.errors.length > 0
+          ? `Import completed. ${results.errors.length} rows failed. Failed rows Excel is available.`
+          : "Drawings imported successfully",
+    });
   } catch (err) {
     try { fs.unlinkSync(filePath); } catch { }
     console.error("Import Drawing error:", err);

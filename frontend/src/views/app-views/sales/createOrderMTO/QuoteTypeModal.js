@@ -61,10 +61,41 @@ const QuoteTypeModal = ({
     showUploadList: false,
     // disable until user picked a project and import panel opened
     disabled: uploading || !isImportExcel || !selectedProject || !selected,
+    // async beforeUpload(file) {
+    //   setUploading(true);
+    //   const hide = message.loading("Importing drawings…", 0);
+    //   try {
+    //     const formData = new FormData();
+    //     formData.append("file", file);
+    //     formData.append("quoteType", selected);
+    //     formData.append("project", selectedProject);
+
+    //     const res = await DrawingService.importDrawings(formData);
+
+    //     if (res?.success) {
+    //       message.success(res?.message || "Drawings imported successfully!");
+    //       onUploadSuccess?.();
+    //       handleClose();
+    //     } else {
+    //       message.error(res?.message || "Import failed");
+    //        handleClose();
+    //     }
+    //   } catch (err) {
+    //     message.error(err?.message || "Import failed");
+    //     handleClose();
+    //   } finally {
+    //     hide();
+    //     setUploading(false);
+    //   }
+    //   // Prevent auto upload; we handled it
+    //   return false;
+    // },
     async beforeUpload(file) {
-      setUploading(true);
-      const hide = message.loading("Importing drawings…", 0);
-      try {
+    setUploading(true);
+
+    const hide = message.loading("Importing drawings…", 0);
+
+    try {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("quoteType", selected);
@@ -72,24 +103,213 @@ const QuoteTypeModal = ({
 
         const res = await DrawingService.importDrawings(formData);
 
+        console.log("--------- Import Drawing Response ---------", res);
+
+        // ==========================================
+        // IMPORT SUCCESS / PARTIAL ERROR
+        // ==========================================
         if (res?.success) {
-          message.success(res?.message || "Drawings imported successfully!");
-          onUploadSuccess?.();
-          handleClose();
+
+            // ------------------------------------------
+            // Some rows failed
+            // ------------------------------------------
+            if (res?.results?.errors?.length > 0) {
+
+                const errors = res.results.errors;
+
+                message.error({
+                    content: (
+                        <div
+                            style={{
+                                fontWeight: 500,
+                                width: 500,
+                                maxWidth: "calc(100vw - 60px)",
+                                fontSize: 12,
+                                lineHeight: 1.35,
+                            }}
+                        >
+                            <div
+                                style={{
+                                    fontWeight: 600,
+                                    marginBottom: 5,
+                                    fontSize: 13,
+                                }}
+                            >
+                                Excel imported with errors
+                            </div>
+
+                            <div
+                                style={{
+                                    fontWeight: 400,
+                                    marginBottom: 7,
+                                }}
+                            >
+                                {res?.results?.drawingsAdded?.length || 0} drawings
+                                imported,{" "}
+                                {errors.length} rows failed.
+                            </div>
+
+                            {/* ERROR LIST */}
+                            <div
+                                style={{
+                                    maxHeight: 220,
+                                    overflowY: "auto",
+                                    paddingRight: 4,
+                                }}
+                            >
+                                {errors.map((error, index) => (
+                                    <div
+                                        key={index}
+                                        style={{
+                                            marginBottom: 5,
+                                            paddingBottom: 5,
+                                            borderBottom:
+                                                index !== errors.length - 1
+                                                    ? "1px solid #eee"
+                                                    : "none",
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 6,
+                                                flexWrap: "wrap",
+                                            }}
+                                        >
+                                            <strong>
+                                                Row {error.row}:
+                                            </strong>
+
+                                            {error.drawingNo && (
+                                                <span>
+                                                    Drawing:{" "}
+                                                    <strong>
+                                                        {error.drawingNo}
+                                                    </strong>
+                                                </span>
+                                            )}
+
+                                            <span
+                                                style={{
+                                                    color: "#d4380d",
+                                                    fontWeight: 500,
+                                                }}
+                                            >
+                                                {error.field}
+                                            </span>
+                                        </div>
+
+                                        {error.value && (
+                                            <div
+                                                style={{
+                                                    color: "#555",
+                                                    marginTop: 2,
+                                                }}
+                                            >
+                                                Value:{" "}
+                                                <strong>
+                                                    {error.value}
+                                                </strong>
+                                            </div>
+                                        )}
+
+                                        <div
+                                            style={{
+                                                color: "#666",
+                                                marginTop: 2,
+                                            }}
+                                        >
+                                            {error.message}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div
+                                style={{
+                                    marginTop: 7,
+                                    color: "#666",
+                                    fontWeight: 400,
+                                }}
+                            >
+                                Failed rows Excel is downloading...
+                            </div>
+                        </div>
+                    ),
+                    duration: 10,
+                });
+
+                // ==========================================
+                // AUTO DOWNLOAD FAILED EXCEL
+                // ==========================================
+                if (res?.failedFilePath) {
+                    const link = document.createElement("a");
+
+                    link.href = res.failedFilePath;
+
+                    link.download =
+                        res.failedFileName ||
+                        "failed-drawings.xlsx";
+
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+
+                onUploadSuccess?.();
+                handleClose();
+
+            } else {
+                // ==========================================
+                // FULL SUCCESS
+                // ==========================================
+                message.success(
+                    res?.message ||
+                    "Drawings imported successfully!"
+                );
+
+                onUploadSuccess?.();
+                handleClose();
+            }
+
         } else {
-          message.error(res?.message || "Import failed");
-           handleClose();
+            // ==========================================
+            // API FAILURE
+            // ==========================================
+            message.error({
+                content:
+                    res?.message ||
+                    "Import failed",
+                duration: 6,
+            });
+
+            handleClose();
         }
-      } catch (err) {
-        message.error(err?.message || "Import failed");
+
+    } catch (err) {
+        console.error("Drawing Excel import failed:", err);
+
+        const errorMessage =
+            err?.response?.data?.message ||
+            err?.message ||
+            "Import failed";
+
+        message.error({
+            content: errorMessage,
+            duration: 6,
+        });
+
         handleClose();
-      } finally {
+
+    } finally {
         hide();
         setUploading(false);
-      }
-      // Prevent auto upload; we handled it
-      return false;
-    },
+    }
+
+    // Prevent Ant Design auto upload
+    return false;
+},
   };
 
   const handleContinue = () => {
