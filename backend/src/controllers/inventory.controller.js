@@ -616,7 +616,15 @@ export const getInventoryList = async (req, res) => {
 
         Status: status,
         purchaseData: item.purchaseData,
-        adjustLog: item?.adjustmentLogs
+        adjustLog: Array.isArray(item?.adjustmentLogs)
+  ? [...item.adjustmentLogs]
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt || b.adjustedAt || 0) -
+          new Date(a.createdAt || a.adjustedAt || 0)
+      )
+      .slice(0, 10)
+  : [],
       };
     });
 

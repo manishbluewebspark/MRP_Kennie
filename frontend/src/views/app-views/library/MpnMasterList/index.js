@@ -279,9 +279,10 @@ const MpnMasterList = () => {
             render: (_, record) => (
                 <ActionButtons
                     onInfo={() => console.log("Info")}
+                   
                     onEdit={() => handleEdit(record?._id)}
                     onDelete={() => handleDelete(record?._id)}
-                    showInfo={hasPermission("library.mpn:view")}
+                    showInfo={false}
                     showEdit={hasPermission("library.mpn:create_edit_delete")}
                     showDelete={hasPermission("library.mpn:create_edit_delete")}
                     showDeleteConfirm={true}

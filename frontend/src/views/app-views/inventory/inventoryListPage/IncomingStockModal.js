@@ -143,10 +143,10 @@ const handleCommitDateChange = async (record, newDate) => {
       : null;
 
     // 🔴 Validation: committedDate > needDate NOT allowed
-    if (needDate && newDate.isAfter(needDate, "day")) {
-      message.error("Committed Date cannot be later than Need Date");
-      return;
-    }
+    // if (needDate && newDate.isAfter(needDate, "day")) {
+    //   message.error("Committed Date cannot be later than Need Date");
+    //   return;
+    // }
 
     // ✅ Valid date → ISO format
     const formatted = newDate.toISOString();

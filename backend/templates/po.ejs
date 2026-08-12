@@ -8,10 +8,10 @@
   return `${dd}/${mm}/${yyyy}`;
   };
 
-  const money = (n) => {
-  const x = Number(n || 0);
-  return x.toFixed(2);
-  };
+ const money = (value) => {
+  const amount = Number(value || 0);
+  return (Math.round((amount + 1e-9) * 100) / 100).toFixed(2);
+};
 
   const poNo = po?.poNumber || "-";
   const currency = po?.currency || "SGD";

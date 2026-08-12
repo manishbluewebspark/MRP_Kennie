@@ -1004,7 +1004,7 @@ const PurchaseOrderForm = () => {
                 <Text strong>Final Amount:</Text>
               </Col>
               <Col span={12} style={{ textAlign: "right", fontWeight: 600 }}>
-                ${totals.finalAmount.toFixed(2)}
+                ${(Math.round((totals.finalAmount + Number.EPSILON) * 100) / 100).toFixed(2)}
               </Col>
             </Row>
           </div>

@@ -383,21 +383,21 @@ export const addPurchaseOrder = async (req, res) => {
  * Update Purchase Order
  */
 
-
 export const updatePurchaseOrder = async (req, res) => {
   try {
     const { id } = req.params;
     const data = req.body || {};
 
     if (!id) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Missing purchase order ID" });
+      return res.status(400).json({
+        success: false,
+        error: "Missing purchase order ID",
+      });
     }
 
-    // --------------------------------------------------
-    // 1️⃣ SPECIAL CASE: committedDate update
-    // --------------------------------------------------
+    // =========================================================
+    // 1. SPECIAL CASE: COMMITTED DATE UPDATE
+    // =========================================================
 
     if (
       !Array.isArray(data.items) &&
@@ -440,38 +440,21 @@ export const updatePurchaseOrder = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------
-    // 2️⃣ DEFAULT FULL UPDATE FLOW
-    // --------------------------------------------------
+    // =========================================================
+    // 2. HELPERS
+    // =========================================================
 
     const num = (v, def = 0) => {
       const n = Number(v);
       return Number.isFinite(n) ? n : def;
     };
 
-    const isId = (v) => typeof v === "string" && v.trim().length > 0;
+    const isId = (v) =>
+      typeof v === "string" && v.trim().length > 0;
 
-    let requiresSecondLevelApproval = false;
-
-    // --------------------------------------------------
-    // Inventory lookup
-    // --------------------------------------------------
-
-    const mpnIds = (data.items || []).map((i) => i.mpn).filter((id) => isId(id));
-
-    const inventories = await Inventory.find({
-      mpnId: { $in: mpnIds },
-    }).lean();
-
-    const inventoryMap = new Map();
-
-    inventories.forEach((inv) => {
-      inventoryMap.set(String(inv.mpnId), inv);
-    });
-
-    // --------------------------------------------------
-    // Items processing
-    // --------------------------------------------------
+    // =========================================================
+    // 3. GET EXISTING PO
+    // =========================================================
 
     const existingPO = await PurchaseOrders.findById(id);
 
@@ -482,55 +465,319 @@ export const updatePurchaseOrder = async (req, res) => {
       });
     }
 
+    // =========================================================
+    // 4. CHECK WHETHER ACTUAL PO DATA HAS CHANGED
+    // =========================================================
+
+    const normalizeForCompare = (value) => {
+      if (value === undefined) return null;
+
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+
+      if (Array.isArray(value)) {
+        return value.map(normalizeForCompare);
+      }
+
+      if (
+        value !== null &&
+        typeof value === "object"
+      ) {
+        const obj = {};
+
+        Object.keys(value)
+          .sort()
+          .forEach((key) => {
+            // Ignore mongoose/internal fields
+            if (
+              key === "_id" ||
+              key === "__v" ||
+              key === "revisionHistory" ||
+              key === "updatedAt" ||
+              key === "createdAt"
+            ) {
+              return;
+            }
+
+            obj[key] = normalizeForCompare(value[key]);
+          });
+
+        return obj;
+      }
+
+      return value;
+    };
+
+    const getComparablePO = (po) => {
+      const obj = po.toObject
+        ? po.toObject()
+        : { ...po };
+
+      // Remove fields which should NOT trigger revision
+      delete obj._id;
+      delete obj.__v;
+      delete obj.revisionHistory;
+      delete obj.updatedAt;
+      delete obj.createdAt;
+
+      return normalizeForCompare(obj);
+    };
+
+    const getComparableIncomingData = (incoming) => {
+      const obj = {
+        ...incoming,
+      };
+
+      // These are handled by backend
+      delete obj._id;
+      delete obj.__v;
+      delete obj.revisionHistory;
+      delete obj.updatedAt;
+      delete obj.createdAt;
+
+      return normalizeForCompare(obj);
+    };
+
+    let hasActualChanges = false;
+
+    // ---------------------------------------------------------
+    // Compare incoming fields against existing PO
+    // ---------------------------------------------------------
+
+    const existingComparable = getComparablePO(existingPO);
+
+    const incomingComparable = getComparableIncomingData(data);
+
+    // Only compare fields actually sent from frontend
+    Object.keys(incomingComparable).forEach((key) => {
+      if (
+        JSON.stringify(existingComparable[key]) !==
+        JSON.stringify(incomingComparable[key])
+      ) {
+        hasActualChanges = true;
+      }
+    });
+
+    // Items are an important part of PO changes
+    if (Array.isArray(data.items)) {
+      const oldItems = normalizeForCompare(
+        existingPO.items?.map((item) => {
+          const obj = item.toObject
+            ? item.toObject()
+            : { ...item };
+
+          delete obj._id;
+
+          return obj;
+        }) || []
+      );
+
+      const newItems = normalizeForCompare(
+        data.items.map((item) => {
+          const obj = {
+            ...item,
+          };
+
+          delete obj._id;
+
+          return obj;
+        })
+      );
+
+      if (
+        JSON.stringify(oldItems) !==
+        JSON.stringify(newItems)
+      ) {
+        hasActualChanges = true;
+      }
+    }
+
+    // =========================================================
+    // 5. REVISION LOGIC
+    // =========================================================
+
+    let isRevision = false;
+    let revisionNo =
+      Number(existingPO.revisionNo || 0);
+
+    let newPoNumber = existingPO.poNumber;
+
+    /*
+     * Revision ONLY when:
+     *
+     * status = Emailed
+     * AND actual changes exist
+     */
+    if (
+      existingPO.status === "Emailed" &&
+      hasActualChanges
+    ) {
+      isRevision = true;
+
+      // -------------------------------------------------------
+      // Determine next revision number
+      // -------------------------------------------------------
+
+      const existingRevisionNumbers =
+        (existingPO.revisionHistory || [])
+          .map((revision) =>
+            Number(revision.revisionNo || 0)
+          )
+          .filter((number) => Number.isFinite(number));
+
+      const maxHistoryRevision =
+        existingRevisionNumbers.length > 0
+          ? Math.max(...existingRevisionNumbers)
+          : 0;
+
+      revisionNo = Math.max(
+        Number(existingPO.revisionNo || 0),
+        maxHistoryRevision
+      ) + 1;
+
+      // -------------------------------------------------------
+      // Remove existing -R number from PO number
+      //
+      // P26-08-00004
+      // P26-08-00004-R1
+      // P26-08-00004-R2
+      // -------------------------------------------------------
+
+      const basePoNumber = String(
+        existingPO.poNumber || ""
+      ).replace(/-R\d+$/i, "");
+
+      newPoNumber =
+        `${basePoNumber}R${revisionNo}`;
+
+      // -------------------------------------------------------
+      // SAVE OLD PO SNAPSHOT
+      // -------------------------------------------------------
+
+      const oldSnapshot =
+        existingPO.toObject();
+
+      delete oldSnapshot._id;
+
+      /*
+       * We save the PO BEFORE changes.
+       * This is what getRevisePurchaseOrderById()
+       * will later return.
+       */
+
+      const revisionEntry = {
+        revisionNo,
+        revisedAt: new Date(),
+        snapshot: oldSnapshot,
+      };
+
+      existingPO.revisionHistory =
+        existingPO.revisionHistory || [];
+
+      existingPO.revisionHistory.push(
+        revisionEntry
+      );
+    }
+
+    // =========================================================
+    // 6. INVENTORY LOOKUP
+    // =========================================================
+
+    const mpnIds = (data.items || [])
+      .map((item) => item.mpn)
+      .filter((mpn) => isId(mpn));
+
+    const inventories = await Inventory.find({
+      mpnId: {
+        $in: mpnIds,
+      },
+    }).lean();
+
+    const inventoryMap = new Map();
+
+    inventories.forEach((inv) => {
+      inventoryMap.set(
+        String(inv.mpnId),
+        inv
+      );
+    });
+
+    // =========================================================
+    // 7. ITEMS PROCESSING
+    // =========================================================
+
     let subTotal = 0;
 
     const items = (data.items || []).map((item) => {
       const qty = num(item.qty);
       const unitPrice = num(item.unitPrice);
-      const discount = num(item.discount ?? item.discPercentage);
 
-      const extPrice = +(qty * unitPrice * (1 - discount / 100));
-
-      const oldItem = existingPO.items.find(
-        (x) =>
-          String(x._id) === String(item._id) ||
-          String(x.mpn) === String(item.mpn)
+      const discount = num(
+        item.discount ??
+        item.discPercentage
       );
 
-      let receivedQtyTotal = Number(oldItem?.receivedQtyTotal || 0);
-      let rejectedQtyTotal = Number(oldItem?.rejectedQtyTotal || 0);
+      const extPrice = +(
+        qty *
+        unitPrice *
+        (1 - discount / 100)
+      );
 
-      // =========================================
-      // PO PARTIALLY RECEIVED CASE
-      // =========================================
+      const oldItem =
+        existingPO.items.find(
+          (x) =>
+            String(x._id) === String(item._id) ||
+            String(x.mpn) === String(item.mpn)
+        );
+
+      let receivedQtyTotal = Number(
+        oldItem?.receivedQtyTotal || 0
+      );
+
+      let rejectedQtyTotal = Number(
+        oldItem?.rejectedQtyTotal || 0
+      );
+
+      // =====================================================
+      // PARTIALLY RECEIVED
+      // =====================================================
 
       if (
-        existingPO.status === "Partially Received" &&
+        existingPO.status ===
+          "Partially Received" &&
         oldItem
       ) {
-        const oldQty = Number(oldItem.qty || 0);
+        const oldQty = Number(
+          oldItem.qty || 0
+        );
 
-        // Qty reduce hui
+        // Qty reduced
         if (qty < oldQty) {
-          let reduceBy = oldQty - qty;
+          let reduceBy =
+            oldQty - qty;
 
-          // Pehle rejected qty se adjust karo
+          // First adjust rejected quantity
           if (rejectedQtyTotal > 0) {
-            const rejectedReduction = Math.min(
-              rejectedQtyTotal,
-              reduceBy
-            );
+            const rejectedReduction =
+              Math.min(
+                rejectedQtyTotal,
+                reduceBy
+              );
 
-            rejectedQtyTotal =
-              rejectedQtyTotal - rejectedReduction;
+            rejectedQtyTotal -=
+              rejectedReduction;
 
-            reduceBy = reduceBy - rejectedReduction;
+            reduceBy -=
+              rejectedReduction;
           }
 
-          // Safety validation
+          // Cannot reduce below received quantity
           if (receivedQtyTotal > qty) {
             throw new Error(
-              `${item.description || item.mpn
+              `${
+                item.description ||
+                item.mpn
               }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
             );
           }
@@ -538,7 +785,9 @@ export const updatePurchaseOrder = async (req, res) => {
       }
 
       const pendingQty = Math.max(
-        qty - (receivedQtyTotal + rejectedQtyTotal),
+        qty -
+          (receivedQtyTotal +
+            rejectedQtyTotal),
         0
       );
 
@@ -556,65 +805,78 @@ export const updatePurchaseOrder = async (req, res) => {
       };
     });
 
-    // --------------------------------------------------
-    // Totals calculation
-    // --------------------------------------------------
-
-    // const freightAmount = num(
-    //   data.totals?.freightAmount ?? data.freightAmount
-    // );
-
-    // const ostTax = +(subTotal * data?.taxPercentage);
-
-    // const finalAmount = +(subTotal + freightAmount + ostTax);
+    // =========================================================
+    // 8. TOTALS
+    // =========================================================
 
     const freightAmount = num(
-      data.totals?.freightAmount ?? data.freightAmount
+      data.totals?.freightAmount ??
+        data.freightAmount
     );
 
-    const subTotals = num(data.totals?.subTotalAmount);
+    const subTotals = num(
+      data.totals?.subTotalAmount
+    );
 
-    const ostTax = num(data.totals?.ostTax);
+    const ostTax = num(
+      data.totals?.ostTax
+    );
 
-    const finalAmount = num(data.totals?.finalAmount);
+    const finalAmount = num(
+      data.totals?.finalAmount
+    );
 
-    const totalDiscount = num(data.totals?.totalDiscount)
+    const totalDiscount = num(
+      data.totals?.totalDiscount
+    );
 
-    const purchaseSetting = await PurchaseSettings.findOne().lean();
+    // =========================================================
+    // 9. SECOND LEVEL APPROVAL
+    // =========================================================
+
+    let requiresSecondLevelApproval = false;
+
+    const purchaseSetting =
+      await PurchaseSettings.findOne().lean();
 
     const APPROVAL_LIMIT = Number(
-      purchaseSetting?.secondLevelApprovalAmountLimit || 5000
+      purchaseSetting
+        ?.secondLevelApprovalAmountLimit ||
+        5000
     );
 
-    // if (finalAmount > APPROVAL_LIMIT) {
-    //   requiresSecondLevelApproval = true;
-    // }
+    if (
+      finalAmount >
+      APPROVAL_LIMIT
+    ) {
+      requiresSecondLevelApproval =
+        true;
 
-    if (finalAmount > APPROVAL_LIMIT) {
+      // =====================================================
+      // FIND APPROVAL USERS
+      // =====================================================
 
-      requiresSecondLevelApproval = true;
+      const approvalUsers =
+        await User.find({
+          permissions: {
+            $in: [
+              "purchase.purchase_order_approval:edit_delete_add",
+            ],
+          },
+        }).select(
+          "_id name email"
+        );
 
-      // =========================================
-      // FIND USERS WITH APPROVAL PERMISSION
-      // =========================================
-
-      const approvalUsers = await User.find({
-        permissions: {
-          $in: [
-            "purchase.purchase_order_approval:edit_delete_add"
-          ]
-        }
-      }).select("_id name email");
-
-      // =========================================
+      // =====================================================
       // CREATE ALERTS
-      // =========================================
+      // =====================================================
 
-      for (const user of approvalUsers) {
-
+      for (
+        const user of approvalUsers
+      ) {
         await createAlertOnce({
-
-          title: "Second Level of Approval",
+          title:
+            "Second Level of Approval",
 
           message:
             `Total Purchase Amount is more than ${APPROVAL_LIMIT}. ` +
@@ -622,67 +884,153 @@ export const updatePurchaseOrder = async (req, res) => {
 
           priority: "critical",
 
-          module: "purchase_order",
+          module:
+            "purchase_order",
 
-          relatedId: user._id,
+          relatedId:
+            existingPO._id,
 
-          assignedTo: user._id,
+          assignedTo:
+            user._id,
         });
       }
     }
-    // --------------------------------------------------
-    // Update purchase order
-    // --------------------------------------------------
 
+    // =========================================================
+    // 10. PO STATUS
+    // =========================================================
 
-    let poStatus = existingPO.status;
+    let poStatus =
+      existingPO.status;
 
-    // Sirf approval case me status change karo
-    if (requiresSecondLevelApproval) {
-      poStatus = "Pending Approval";
+    // Revision from Emailed
+    if (isRevision) {
+      poStatus =
+        "Pending";
     }
 
-    // Partially Received ko preserve rakho
-    if (existingPO.status === "Partially Received") {
-      poStatus = "Partially Received";
+    // Existing approval logic
+    if (
+      requiresSecondLevelApproval
+    ) {
+      poStatus =
+        "Pending Approval";
     }
 
-    // Closed ko preserve rakho
-    if (existingPO.status === "Closed") {
+    // Preserve Partially Received
+    if (
+      existingPO.status ===
+      "Partially Received"
+    ) {
+      poStatus =
+        "Partially Received";
+    }
+
+    // Preserve Closed
+    if (
+      existingPO.status === "Closed"
+    ) {
       poStatus = "Closed";
     }
 
+    // =========================================================
+    // 11. PREPARE UPDATE
+    // =========================================================
 
-    const updated = await PurchaseOrders.findByIdAndUpdate(
-      id,
-      {
-        ...data,
-        requiresSecondLevelApproval,
-        status: poStatus,
-        items,
-        totals: {
-          freightAmount,
-          subTotalAmount: subTotals,
-          ostTax,
-          finalAmount,
-          totalDiscount
-        },
+    const updateData = {
+      ...data,
+
+      // Revision fields
+      poNumber: newPoNumber,
+      revisionNo,
+      isRevised: isRevision
+        ? true
+        : Boolean(
+            existingPO.isRevised
+          ),
+
+      requiresSecondLevelApproval,
+
+      status: poStatus,
+
+      items,
+
+      totals: {
+        freightAmount,
+        subTotalAmount:
+          subTotals,
+        ostTax,
+        finalAmount,
+        totalDiscount,
       },
-      { new: true, runValidators: true }
-    );
+    };
+
+    // ---------------------------------------------------------
+    // IMPORTANT:
+    // Keep revisionHistory from existing PO
+    // ---------------------------------------------------------
+
+    if (isRevision) {
+      updateData.revisionHistory =
+        existingPO.revisionHistory;
+    }
+
+    // =========================================================
+    // 12. UPDATE PO
+    // =========================================================
+
+    const updated =
+      await PurchaseOrders.findByIdAndUpdate(
+        id,
+        updateData,
+        {
+          new: true,
+          runValidators: true,
+        }
+      );
 
     if (!updated) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Purchase order not found" });
+      return res.status(404).json({
+        success: false,
+        error:
+          "Purchase order not found",
+      });
     }
+
+    // =========================================================
+    // 13. RESPONSE
+    // =========================================================
 
     return res.json({
       success: true,
+
+      message: isRevision
+        ? `Purchase order revised successfully as ${newPoNumber}`
+        : "Purchase order updated successfully",
+
       data: updated,
+
+      revision: isRevision
+        ? {
+            isRevised: true,
+            revisionNo,
+            poNumber: newPoNumber,
+          }
+        : {
+            isRevised: Boolean(
+              updated.isRevised
+            ),
+            revisionNo:
+              updated.revisionNo || 0,
+            poNumber:
+              updated.poNumber,
+          },
     });
   } catch (error) {
-    console.error("❌ updatePurchaseOrder error:", error);
+    console.error(
+      "❌ updatePurchaseOrder error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -690,6 +1038,313 @@ export const updatePurchaseOrder = async (req, res) => {
     });
   }
 };
+
+// export const updatePurchaseOrder = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const data = req.body || {};
+
+//     if (!id) {
+//       return res
+//         .status(400)
+//         .json({ success: false, error: "Missing purchase order ID" });
+//     }
+
+//     // --------------------------------------------------
+//     // 1️⃣ SPECIAL CASE: committedDate update
+//     // --------------------------------------------------
+
+//     if (
+//       !Array.isArray(data.items) &&
+//       data.idNumber &&
+//       data.mpn &&
+//       Object.prototype.hasOwnProperty.call(data, "committedDate")
+//     ) {
+//       const po = await PurchaseOrders.findById(id);
+
+//       if (!po) {
+//         return res.status(404).json({
+//           success: false,
+//           error: "Purchase order not found",
+//         });
+//       }
+
+//       const idx = po.items.findIndex(
+//         (it) =>
+//           String(it.idNumber).trim() === String(data.idNumber).trim() &&
+//           String(it.mpn) === String(data.mpn)
+//       );
+
+//       if (idx === -1) {
+//         return res.status(404).json({
+//           success: false,
+//           error: "PO item not found for given idNumber + mpn",
+//         });
+//       }
+
+//       po.items[idx].committedDate = data.committedDate
+//         ? new Date(data.committedDate)
+//         : null;
+
+//       await po.save();
+
+//       return res.json({
+//         success: true,
+//         message: "Committed date updated successfully",
+//         data: po,
+//       });
+//     }
+
+//     // --------------------------------------------------
+//     // 2️⃣ DEFAULT FULL UPDATE FLOW
+//     // --------------------------------------------------
+
+//     const num = (v, def = 0) => {
+//       const n = Number(v);
+//       return Number.isFinite(n) ? n : def;
+//     };
+
+//     const isId = (v) => typeof v === "string" && v.trim().length > 0;
+
+//     let requiresSecondLevelApproval = false;
+
+//     // --------------------------------------------------
+//     // Inventory lookup
+//     // --------------------------------------------------
+
+//     const mpnIds = (data.items || []).map((i) => i.mpn).filter((id) => isId(id));
+
+//     const inventories = await Inventory.find({
+//       mpnId: { $in: mpnIds },
+//     }).lean();
+
+//     const inventoryMap = new Map();
+
+//     inventories.forEach((inv) => {
+//       inventoryMap.set(String(inv.mpnId), inv);
+//     });
+
+//     // --------------------------------------------------
+//     // Items processing
+//     // --------------------------------------------------
+
+//     const existingPO = await PurchaseOrders.findById(id);
+
+//     if (!existingPO) {
+//       return res.status(404).json({
+//         success: false,
+//         error: "Purchase order not found",
+//       });
+//     }
+
+//     let subTotal = 0;
+
+//     const items = (data.items || []).map((item) => {
+//       const qty = num(item.qty);
+//       const unitPrice = num(item.unitPrice);
+//       const discount = num(item.discount ?? item.discPercentage);
+
+//       const extPrice = +(qty * unitPrice * (1 - discount / 100));
+
+//       const oldItem = existingPO.items.find(
+//         (x) =>
+//           String(x._id) === String(item._id) ||
+//           String(x.mpn) === String(item.mpn)
+//       );
+
+//       let receivedQtyTotal = Number(oldItem?.receivedQtyTotal || 0);
+//       let rejectedQtyTotal = Number(oldItem?.rejectedQtyTotal || 0);
+
+//       // =========================================
+//       // PO PARTIALLY RECEIVED CASE
+//       // =========================================
+
+//       if (
+//         existingPO.status === "Partially Received" &&
+//         oldItem
+//       ) {
+//         const oldQty = Number(oldItem.qty || 0);
+
+//         // Qty reduce hui
+//         if (qty < oldQty) {
+//           let reduceBy = oldQty - qty;
+
+//           // Pehle rejected qty se adjust karo
+//           if (rejectedQtyTotal > 0) {
+//             const rejectedReduction = Math.min(
+//               rejectedQtyTotal,
+//               reduceBy
+//             );
+
+//             rejectedQtyTotal =
+//               rejectedQtyTotal - rejectedReduction;
+
+//             reduceBy = reduceBy - rejectedReduction;
+//           }
+
+//           // Safety validation
+//           if (receivedQtyTotal > qty) {
+//             throw new Error(
+//               `${item.description || item.mpn
+//               }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
+//             );
+//           }
+//         }
+//       }
+
+//       const pendingQty = Math.max(
+//         qty - (receivedQtyTotal + rejectedQtyTotal),
+//         0
+//       );
+
+//       subTotal += extPrice;
+
+//       return {
+//         ...item,
+//         qty,
+//         unitPrice,
+//         discount,
+//         extPrice,
+//         receivedQtyTotal,
+//         rejectedQtyTotal,
+//         // pendingQty,
+//       };
+//     });
+
+//     // --------------------------------------------------
+//     // Totals calculation
+//     // --------------------------------------------------
+
+//     // const freightAmount = num(
+//     //   data.totals?.freightAmount ?? data.freightAmount
+//     // );
+
+//     // const ostTax = +(subTotal * data?.taxPercentage);
+
+//     // const finalAmount = +(subTotal + freightAmount + ostTax);
+
+//     const freightAmount = num(
+//       data.totals?.freightAmount ?? data.freightAmount
+//     );
+
+//     const subTotals = num(data.totals?.subTotalAmount);
+
+//     const ostTax = num(data.totals?.ostTax);
+
+//     const finalAmount = num(data.totals?.finalAmount);
+
+//     const totalDiscount = num(data.totals?.totalDiscount)
+
+//     const purchaseSetting = await PurchaseSettings.findOne().lean();
+
+//     const APPROVAL_LIMIT = Number(
+//       purchaseSetting?.secondLevelApprovalAmountLimit || 5000
+//     );
+
+//     // if (finalAmount > APPROVAL_LIMIT) {
+//     //   requiresSecondLevelApproval = true;
+//     // }
+
+//     if (finalAmount > APPROVAL_LIMIT) {
+
+//       requiresSecondLevelApproval = true;
+
+//       // =========================================
+//       // FIND USERS WITH APPROVAL PERMISSION
+//       // =========================================
+
+//       const approvalUsers = await User.find({
+//         permissions: {
+//           $in: [
+//             "purchase.purchase_order_approval:edit_delete_add"
+//           ]
+//         }
+//       }).select("_id name email");
+
+//       // =========================================
+//       // CREATE ALERTS
+//       // =========================================
+
+//       for (const user of approvalUsers) {
+
+//         await createAlertOnce({
+
+//           title: "Second Level of Approval",
+
+//           message:
+//             `Total Purchase Amount is more than ${APPROVAL_LIMIT}. ` +
+//             `Approval by ${user.name} is required before proceeding further.`,
+
+//           priority: "critical",
+
+//           module: "purchase_order",
+
+//           relatedId: user._id,
+
+//           assignedTo: user._id,
+//         });
+//       }
+//     }
+//     // --------------------------------------------------
+//     // Update purchase order
+//     // --------------------------------------------------
+
+
+//     let poStatus = existingPO.status;
+
+//     // Sirf approval case me status change karo
+//     if (requiresSecondLevelApproval) {
+//       poStatus = "Pending Approval";
+//     }
+
+//     // Partially Received ko preserve rakho
+//     if (existingPO.status === "Partially Received") {
+//       poStatus = "Partially Received";
+//     }
+
+//     // Closed ko preserve rakho
+//     if (existingPO.status === "Closed") {
+//       poStatus = "Closed";
+//     }
+
+
+//     const updated = await PurchaseOrders.findByIdAndUpdate(
+//       id,
+//       {
+//         ...data,
+//         requiresSecondLevelApproval,
+//         status: poStatus,
+//         items,
+//         totals: {
+//           freightAmount,
+//           subTotalAmount: subTotals,
+//           ostTax,
+//           finalAmount,
+//           totalDiscount
+//         },
+//       },
+//       { new: true, runValidators: true }
+//     );
+
+//     if (!updated) {
+//       return res
+//         .status(404)
+//         .json({ success: false, error: "Purchase order not found" });
+//     }
+
+//     return res.json({
+//       success: true,
+//       data: updated,
+//     });
+//   } catch (error) {
+//     console.error("❌ updatePurchaseOrder error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       error: error.message,
+//     });
+//   }
+// };
 
 
 export const updatePurchaseOrderStatus = async (req, res) => {
@@ -2119,135 +2774,341 @@ export const exportRevisedPurchaseOrderPDF = async (req, res) => {
 
 export const getPurchaseOrdersHistory = async (req, res) => {
   try {
-    let { year, month, supplier, status, search = "", page = 1, limit = 10 } = req.query;
+    let {
+      year,
+      month,
+      supplier,
+      status,
+      search = "",
+      page = 1,
+      limit = 10,
+    } = req.query;
+
     page = Math.max(parseInt(page) || 1, 1);
     limit = Math.max(parseInt(limit) || 10, 1);
 
-    const filter = buildFilter({ year, month, supplier, status });
-    if (search) filter.poNumber = { $regex: search, $options: "i" };
+    // ============================================
+    // BASE FILTER
+    // ============================================
 
-    const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed", "Closed"];
+    const filter = buildFilter({
+      year,
+      month,
+      supplier,
+      status,
+    });
+
+    // ============================================
+    // SEARCH
+    // ============================================
+
+    if (search && search.trim()) {
+      filter.poNumber = {
+        $regex: search.trim(),
+        $options: "i",
+      };
+    }
+
+    // ============================================
+    // STATUS
+    // ============================================
+
+    const baseStatuses = [
+      "Partially Received",
+      "Pending",
+      "Emailed",
+      "Completed",
+      "Closed",
+      "Pending Approval",
+    ];
 
     if (status) {
-      // single status filter
       filter.status = status;
     } else {
-      // all statuses
-      filter.status = { $in: baseStatuses };
+      filter.status = {
+        $in: baseStatuses,
+      };
     }
-    // For header label
-    const y = Number(year) || new Date().getUTCFullYear();
+
+    // ============================================
+    // PERIOD
+    // ============================================
+
+    const y =
+      Number(year) || new Date().getUTCFullYear();
+
     const periodLabel = month
       ? `${y}-${String(Number(month)).padStart(2, "0")}`
       : `${y}`;
 
-    const pipeline = [
-      { $match: filter },
+    // ============================================
+    // GET ALL PURCHASE ORDERS
+    // ============================================
 
-      // Join supplier for readable name
-      {
-        $lookup: {
-          from: "suppliers",             // <-- collection name
-          localField: "supplier",
-          foreignField: "_id",
-          as: "supplier",
-        },
-      },
-      { $unwind: { path: "$supplier", preserveNullAndEmptyArrays: true } },
+    const purchaseOrders = await PurchaseOrders.find(filter)
+      .populate({
+        path: "supplier",
+        select: "companyName",
+      })
+      .lean();
 
-      // Project needed fields
-      {
-        $project: {
-          _id: 1,
-          poNumber: 1,
-          poDate: 1,
-          status: 1,
-          "totals.finalAmount": 1,
-          "totals.subTotalAmount": 1,
-          "totals.freightAmount": 1,
-          "totals.ostTax": 1,
-          supplierId: "$supplier._id",
-          supplierName: "$supplier.companyName",
-          updatedAt: 1
-        },
-      },
+    // ============================================
+    // GROUP BY SUPPLIER
+    // ============================================
 
-      // Group by supplier for the selected period
-      {
-        $group: {
-          _id: { supplierId: "$supplierId", supplierName: "$supplierName" },
-          count: { $sum: 1 },
-          sumSubTotal: { $sum: "$totals.subTotalAmount" },
-          sumFreight: { $sum: "$totals.freightAmount" },
-          sumTax: { $sum: "$totals.ostTax" },
-          sumFinal: { $sum: "$totals.finalAmount" },
-          orders: {
-            $push: {
-              _id: "$_id",
-              poNumber: "$poNumber",
-              poDate: "$poDate",
-              status: "$status",
-              finalAmount: "$totals.finalAmount",
-              updatedAt: "$updatedAt"
-            },
+    const supplierMap = new Map();
+
+    for (const po of purchaseOrders) {
+      const supplierId = po.supplier?._id
+        ? String(po.supplier._id)
+        : "no-supplier";
+
+      const supplierName =
+        po.supplier?.companyName || "N/A";
+
+      // ------------------------------------------
+      // Supplier group
+      // ------------------------------------------
+
+      if (!supplierMap.has(supplierId)) {
+        supplierMap.set(supplierId, {
+          supplier: {
+            _id: po.supplier?._id || null,
+            companyName: supplierName,
           },
-        },
-      },
 
-      { $sort: { "_id.supplierName": 1 } },
+          count: 0,
 
-      // Pagination on groups
-      {
-        $facet: {
-          meta: [{ $count: "totalGroups" }],
-          data: [
-            { $skip: (page - 1) * limit },
-            { $limit: limit },
-          ],
-        },
-      },
-    ];
+          totals: {
+            sumSubTotal: 0,
+            sumFreight: 0,
+            sumTax: 0,
+            sumFinal: 0,
+          },
 
-    const result = await PurchaseOrders.aggregate(pipeline);
-    const totalGroups = result?.[0]?.meta?.[0]?.totalGroups || 0;
+          orders: [],
+        });
+      }
 
-    const groups = (result?.[0]?.data || []).map((g) => ({
-      supplier: {
-        _id: g?._id?.supplierId,
-        companyName: g?._id?.supplierName || "N/A",
-      },
-      count: g.count || 0,
-      totals: {
-        sumSubTotal: g.sumSubTotal || 0,
-        sumFreight: g.sumFreight || 0,
-        sumTax: g.sumTax || 0,
-        sumFinal: g.sumFinal || 0,
-      },
-      // newest first
-      orders: (g.orders || [])
-        // .sort((a, b) => new Date(b.poDate) - new Date(a.poDate))
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-        .map((o) => ({
-          _id: o._id,
-          poNumber: o.poNumber,
-          poDate: o.poDate,
-          status: o.status,
-          finalAmount: o.finalAmount,
-        })),
-    }));
+      const group = supplierMap.get(supplierId);
 
-    res.json({
+      // ==========================================
+      // REVISION DETECTION
+      // ==========================================
+
+      const poNumber = String(
+        po.poNumber || ""
+      ).trim();
+
+      const revisionMatch =
+        poNumber.match(/R(\d+)$/i);
+
+      const detectedRevisionNo =
+        revisionMatch
+          ? Number(revisionMatch[1])
+          : null;
+
+      const isRevised =
+        Boolean(
+          po.isRevised ||
+          detectedRevisionNo !== null
+        );
+
+      const revisionNo =
+        po.revisionNo ??
+        detectedRevisionNo ??
+        null;
+
+      // ==========================================
+      // PUSH EVERY PO DIRECTLY INTO ORDERS
+      // ==========================================
+
+      group.orders.push({
+        _id: po._id,
+
+        poNumber: poNumber,
+
+        poDate: po.poDate,
+
+        status: po.status,
+
+        revisionNo: revisionNo,
+
+        isRevised: isRevised,
+
+        finalAmount:
+          po.totals?.finalAmount ?? 0,
+
+        subTotalAmount:
+          po.totals?.subTotalAmount ?? 0,
+
+        freightAmount:
+          po.totals?.freightAmount ?? 0,
+
+        ostTax:
+          po.totals?.ostTax ?? 0,
+
+        updatedAt:
+          po.updatedAt ?? null,
+
+        createdAt:
+          po.createdAt ?? null,
+      });
+
+      // ==========================================
+      // TOTALS
+      // ==========================================
+
+      group.totals.sumSubTotal += Number(
+        po.totals?.subTotalAmount || 0
+      );
+
+      group.totals.sumFreight += Number(
+        po.totals?.freightAmount || 0
+      );
+
+      group.totals.sumTax += Number(
+        po.totals?.ostTax || 0
+      );
+
+      group.totals.sumFinal += Number(
+        po.totals?.finalAmount || 0
+      );
+    }
+
+    // ============================================
+    // FORMAT GROUPS
+    // ============================================
+
+    let groups = Array.from(
+      supplierMap.values()
+    );
+
+    groups.forEach((group) => {
+      // ==========================================
+      // SORT:
+      // Original first
+      // Then R1, R2, R3...
+      // ==========================================
+
+      group.orders.sort((a, b) => {
+        // Original PO first
+        if (
+          !a.isRevised &&
+          b.isRevised
+        ) {
+          return -1;
+        }
+
+        if (
+          a.isRevised &&
+          !b.isRevised
+        ) {
+          return 1;
+        }
+
+        // Both revisions
+        if (
+          a.isRevised &&
+          b.isRevised
+        ) {
+          return (
+            Number(a.revisionNo || 0) -
+            Number(b.revisionNo || 0)
+          );
+        }
+
+        // Both original
+        return (
+          new Date(
+            b.updatedAt ||
+              b.createdAt ||
+              b.poDate ||
+              0
+          ) -
+          new Date(
+            a.updatedAt ||
+              a.createdAt ||
+              a.poDate ||
+              0
+          )
+        );
+      });
+
+      // ==========================================
+      // COUNT ALL ORDERS
+      // Including R1/R2
+      // ==========================================
+
+      group.count =
+        group.orders.length;
+    });
+
+    // ============================================
+    // SORT SUPPLIERS
+    // ============================================
+
+    groups.sort((a, b) =>
+      String(
+        a.supplier.companyName
+      ).localeCompare(
+        String(
+          b.supplier.companyName
+        )
+      )
+    );
+
+    // ============================================
+    // PAGINATION
+    // ============================================
+
+    const totalGroups =
+      groups.length;
+
+    const start =
+      (page - 1) * limit;
+
+    const paginatedGroups =
+      groups.slice(
+        start,
+        start + limit
+      );
+
+    // ============================================
+    // RESPONSE
+    // ============================================
+
+    return res.json({
       success: true,
+
       period: periodLabel,
-      data: groups,
+
+      data: paginatedGroups,
+
       total: totalGroups,
+
       page,
+
       limit,
-      filtersApplied: { year, month, supplier, status, search },
+
+      filtersApplied: {
+        year,
+        month,
+        supplier,
+        status,
+        search,
+      },
     });
   } catch (error) {
-    console.error("getPurchaseOrdersHistory error:", error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error(
+      "getPurchaseOrdersHistory error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 };
 
