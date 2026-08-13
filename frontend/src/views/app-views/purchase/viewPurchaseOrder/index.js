@@ -225,10 +225,8 @@ const PurchaseOrderDetailsPage = () => {
       key: "revisionNo",
       render: (text, record) => (
         <div>
-          <Text strong>R{text}</Text>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            {record.poNumber}
-          </div>
+          <Text strong>R{text - 1}</Text>
+          
         </div>
       ),
     },
@@ -236,7 +234,7 @@ const PurchaseOrderDetailsPage = () => {
       title: "PO Number",
       dataIndex: "poNumber",
       key: "poNumber",
-      render: (text) => <Text copyable>{text}</Text>,
+      render: (text,record) => <Text copyable>{record.snapshot?.poNumber}</Text>,
     },
     {
       title: "Status",
