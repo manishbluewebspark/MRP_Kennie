@@ -996,7 +996,7 @@ const PurchaseOrderForm = () => {
               </Col>
               <Col span={12} style={{ textAlign: "right" }}>
                 {/* ${n(totals.ostTax)} */}
-                 ${(Math.round((totals.ostTax + Number.EPSILON) * 100) / 100).toFixed(2)}
+                  {(Math.trunc(Number(totals.ostTax) * 100) / 100)}
               </Col>
             </Row>
 

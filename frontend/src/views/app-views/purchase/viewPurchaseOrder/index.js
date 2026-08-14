@@ -457,7 +457,9 @@ const PurchaseOrderDetailsPage = () => {
               <Text strong>
                 GST ({totals.taxPercentage}%):
               </Text>
-              <Text>{fmtMoney(totals.tax)}</Text>
+        <Text>
+  {fmtMoney(Math.trunc(Number(totals.tax) * 100) / 100)}
+</Text>
             </div>
 
             <Divider style={{ margin: "12px 0" }} />

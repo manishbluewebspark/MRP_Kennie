@@ -496,7 +496,7 @@
                   <%= taxPercentage %>% GST Tax:
                 </span>
                 <span>
-                  <%= money(totals?.ostTax) %>
+                <%= (Math.trunc(Number(totals.ostTax) * 100) / 100).toFixed(2) %>
                 </span>
               </div>
 
