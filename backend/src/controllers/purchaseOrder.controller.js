@@ -745,7 +745,7 @@ export const updatePurchaseOrder = async (req, res) => {
 
       if (
         existingPO.status ===
-          "Partially Received" &&
+        "Partially Received" &&
         oldItem
       ) {
         const oldQty = Number(
@@ -775,9 +775,8 @@ export const updatePurchaseOrder = async (req, res) => {
           // Cannot reduce below received quantity
           if (receivedQtyTotal > qty) {
             throw new Error(
-              `${
-                item.description ||
-                item.mpn
+              `${item.description ||
+              item.mpn
               }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
             );
           }
@@ -786,8 +785,8 @@ export const updatePurchaseOrder = async (req, res) => {
 
       const pendingQty = Math.max(
         qty -
-          (receivedQtyTotal +
-            rejectedQtyTotal),
+        (receivedQtyTotal +
+          rejectedQtyTotal),
         0
       );
 
@@ -811,7 +810,7 @@ export const updatePurchaseOrder = async (req, res) => {
 
     const freightAmount = num(
       data.totals?.freightAmount ??
-        data.freightAmount
+      data.freightAmount
     );
 
     const subTotals = num(
@@ -842,7 +841,7 @@ export const updatePurchaseOrder = async (req, res) => {
     const APPROVAL_LIMIT = Number(
       purchaseSetting
         ?.secondLevelApprovalAmountLimit ||
-        5000
+      5000
     );
 
     if (
@@ -946,8 +945,8 @@ export const updatePurchaseOrder = async (req, res) => {
       isRevised: isRevision
         ? true
         : Boolean(
-            existingPO.isRevised
-          ),
+          existingPO.isRevised
+        ),
 
       requiresSecondLevelApproval,
 
@@ -1012,19 +1011,19 @@ export const updatePurchaseOrder = async (req, res) => {
 
       revision: isRevision
         ? {
-            isRevised: true,
-            revisionNo,
-            poNumber: newPoNumber,
-          }
+          isRevised: true,
+          revisionNo,
+          poNumber: newPoNumber,
+        }
         : {
-            isRevised: Boolean(
-              updated.isRevised
-            ),
-            revisionNo:
-              updated.revisionNo || 0,
-            poNumber:
-              updated.poNumber,
-          },
+          isRevised: Boolean(
+            updated.isRevised
+          ),
+          revisionNo:
+            updated.revisionNo || 0,
+          poNumber:
+            updated.poNumber,
+        },
     });
   } catch (error) {
     console.error(
@@ -3022,15 +3021,15 @@ export const getPurchaseOrdersHistory = async (req, res) => {
         return (
           new Date(
             b.updatedAt ||
-              b.createdAt ||
-              b.poDate ||
-              0
+            b.createdAt ||
+            b.poDate ||
+            0
           ) -
           new Date(
             a.updatedAt ||
-              a.createdAt ||
-              a.poDate ||
-              0
+            a.createdAt ||
+            a.poDate ||
+            0
           )
         );
       });
@@ -6261,13 +6260,17 @@ export const acceptPurchaseOrder = async (req, res) => {
     }
 
     // ✅ Special case: Partially Received → Closed
+    // Supplier ACK
+    po.acceptedAt = new Date();
+
+    // IMPORTANT:
+    // If PO is partially received, ACK must NOT close the PO.
+    // Keep the existing receiving status so remaining incoming
+    // quantity can still be received.
     if (po.status === "Partially Received") {
-      po.status = "Closed";
-      po.closedAt = new Date(); // optional tracking field
+      po.status = "Partially Received";
     } else {
-      // Normal flow
       po.status = "Acknowledged";
-      po.acceptedAt = new Date();
     }
 
     await po.save();
