@@ -46,6 +46,23 @@ const itemExt = (qty, unit, disc) => {
   return q * u * (1 - d / 100);
 };
 
+
+
+
+
+const roundMoney = (value) => {
+  return Math.round((n(value) + Number.EPSILON) * 100) / 100;
+};
+
+const fmtMoney = (amount = 0, currency = "USD") =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(roundMoney(amount));
+
+
 // simple blank row (idNumber set later)
 const blankItem = () => ({
   key: Date.now().toString(),
@@ -137,46 +154,47 @@ const PurchaseOrderForm = () => {
   // const totals = calcTotals();
 
   const calcTotals = () => {
-    // Gross Amount (Qty × Unit Price)
-    const grossAmount = orderItems.reduce((sum, it) => {
-      return sum + (n(it.qty) * n(it.unitPrice));
-    }, 0);
+  // Gross Amount = Qty × Unit Price
+  const grossAmount = roundMoney(
+    orderItems.reduce((sum, it) => {
+      return sum + n(it.qty) * n(it.unitPrice);
+    }, 0)
+  );
 
-    const freight = Number(freightAmount || 0);
-    const totalDiscount = Number(discountAmou || 0);
+  const freight = roundMoney(freightAmount);
+  const totalDiscount = roundMoney(discountAmou);
 
-    // ✅ Gross + Freight - Discount
-    const subTotalAmount = grossAmount + freight - totalDiscount;
+  // Sub Total = Gross + Freight - Discount
+  const subTotalAmount = roundMoney(
+    grossAmount + freight - totalDiscount
+  );
 
+  const gstPercent = n(
+    workOrderSettings?.gstSettings?.gstPercentage
+  );
 
-    // console.log({
-    //   grossAmount,
-    //   freight,
-    //   totalDiscount,
-    //   subTotalAmount,
-    // });
+  // GST
+  const gstBeforeRound = selectedSupplier?.gst
+    ? subTotalAmount * (gstPercent / 100)
+    : 0;
 
-    const gstPercent = Number(
-      workOrderSettings?.gstSettings?.gstPercentage || 0
-    );
+  // GST ko 2 decimal par round karo
+  const ostTax = roundMoney(gstBeforeRound);
 
-    // GST on Sub Total
-    const ostTax = selectedSupplier?.gst
-      ? subTotalAmount * (gstPercent / 100)
-      : 0;
+  // Final Amount = Sub Total + Rounded GST
+  const finalAmount = roundMoney(
+    subTotalAmount + ostTax
+  );
 
-    // Final Amount
-    const finalAmount = subTotalAmount + ostTax;
-
-    return {
-      grossAmount,
-      freight,
-      totalDiscount,
-      subTotalAmount,
-      ostTax,
-      finalAmount,
-    };
+  return {
+    grossAmount,
+    freight,
+    totalDiscount,
+    subTotalAmount,
+    ostTax,
+    finalAmount,
   };
+};
 
   const totals = calcTotals();
 
@@ -995,8 +1013,8 @@ const PurchaseOrderForm = () => {
                 </Text>
               </Col>
               <Col span={12} style={{ textAlign: "right" }}>
-                {/* ${n(totals.ostTax)} */}
-                  {(Math.trunc(Number(totals.ostTax) * 100) / 100)}
+               {fmtMoney(totals.ostTax)}
+                  {/* {(Math.trunc(Number(totals.ostTax) * 100) / 100)} */}
               </Col>
             </Row>
 
@@ -1005,7 +1023,7 @@ const PurchaseOrderForm = () => {
                 <Text strong>Final Amount:</Text>
               </Col>
               <Col span={12} style={{ textAlign: "right", fontWeight: 600 }}>
-                ${(Math.round((totals.finalAmount + Number.EPSILON) * 100) / 100).toFixed(2)}
+                {fmtMoney(totals.finalAmount)}
               </Col>
             </Row>
           </div>

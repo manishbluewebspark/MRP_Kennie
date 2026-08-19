@@ -226,7 +226,7 @@ const PurchaseOrderDetailsPage = () => {
       render: (text, record) => (
         <div>
           <Text strong>R{text - 1}</Text>
-          
+
         </div>
       ),
     },
@@ -234,7 +234,7 @@ const PurchaseOrderDetailsPage = () => {
       title: "PO Number",
       dataIndex: "poNumber",
       key: "poNumber",
-      render: (text,record) => <Text copyable>{record.snapshot?.poNumber}</Text>,
+      render: (text, record) => <Text copyable>{record.snapshot?.poNumber}</Text>,
     },
     {
       title: "Status",
@@ -457,9 +457,10 @@ const PurchaseOrderDetailsPage = () => {
               <Text strong>
                 GST ({totals.taxPercentage}%):
               </Text>
-        <Text>
-  {fmtMoney(Math.trunc(Number(totals.tax) * 100) / 100)}
-</Text>
+              <Text>
+                {fmtMoney(totals.tax)}
+                {/* {fmtMoney(Math.trunc(Number(totals.tax) * 100) / 100)} */}
+              </Text>
             </div>
 
             <Divider style={{ margin: "12px 0" }} />
@@ -477,6 +478,7 @@ const PurchaseOrderDetailsPage = () => {
                   marginLeft: 10,
                 }}
               >
+
                 {fmtMoney(totals.finalAmount)}
               </Text>
             </div>

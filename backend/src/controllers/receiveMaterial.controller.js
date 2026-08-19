@@ -6,6 +6,220 @@ import ReceiveMaterial from "../models/ReceiveMaterial.js";
 import UOM from "../models/UOM.js";
 import { convertQty, convertToInventoryUom, convertToMeter } from "../utils/uomController.js";
 
+
+const createPartialPurchaseOrder = async ({
+  originalPO,
+  remainingItems,
+  userId,
+}) => {
+  if (!remainingItems?.length) {
+    return null;
+  }
+
+  // =====================================================
+  // 1. BASE PO NUMBER
+  // =====================================================
+
+  // P26-08-00012
+  // P26-08-00012R1 -> P26-08-00012
+  // P26-08-00012R2 -> P26-08-00012
+
+  const basePoNumber = String(
+    originalPO.poNumber || ""
+  ).replace(/R\d+$/i, "");
+
+  // =====================================================
+  // 2. FIND LAST R NUMBER
+  // =====================================================
+
+  const escapedBase = basePoNumber.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+
+  const existingRevisionPOs =
+    await PurchaseOrders.find({
+      poNumber: {
+        $regex: `^${escapedBase}R\\d+$`,
+        $options: "i",
+      },
+    })
+      .select("poNumber")
+      .lean();
+
+  let maxRevision = 0;
+
+  for (const existing of existingRevisionPOs) {
+    const match = String(
+      existing.poNumber || ""
+    ).match(/R(\d+)$/i);
+
+    if (match) {
+      maxRevision = Math.max(
+        maxRevision,
+        Number(match[1])
+      );
+    }
+  }
+
+  const revisionNo = maxRevision + 1;
+
+  const newPoNumber =
+    `${basePoNumber}R${revisionNo}`;
+
+  // =====================================================
+  // 3. CREATE NEW ITEMS
+  // =====================================================
+
+  let grossAmount = 0;
+
+  const newItems = remainingItems.map((item) => {
+    const qty = Number(item.qty || 0);
+    const unitPrice = Number(item.unitPrice || 0);
+
+    const discount = Number(
+      item.discount ??
+      item.discPercentage ??
+      0
+    );
+
+    const extPrice =
+      qty *
+      unitPrice *
+      (1 - discount / 100);
+
+    grossAmount += extPrice;
+
+    return {
+      ...item,
+
+      // Remaining quantity
+      qty,
+
+      unitPrice,
+
+      discount,
+      discPercentage: discount,
+
+      extPrice,
+
+      // New PO receiving starts from zero
+      receivedQtyTotal: 0,
+      rejectedQtyTotal: 0,
+      pendingQty: qty,
+
+      status: "Pending",
+    };
+  });
+
+  // =====================================================
+  // 4. TOTALS
+  // =====================================================
+
+  const freightAmount = Number(
+    originalPO.totals?.freightAmount ||
+    0
+  );
+
+  const totalDiscount = Number(
+    originalPO.totals?.totalDiscount ||
+    0
+  );
+
+  const subTotalAmount =
+    grossAmount +
+    freightAmount -
+    totalDiscount;
+
+  const taxPercentage = Number(
+    originalPO.taxPercentage ||
+    originalPO.totals?.taxPercentage ||
+    0
+  );
+
+  const ostTax =
+    subTotalAmount *
+    (taxPercentage / 100);
+
+  const finalAmount =
+    subTotalAmount +
+    ostTax;
+
+  // =====================================================
+  // 5. OLD PO SNAPSHOT
+  // =====================================================
+
+  const oldSnapshot =
+    originalPO.toObject();
+
+  delete oldSnapshot._id;
+
+  // =====================================================
+  // 6. CREATE REVISION HISTORY ENTRY
+  // =====================================================
+
+  const revisionEntry = {
+    revisionNo,
+    revisedAt: new Date(),
+    snapshot: oldSnapshot,
+  };
+
+  // =====================================================
+  // 7. CREATE NEW PO DATA
+  // =====================================================
+
+  const newPOData = {
+    ...oldSnapshot,
+
+    poNumber: newPoNumber,
+
+    revisionNo,
+
+    isRevised: true,
+
+    status: "Pending",
+
+    items: newItems,
+
+    totals: {
+      ...(originalPO.totals?.toObject
+        ? originalPO.totals.toObject()
+        : originalPO.totals || {}),
+
+      subTotalAmount,
+      freightAmount,
+      totalDiscount,
+      ostTax,
+      finalAmount,
+    },
+
+    // New PO has its own revision history
+    revisionHistory: [
+      revisionEntry,
+    ],
+
+    createdBy: userId,
+  };
+
+  // Remove old mongoose fields
+  delete newPOData._id;
+  delete newPOData.__v;
+  delete newPOData.createdAt;
+  delete newPOData.updatedAt;
+
+  // =====================================================
+  // 8. SAVE NEW PO
+  // =====================================================
+
+  const newPO =
+    await PurchaseOrders.create(
+      newPOData
+    );
+
+  return newPO;
+};
+
+
 // ============================
 export const createReceiveMaterial = async (req, res) => {
   try {
@@ -39,6 +253,7 @@ export const createReceiveMaterial = async (req, res) => {
     const poItems = po.items || [];
     const grnItems = [];
 
+    const remainingItemsForNewPO = [];
     // ============================
     // ✅ Prefetch MPN master UOM (SAFE)
     // ============================
@@ -140,7 +355,7 @@ export const createReceiveMaterial = async (req, res) => {
 
       // console.log('-------acceptedQty', poItem.receivedQtyTotal, fromUomId,receivedQty)
       const acceptedQtyInMaster = await convertToMeter({
-        qty:receivedQty,
+        qty: receivedQty,
         fromUom: fromUomId,
         // toUom: masterUomId,
       });
@@ -148,58 +363,180 @@ export const createReceiveMaterial = async (req, res) => {
       // console.log('-------acceptedQtyInMaster',acceptedQtyInMaster)
       // ---- PO totals update ----
       if (poItem) {
-        const orderedQty = Number(poItem.qty || line.orderedQty || 0);
-        const prevReceivedTotal = Number(poItem.receivedQtyTotal || 0);
-        const prevRejectedTotal = Number(poItem.rejectedQtyTotal || 0);
+        const orderedQty = Number(
+          poItem.qty ||
+          line.orderedQty ||
+          0
+        );
 
-        const newReceivedTotal = prevReceivedTotal + receivedQty;
-        const newRejectedTotal = prevRejectedTotal + rejectedQty;
+        const prevReceivedTotal = Number(
+          poItem.receivedQtyTotal || 0
+        );
 
-        // Client Requirement:
-        // Last Received Qty = Previous Last Received Qty + Current Received Qty
-        // Pending Qty = Ordered Qty - Last Received Qty
+        const prevRejectedTotal = Number(
+          poItem.rejectedQtyTotal || 0
+        );
 
-       const pendingQty = Math.max(
-  orderedQty - (newReceivedTotal + newRejectedTotal),
-  0
-);
+        // =====================================================
+        // TOTAL RECEIVED
+        // =====================================================
 
-        poItem.receivedQtyTotal = newReceivedTotal;
-        poItem.rejectedQtyTotal = rejectedQty;
-        poItem.pendingQty = pendingQty;
-        // poItem.remarks = 
+        const newReceivedTotal =
+          prevReceivedTotal +
+          receivedQty;
 
-        // Status based only on received quantity
-        if (newReceivedTotal >= orderedQty) {
+        // =====================================================
+        // TOTAL REJECTED
+        // =====================================================
+
+        const newRejectedTotal =
+          prevRejectedTotal +
+          rejectedQty;
+
+        // =====================================================
+        // PENDING
+        // =====================================================
+
+        const pendingQty = Math.max(
+          orderedQty -
+          (
+            newReceivedTotal +
+            newRejectedTotal
+          ),
+          0
+        );
+
+        // =====================================================
+        // UPDATE ORIGINAL PO ITEM
+        // =====================================================
+
+        poItem.receivedQtyTotal =
+          newReceivedTotal;
+
+        poItem.rejectedQtyTotal =
+          newRejectedTotal;
+
+        poItem.pendingQty =
+          pendingQty;
+
+        // =====================================================
+        // ITEM STATUS
+        // =====================================================
+
+        if (
+          newReceivedTotal >=
+          orderedQty
+        ) {
           poItem.status = "Accepted";
-        } else if (newReceivedTotal > 0) {
-          poItem.status = "Partially Accepted";
+        } else if (
+          newReceivedTotal > 0
+        ) {
+          poItem.status =
+            "Partially Accepted";
         } else {
           poItem.status = "Pending";
         }
 
         if (line.remarks?.trim()) {
-          poItem.remarks = line.remarks.trim();
+          poItem.remarks =
+            line.remarks.trim();
         }
 
-        // if (line.remarks) poItem.remarks = line.remarks;
+        // =====================================================
+        // GRN ITEM
+        // =====================================================
 
         grnItems.push({
-          mpnId, // ✅ always string id
+          mpnId,
           itemId: itemId || null,
+
           receivedQty,
           rejectedQty,
           acceptedQty,
+
           fromUomId,
           fromUomName,
+
           masterUomId,
           masterUomName,
+
           acceptedQtyInMaster,
-          remarks: line.remarks || "",
-          receivedQtyTotal: newReceivedTotal,
-          rejectedQtyTotal: newRejectedTotal,
+
+          remarks:
+            line.remarks || "",
+
+          receivedQtyTotal:
+            newReceivedTotal,
+
+          rejectedQtyTotal:
+            newRejectedTotal,
+
           pendingQty,
         });
+
+        // =====================================================
+        // REMAINING QTY FOR NEW PO
+        // =====================================================
+
+        if (pendingQty > 0) {
+          const oldItemData =
+            poItem.toObject();
+
+          // Old receiving values remove/reset
+          const newItem = {
+            ...oldItemData,
+
+            // ONLY REMAINING QTY
+            qty: pendingQty,
+
+            // Fresh receiving for new PO
+            receivedQtyTotal: 0,
+            rejectedQtyTotal: 0,
+            pendingQty,
+
+            status: "Pending",
+
+            // Keep pricing
+            unitPrice:
+              Number(
+                poItem.unitPrice || 0
+              ),
+
+            discount:
+              Number(
+                poItem.discount ??
+                poItem.discPercentage ??
+                0
+              ),
+
+            discPercentage:
+              Number(
+                poItem.discPercentage ??
+                poItem.discount ??
+                0
+              ),
+
+            extPrice:
+              pendingQty *
+              Number(
+                poItem.unitPrice || 0
+              ) *
+              (
+                1 -
+                Number(
+                  poItem.discount ??
+                  poItem.discPercentage ??
+                  0
+                ) / 100
+              ),
+          };
+
+          delete newItem._id;
+
+          remainingItemsForNewPO.push(
+            newItem
+          );
+        }
       } else {
         const ordered = Number(line.orderedQty || 0);
         const pendingQty = Math.max(ordered - acceptedQty + rejectedQty);
@@ -224,13 +561,13 @@ export const createReceiveMaterial = async (req, res) => {
 
 
       const before = await Inventory.findOne({
-  mpnId: new mongoose.Types.ObjectId(mpnId)
-});
+        mpnId: new mongoose.Types.ObjectId(mpnId)
+      });
 
-// console.log(
-//   "BEFORE:",
-//   before.balanceQuantity
-// );
+      // console.log(
+      //   "BEFORE:",
+      //   before.balanceQuantity
+      // );
       // ============================
       // ✅ Inventory update (MASTER UOM)
       // ============================
@@ -252,13 +589,13 @@ export const createReceiveMaterial = async (req, res) => {
       }
 
       const after = await Inventory.findOne({
-  mpnId: new mongoose.Types.ObjectId(mpnId)
-});
+        mpnId: new mongoose.Types.ObjectId(mpnId)
+      });
 
-// console.log(
-//   "AFTER:",
-//   after.balanceQuantity
-// );
+      // console.log(
+      //   "AFTER:",
+      //   after.balanceQuantity
+      // );
 
       // 4️⃣ MPN.purchaseHistory update
       const purchaseHistoryEntry = {
@@ -295,58 +632,88 @@ export const createReceiveMaterial = async (req, res) => {
 
     await newGRN.save();
 
-  const updatedItems = po.items || [];
+    let partialPurchaseOrder = null;
 
-// const allProcessed = updatedItems.length > 0 && updatedItems.every((it) => {
-//   const orderedQty = Number(it.qty || 0);
-//   const receivedTotal = Number(it.receivedQtyTotal || 0);
-//   const rejectedTotal = Number(it.rejectedQtyTotal || 0);
+    if (
+      remainingItemsForNewPO.length > 0
+    ) {
+      partialPurchaseOrder =
+        await createPartialPurchaseOrder({
+          originalPO: po,
+          remainingItems:
+            remainingItemsForNewPO,
+          userId,
+        });
 
-//   const processedQty = receivedTotal + rejectedTotal;
+      console.log(
+        "✅ Partial PO created:",
+        partialPurchaseOrder.poNumber
+      );
+    }
 
-//   return processedQty >= orderedQty;
-// });
+    const updatedItems = po.items || [];
 
-// const anyProcessed = updatedItems.some((it) => {
-//   const receivedTotal = Number(it.receivedQtyTotal || 0);
-//   const rejectedTotal = Number(it.rejectedQtyTotal || 0);
+    // const allProcessed = updatedItems.length > 0 && updatedItems.every((it) => {
+    //   const orderedQty = Number(it.qty || 0);
+    //   const receivedTotal = Number(it.receivedQtyTotal || 0);
+    //   const rejectedTotal = Number(it.rejectedQtyTotal || 0);
 
-//   return (receivedTotal + rejectedTotal) > 0;
-// });
+    //   const processedQty = receivedTotal + rejectedTotal;
 
-// if (allProcessed) {
-//   po.status = "Closed";
-// } else if (anyProcessed) {
-//   po.status = "Partially Received";
-// } else if (!["Cancelled", "Closed"].includes(po.status)) {
-//   po.status = "Pending";
-// }
+    //   return processedQty >= orderedQty;
+    // });
 
-const allReceived = updatedItems.every((it) => {
-  const orderedQty = Number(it.qty || 0);
-  const receivedQty = Number(it.receivedQtyTotal || 0);
+    // const anyProcessed = updatedItems.some((it) => {
+    //   const receivedTotal = Number(it.receivedQtyTotal || 0);
+    //   const rejectedTotal = Number(it.rejectedQtyTotal || 0);
 
-  return receivedQty >= orderedQty;
-});
+    //   return (receivedTotal + rejectedTotal) > 0;
+    // });
 
-const anyReceived = updatedItems.some((it) => {
-  return Number(it.receivedQtyTotal || 0) > 0;
-});
+    // if (allProcessed) {
+    //   po.status = "Closed";
+    // } else if (anyProcessed) {
+    //   po.status = "Partially Received";
+    // } else if (!["Cancelled", "Closed"].includes(po.status)) {
+    //   po.status = "Pending";
+    // }
 
-if (allReceived) {
-  po.status = "Closed";
-} else if (anyReceived) {
-  po.status = "Partially Received";
-} else {
-  po.status = "Pending";
-}
+    const allReceived = updatedItems.every((it) => {
+      const orderedQty = Number(it.qty || 0);
+      const receivedQty = Number(it.receivedQtyTotal || 0);
+
+      return receivedQty >= orderedQty;
+    });
+
+    const anyReceived = updatedItems.some((it) => {
+      return Number(it.receivedQtyTotal || 0) > 0;
+    });
+
+    if (allReceived) {
+      po.status = "Closed";
+    } else if (anyReceived) {
+      po.status = "Partially Received";
+    } else {
+      po.status = "Pending";
+    }
 
     await po.save();
 
     return res.status(201).json({
       success: true,
-      message: "Material received successfully (inventory updated in MPN master UOM).",
-      data: { grn: newGRN, purchaseOrder: po },
+
+      message: partialPurchaseOrder
+        ? `Material received successfully. Remaining quantity PO ${partialPurchaseOrder.poNumber} created.`
+        : "Material received successfully.",
+
+      data: {
+        grn: newGRN,
+
+        purchaseOrder: po,
+
+        partialPurchaseOrder:
+          partialPurchaseOrder || null,
+      },
     });
   } catch (error) {
     console.error("❌ Error in createReceiveMaterial:", error);
