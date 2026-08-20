@@ -287,7 +287,7 @@ const InventoryListPage = () => {
     try {
       const response = await ReceiveMaterialService.takeReceiveMaterial(formData);
       if (response.success) {
-        message.success("Materials received successfully!");
+        message.success(response?.message);
         setIsReceiveMaterialModalOpen(false);
         dispatch(fetchPurchaseOrders());
         // refresh current tab data

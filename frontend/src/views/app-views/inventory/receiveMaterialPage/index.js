@@ -78,7 +78,7 @@ const PurchaseOrdersReceivePage = () => {
 
             if (response.success) {
                 message.success(
-                    body.message || 'Materials received successfully!'
+                    response.message || 'Materials received successfully!'
                 );
                 setIsReceiveMaterialModalOpen(false);
                 setSelectedPO(null);

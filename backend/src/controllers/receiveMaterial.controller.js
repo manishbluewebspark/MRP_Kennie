@@ -633,23 +633,109 @@ export const createReceiveMaterial = async (req, res) => {
     await newGRN.save();
 
     let partialPurchaseOrder = null;
+    let revisedPOBlocked = false;
+    let revisedPOBlockMessage = null;
 
-    if (
-      remainingItemsForNewPO.length > 0
-    ) {
-      partialPurchaseOrder =
-        await createPartialPurchaseOrder({
-          originalPO: po,
-          remainingItems:
-            remainingItemsForNewPO,
-          userId,
-        });
 
-      console.log(
-        "✅ Partial PO created:",
-        partialPurchaseOrder.poNumber
-      );
+
+
+   if (remainingItemsForNewPO.length > 0) {
+  const basePoNumber = String(
+    po.poNumber || ""
+  ).replace(/R\d+$/i, "");
+
+  const escapedBase = basePoNumber.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+
+  const revisedPOs = await PurchaseOrders.find({
+    poNumber: {
+      $regex: `^${escapedBase}R\\d+$`,
+      $options: "i",
+    },
+  })
+    .select("poNumber status revisionNo")
+    .lean();
+
+  let latestRevisedPO = null;
+
+  for (const current of revisedPOs) {
+    const currentRevision = Number(
+      String(current.poNumber || "")
+        .match(/R(\d+)$/i)?.[1] || 0
+    );
+
+    if (!latestRevisedPO) {
+      latestRevisedPO = current;
+      continue;
     }
+
+    const latestRevision = Number(
+      String(latestRevisedPO.poNumber || "")
+        .match(/R(\d+)$/i)?.[1] || 0
+    );
+
+    if (currentRevision > latestRevision) {
+      latestRevisedPO = current;
+    }
+  }
+
+  console.log("====================================");
+  console.log("BASE PO:", basePoNumber);
+  console.log(
+    "LATEST REVISED PO:",
+    latestRevisedPO?.poNumber
+  );
+  console.log(
+    "LATEST REVISED PO STATUS:",
+    latestRevisedPO?.status
+  );
+  console.log("====================================");
+
+  // =====================================================
+  // PREVIOUS REVISION EXISTS AND IS NOT READY
+  // =====================================================
+
+  if (
+    latestRevisedPO &&
+    !["Emailed", "Acknowledged"].includes(
+      latestRevisedPO.status
+    )
+  ) {
+    revisedPOBlocked = true;
+
+    revisedPOBlockMessage =
+      `New Revised Purchase Order was not created. ` +
+      `Previous Revised Purchase Order "${latestRevisedPO.poNumber}" ` +
+      `is currently "${latestRevisedPO.status}". ` +
+      `Please Emailed or Acknowledged "${latestRevisedPO.poNumber}" ` +
+      `before creating the next Revised Purchase Order.`;
+
+    console.log(
+      "❌ REVISED PO BLOCKED:",
+      revisedPOBlockMessage
+    );
+  }
+
+  // =====================================================
+  // CREATE NEXT REVISION
+  // =====================================================
+
+  if (!revisedPOBlocked) {
+    partialPurchaseOrder =
+      await createPartialPurchaseOrder({
+        originalPO: po,
+        remainingItems: remainingItemsForNewPO,
+        userId,
+      });
+
+    console.log(
+      "✅ Partial PO created:",
+      partialPurchaseOrder.poNumber
+    );
+  }
+}
 
     const updatedItems = po.items || [];
 
@@ -699,22 +785,40 @@ export const createReceiveMaterial = async (req, res) => {
 
     await po.save();
 
-    return res.status(201).json({
-      success: true,
+    // return res.status(201).json({
+    //   success: true,
 
-      message: partialPurchaseOrder
-        ? `Material received successfully. Remaining quantity PO ${partialPurchaseOrder.poNumber} created.`
-        : "Material received successfully.",
+    //   message: partialPurchaseOrder
+    //     ? `Material received successfully. Remaining quantity PO ${partialPurchaseOrder.poNumber} created.`
+    //     : "Material received successfully.",
 
-      data: {
-        grn: newGRN,
+    //   data: {
+    //     grn: newGRN,
 
-        purchaseOrder: po,
+    //     purchaseOrder: po,
 
-        partialPurchaseOrder:
-          partialPurchaseOrder || null,
-      },
-    });
+    //     partialPurchaseOrder:
+    //       partialPurchaseOrder || null,
+    //   },
+    // });
+   return res.status(201).json({
+  success: true,
+
+  message: partialPurchaseOrder
+    ? `Material received successfully. Remaining quantity PO ${partialPurchaseOrder.poNumber} created.`
+    : revisedPOBlocked
+      ? revisedPOBlockMessage
+      : "Material received successfully.",
+
+  data: {
+    grn: newGRN,
+    purchaseOrder: po,
+    partialPurchaseOrder: partialPurchaseOrder || null,
+
+    revisedPOBlocked,
+    revisedPOBlockMessage,
+  },
+});
   } catch (error) {
     console.error("❌ Error in createReceiveMaterial:", error);
     return res.status(500).json({
