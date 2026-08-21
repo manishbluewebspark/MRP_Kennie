@@ -100,7 +100,7 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
       }
     },
     {
-      title: 'Ordered Qty',
+      title: 'Qty',
       dataIndex: 'qty',
       key: 'orderedQty',
       width: 100,
@@ -108,17 +108,37 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
       render: (qty) => <Text strong>{qty}</Text>
     },
     {
-      title: 'Last Received Qty',
-      dataIndex: 'receivedQtyTotal',
-      key: 'orderedQty',
-      width: 100,
-      align: 'center',
-      render: (_, record) => (
-        <Text strong>
-          {Number(record?.receivedQtyTotal || 0)}
-        </Text>
-      )
-    },
+  title: 'Previously (PO) Received',
+  dataIndex: 'receivedQtyTotal',
+  key: 'receivedQtyTotal',
+  width: 120,
+  align: 'center',
+  render: (_, record) => (
+    <Text strong>
+      {Number(record?.lastReceivedQty || 0)}
+    </Text>
+  )
+},
+{
+  title: 'Remaining Qty',
+  key: 'remainingQty',
+  width: 110,
+  align: 'center',
+  render: (_, record) => {
+    const orderedQty = Number(record?.qty || 0);
+    const receivedQty = Number(record?.receivedQtyTotal || 0);
+    const rejectedQty = Number(record?.rejectedQtyTotal || 0);
+
+    return (
+      <Text strong>
+        {Math.max(
+          orderedQty - receivedQty - rejectedQty,
+          0
+        )}
+      </Text>
+    );
+  }
+},
     {
       title: 'Rejected Qty',
       dataIndex: 'rejectedQtyTotal',

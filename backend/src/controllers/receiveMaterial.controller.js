@@ -106,6 +106,7 @@ const createPartialPurchaseOrder = async ({
       // New PO receiving starts from zero
       receivedQtyTotal: 0,
       rejectedQtyTotal: 0,
+      lastReceivedQty:item?.lastReceivedQty,
       pendingQty: qty,
 
       status: "Pending",
@@ -492,6 +493,7 @@ export const createReceiveMaterial = async (req, res) => {
             // Fresh receiving for new PO
             receivedQtyTotal: 0,
             rejectedQtyTotal: 0,
+            lastReceivedQty:newReceivedTotal,
             pendingQty,
 
             status: "Pending",
