@@ -100,7 +100,7 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
       }
     },
     {
-      title: 'Qty',
+      title: 'Ordered',
       dataIndex: 'qty',
       key: 'orderedQty',
       width: 100,
@@ -108,7 +108,7 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
       render: (qty) => <Text strong>{qty}</Text>
     },
     {
-  title: 'Previously (PO) Received',
+  title: 'Last Received Qty',
   dataIndex: 'receivedQtyTotal',
   key: 'receivedQtyTotal',
   width: 120,
@@ -419,9 +419,27 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
       );
     });
 
- const canForceClose =
+// Determine if the current PO is a revision (ends with R + digits)
+const isRevisedPO = /R\d+$/.test(String(purchaseOrderData?.poNumber || "").trim());
+
+// Check if every line item has been fully accepted (accepted = ordered)
+const isFullyAccepted =
+  purchaseOrderData?.items?.length > 0 &&
+  purchaseOrderData.items.every((item) => {
+    const ordered = Number(item.qty || 0);
+    const received = Number(item.receivedQtyTotal || 0);
+    const rejected = Number(item.rejectedQtyTotal || 0);
+    const accepted = received - rejected;
+    return accepted === ordered;
+  }) || false;
+
+// Decide whether to allow manual closure
+const canClosePO =
   purchaseOrderData?.status !== "Closed" &&
-  hasAnyActivity;
+  (
+    (isRevisedPO && isFullyAccepted) ||   // revision: must be fully accepted
+    (!isRevisedPO && purchaseOrderData?.isRevision)         // original: allowed only if a revision exists
+  );
 
   return (
     <Modal
@@ -516,7 +534,7 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
             Cancel
           </Button>
 
-          {canForceClose && (
+          {canClosePO && (
             <Button
               danger
               onClick={() => handleClosePO(purchaseOrderData?._id)}
