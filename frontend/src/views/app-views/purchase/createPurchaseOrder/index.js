@@ -98,7 +98,7 @@ const PurchaseOrderForm = () => {
   const fromShortage = location.state?.fromShortage || false;
   const shortageItems = location.state?.shortageItems || [];
   const shortageSupplierId = location.state?.supplier || null;
-
+const [revisionMinQty, setRevisionMinQty] = useState({});
   // console.log('-------location.state', location?.state);
 
   const dispatch = useDispatch();
@@ -284,21 +284,73 @@ const PurchaseOrderForm = () => {
         </Select>
       ),
     },
-    {
-      title: 'Qty',
-      dataIndex: 'qty',
-      key: 'qty',
-      width: 90,
-      render: (text, record) => (
-        <InputNumber
-          size="small"
-          min={0}
-          value={record.qty}
-          onChange={(v) => handleItemChange(record.key, 'qty', n(v))}
-          style={{ width: '100%' }}
-        />
-      ),
-    },
+   {
+  title: 'Qty',
+  dataIndex: 'qty',
+  key: 'qty',
+  width: 90,
+  render: (text, record) => {
+    const minQty = record.minimumQty ?? 0;
+
+    return (
+      <InputNumber
+        size="small"
+        min={minQty}
+        value={record.qty}
+        style={{ width: '100%' }}
+onBlur={(e) => {
+  const qty = n(e.target.value);
+
+  if (qty < minQty) {
+    message.error(
+      `Minimum quantity is ${minQty}`
+    );
+
+    setOrderItems((prev) =>
+      prev.map((item) =>
+        item.key === record.key
+          ? {
+              ...item,
+              qty: minQty,
+            }
+          : item
+      )
+    );
+  }
+}}
+        onChange={(value) => {
+          const qty = n(value);
+
+          if (qty < minQty) {
+            message.error(
+              `Quantity cannot be less than ${minQty}`
+            );
+
+            // 👇 IMPORTANT: old valid value wapas set
+            setOrderItems((prev) =>
+              prev.map((item) =>
+                item.key === record.key
+                  ? {
+                      ...item,
+                      qty: minQty,
+                    }
+                  : item
+              )
+            );
+
+            return;
+          }
+
+          handleItemChange(
+            record.key,
+            'qty',
+            qty
+          );
+        }}
+      />
+    );
+  },
+},
     {
       title: 'Unit Price',
       dataIndex: 'unitPrice',
@@ -435,17 +487,49 @@ const PurchaseOrderForm = () => {
         discountAmount: n(po?.totals?.totalDiscount)
       });
 
-      const items = (po.items || []).map((it, idx) => ({
-        key: String(it._id || `${it.mpn}-${Math.random()}`),
-        idNumber: it.idNumber || String(idx + 1).padStart(4, '0'),
-        description: it.description || '',
-        mpn: it.mpn?._id || it.mpn || '', // id
-        manufacturer: it.manufacturer || '',
-        uom: it.uom?._id || it.uom || '', // id
-        qty: n(it.qty, 1),
-        unitPrice: n(it.unitPrice, 0),
-        discPercentage: n(it.discount, 0),
-      }));
+      const isRevisedPO = /R\d+$/i.test(String(po.poNumber || ''));
+
+      const minQtyMap = {};
+
+      // const items = (po.items || []).map((it, idx) => ({
+      //   key: String(it._id || `${it.mpn}-${Math.random()}`),
+      //   idNumber: it.idNumber || String(idx + 1).padStart(4, '0'),
+      //   description: it.description || '',
+      //   mpn: it.mpn?._id || it.mpn || '', // id
+      //   manufacturer: it.manufacturer || '',
+      //   uom: it.uom?._id || it.uom || '', // id
+      //   qty: n(it.qty, 1),
+      //     originalQty: n(it.qty, 1),
+      //   unitPrice: n(it.unitPrice, 0),
+      //   discPercentage: n(it.discount, 0),
+      // }));
+      const items = (po.items || []).map((it, idx) => {
+  const itemKey = String(
+    it._id || `${it.mpn}-${Math.random()}`
+  );
+
+  if (isRevisedPO) {
+    minQtyMap[itemKey] = n(it.qty, 0);
+  }
+
+  return {
+    key: itemKey,
+    idNumber:
+      it.idNumber ||
+      String(idx + 1).padStart(4, '0'),
+    description: it.description || '',
+    mpn: it.mpn?._id || it.mpn || '',
+    manufacturer: it.manufacturer || '',
+    uom: it.uom?._id || it.uom || '',
+     minimumQty: n(it.qty, 1),
+    qty: n(it.qty, 1),
+    unitPrice: n(it.unitPrice, 0),
+    discPercentage: n(it.discount, 0),
+  };
+});
+
+setRevisionMinQty(minQtyMap);
+
       setOrderItems(items.length ? items : []);
 
       if (po.supplier?._id && suppliers?.length) {
@@ -577,6 +661,21 @@ const PurchaseOrderForm = () => {
   };
 
   const handleItemChange = (key, field, value) => {
+
+     if (field === 'qty') {
+    const minQty = revisionMinQty[key];
+
+    if (
+      minQty !== undefined &&
+      n(value) < minQty
+    ) {
+      message.error(
+        `Quantity cannot be less than ${minQty}.`
+      );
+      return;
+    }
+  }
+
     // ✅ MPN validation for Office PO
     if (field === 'mpn' && isOfficePO) {
       const selectedMPN = librarys?.mpnList?.find(

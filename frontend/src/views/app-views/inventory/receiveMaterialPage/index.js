@@ -126,22 +126,22 @@ const PurchaseOrdersReceivePage = () => {
         try {
             const po = selectedPO;
 
-            const canClose = po?.items?.every((item) => {
-                const orderedQty = Number(item.qty || 0);
-                const receivedQty = Number(item.receivedQtyTotal || 0);
-                const rejectedQty = Number(item.rejectedQtyTotal || 0);
+            // const canClose = po?.items?.every((item) => {
+            //     const orderedQty = Number(item.qty || 0);
+            //     const receivedQty = Number(item.receivedQtyTotal || 0);
+            //     const rejectedQty = Number(item.rejectedQtyTotal || 0);
 
-                return (
-                    receivedQty >= orderedQty ||
-                    receivedQty + rejectedQty >= orderedQty
-                );
-            });
+            //     return (
+            //         receivedQty >= orderedQty ||
+            //         receivedQty + rejectedQty >= orderedQty
+            //     );
+            // });
 
-            if (!canClose) {
-                return message.error(
-                    "PO cannot be closed. Ordered Qty must be fully received or received + rejected must equal ordered qty."
-                );
-            }
+            // if (!canClose) {
+            //     return message.error(
+            //         "PO cannot be closed. Ordered Qty must be fully received or received + rejected must equal ordered qty."
+            //     );
+            // }
 
             await ReceiveMaterialService.closePurchaseOrder(id);
 

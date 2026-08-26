@@ -100,7 +100,7 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
       }
     },
     {
-      title: 'Ordered',
+      title: 'Ordered Qty',
       dataIndex: 'qty',
       key: 'orderedQty',
       width: 100,
@@ -419,8 +419,7 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
       );
     });
 
-// Determine if the current PO is a revision (ends with R + digits)
-const isRevisedPO = /R\d+$/.test(String(purchaseOrderData?.poNumber || "").trim());
+
 
 // Check if every line item has been fully accepted (accepted = ordered)
 const isFullyAccepted =
@@ -437,8 +436,8 @@ const isFullyAccepted =
 const canClosePO =
   purchaseOrderData?.status !== "Closed" &&
   (
-    (isRevisedPO && isFullyAccepted) ||   // revision: must be fully accepted
-    (!isRevisedPO && purchaseOrderData?.isRevision)         // original: allowed only if a revision exists
+    (purchaseOrderData?.isLocked) ||
+    (!purchaseOrderData?.isLocked && false)
   );
 
   return (

@@ -792,15 +792,35 @@ export const updatePurchaseOrder = async (req, res) => {
 
       subTotal += extPrice;
 
+      // return {
+      //      ...oldItemData,
+      //   ...item,
+      //   qty,
+      //   unitPrice,
+      //   discount,
+      //   extPrice,
+      //   receivedQtyTotal,
+      //   rejectedQtyTotal,
+      //   // pendingQty,
+      // };
       return {
-        ...item,
+        ...oldItemData,
+
+        idNumber: item.idNumber ?? oldItemData.idNumber,
+        description: item.description ?? oldItemData.description,
+        mpn: item.mpn ?? oldItemData.mpn,
+        manufacturer: item.manufacturer ?? oldItemData.manufacturer,
+        uom: item.uom ?? oldItemData.uom,
+
         qty,
         unitPrice,
         discount,
         extPrice,
+
         receivedQtyTotal,
         rejectedQtyTotal,
-        // pendingQty,
+        lastReceivedQty,
+        receivedQty,
       };
     });
 
@@ -1942,24 +1962,137 @@ export const deletePurchaseOrder = async (req, res) => {
 //   }
 // };
 
+// export const getAllPurchaseOrders = async (req, res) => {
+//   try {
+//     let { page = 1, limit = 10, search = "", sortBy = "createdAt", sortOrder = "desc" } = req.query;
+//     page = parseInt(page);
+//     limit = parseInt(limit);
+
+//     const filter = { isDeleted: false };
+//     if (search) {
+//       filter.poNumber = { $regex: search, $options: "i" };
+//     }
+//     let rawStatus = req.query.status ?? req.query["status[]"];
+//     let statusArray = [];
+
+//     if (Array.isArray(rawStatus)) {
+//       // e.g. status[]=Pending&status[]=Partially%20Received
+//       statusArray = rawStatus.map((s) => s.trim()).filter(Boolean);
+//     } else if (typeof rawStatus === "string" && rawStatus.trim() !== "") {
+//       // e.g. status=Pending,Partially%20Received
+//       statusArray = rawStatus
+//         .split(",")
+//         .map((s) => s.trim())
+//         .filter(Boolean);
+//     }
+
+//     if (statusArray.length > 0) {
+//       filter.status = { $in: statusArray };
+//     }
+
+//     const total = await PurchaseOrders.countDocuments(filter);
+
+//     const purchaseOrders = await PurchaseOrders.find(filter)
+//       .populate("supplier")
+//       .populate("workOrderNo") // ✅ WorkOrder populate karo
+//       .populate({
+//         path: "items.mpn", // ✅ MPN populate karo
+//         model: "MPNLibrary", // Adjust model name as per your schema
+//         select: "MPN" // Select required fields
+//       })
+//       .populate({
+//         path: "items.uom", // ✅ UOM populate karo
+//         model: "UOM", // Adjust model name as per your schema
+//         select: "name symbol" // Select required fields
+//       })
+//       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
+//       .skip((page - 1) * limit)
+//       .limit(limit);
+
+//     // ✅ Transform data to include workOrder dates and populated items
+//     const transformedOrders = purchaseOrders.map(order => {
+//       const transformedOrder = order.toObject();
+
+//       // ✅ WorkOrder se needDate aur commitDate lo
+//       if (transformedOrder.workOrderNo) {
+//         transformedOrder.needDate = transformedOrder?.workOrderNo?.needDate || transformedOrder?.needDate;
+//         transformedOrder.commitDate = transformedOrder?.workOrderNo?.commitDate;
+//       }
+
+//       // ✅ Items ko transform karo with populated data
+//       if (transformedOrder.items && transformedOrder.items.length > 0) {
+//         transformedOrder.items = transformedOrder.items.map(item => {
+//           const transformedItem = { ...item };
+//           transformedItem.needDate = transformedOrder?.workOrderNo?.needDate
+//           transformedItem.commitDate = transformedOrder?.workOrderNo?.commitDate
+//           // ✅ MPN data ko properly handle karo
+//           if (item.mpn && typeof item.mpn === 'object') {
+//             transformedItem.mpnData = {
+//               MPN: item.mpn.MPN
+//             };
+//           }
+
+//           // ✅ UOM data ko properly handle karo
+//           if (item.uom && typeof item.uom === 'object') {
+//             transformedItem.uomData = {
+//               name: item.uom.name,
+//               symbol: item.uom.symbol
+//             };
+//           }
+
+//           return transformedItem;
+//         });
+//       }
+
+//       return transformedOrder;
+//     });
+
+//     res.json({
+//       success: true,
+//       data: transformedOrders,
+//       total,
+//       page,
+//       limit
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ success: false, error: error.message });
+//   }
+// };
+
 export const getAllPurchaseOrders = async (req, res) => {
   try {
-    let { page = 1, limit = 10, search = "", sortBy = "createdAt", sortOrder = "desc" } = req.query;
+    let {
+      page = 1,
+      limit = 10,
+      search = "",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
+
     page = parseInt(page);
     limit = parseInt(limit);
 
     const filter = { isDeleted: false };
+
     if (search) {
-      filter.poNumber = { $regex: search, $options: "i" };
+      filter.poNumber = {
+        $regex: search,
+        $options: "i",
+      };
     }
+
     let rawStatus = req.query.status ?? req.query["status[]"];
     let statusArray = [];
 
     if (Array.isArray(rawStatus)) {
-      // e.g. status[]=Pending&status[]=Partially%20Received
-      statusArray = rawStatus.map((s) => s.trim()).filter(Boolean);
-    } else if (typeof rawStatus === "string" && rawStatus.trim() !== "") {
-      // e.g. status=Pending,Partially%20Received
+      statusArray = rawStatus
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else if (
+      typeof rawStatus === "string" &&
+      rawStatus.trim() !== ""
+    ) {
       statusArray = rawStatus
         .split(",")
         .map((s) => s.trim())
@@ -1970,76 +2103,185 @@ export const getAllPurchaseOrders = async (req, res) => {
       filter.status = { $in: statusArray };
     }
 
-    const total = await PurchaseOrders.countDocuments(filter);
+    const total =
+      await PurchaseOrders.countDocuments(filter);
 
-    const purchaseOrders = await PurchaseOrders.find(filter)
-      .populate("supplier")
-      .populate("workOrderNo") // ✅ WorkOrder populate karo
-      .populate({
-        path: "items.mpn", // ✅ MPN populate karo
-        model: "MPNLibrary", // Adjust model name as per your schema
-        select: "MPN" // Select required fields
-      })
-      .populate({
-        path: "items.uom", // ✅ UOM populate karo
-        model: "UOM", // Adjust model name as per your schema
-        select: "name symbol" // Select required fields
-      })
-      .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
+    const purchaseOrders =
+      await PurchaseOrders.find(filter)
+        .populate("supplier")
+        .populate("workOrderNo")
+        .populate({
+          path: "items.mpn",
+          model: "MPNLibrary",
+          select: "MPN",
+        })
+        .populate({
+          path: "items.uom",
+          model: "UOM",
+          select: "name symbol",
+        })
+        .sort({
+          [sortBy]: sortOrder === "desc" ? -1 : 1,
+        })
+        .skip((page - 1) * limit)
+        .limit(limit);
 
-    // ✅ Transform data to include workOrder dates and populated items
-    const transformedOrders = purchaseOrders.map(order => {
-      const transformedOrder = order.toObject();
+    // =====================================================
+    // FIND REVISED PO NUMBERS
+    // =====================================================
 
-      // ✅ WorkOrder se needDate aur commitDate lo
-      if (transformedOrder.workOrderNo) {
-        transformedOrder.needDate = transformedOrder?.workOrderNo?.needDate || transformedOrder?.needDate;
-        transformedOrder.commitDate = transformedOrder?.workOrderNo?.commitDate;
-      }
+    const basePoNumbers = purchaseOrders.map((order) =>
+      String(order.poNumber || "").replace(/R\d+$/i, "")
+    );
 
-      // ✅ Items ko transform karo with populated data
-      if (transformedOrder.items && transformedOrder.items.length > 0) {
-        transformedOrder.items = transformedOrder.items.map(item => {
-          const transformedItem = { ...item };
-          transformedItem.needDate = transformedOrder?.workOrderNo?.needDate
-          transformedItem.commitDate = transformedOrder?.workOrderNo?.commitDate
-          // ✅ MPN data ko properly handle karo
-          if (item.mpn && typeof item.mpn === 'object') {
-            transformedItem.mpnData = {
-              MPN: item.mpn.MPN
-            };
-          }
+    const uniqueBasePoNumbers = [
+      ...new Set(basePoNumbers),
+    ];
 
-          // ✅ UOM data ko properly handle karo
-          if (item.uom && typeof item.uom === 'object') {
-            transformedItem.uomData = {
-              name: item.uom.name,
-              symbol: item.uom.symbol
-            };
-          }
+    const revisedPOs =
+      uniqueBasePoNumbers.length > 0
+        ? await PurchaseOrders.find({
+          isDeleted: false,
+          poNumber: {
+            $regex: `^(${uniqueBasePoNumbers
+              .map((po) =>
+                po.replace(
+                  /[.*+?^${}()|[\]\\]/g,
+                  "\\$&"
+                )
+              )
+              .join("|")})R\\d+$`,
+            $options: "i",
+          },
+        })
+          .select("poNumber")
+          .lean()
+        : [];
 
-          return transformedItem;
-        });
-      }
+    // =====================================================
+    // CREATE SET OF BASE PO NUMBERS HAVING REVISION
+    // =====================================================
 
-      return transformedOrder;
-    });
+    const revisedBasePOSet = new Set();
+
+    for (const revisedPO of revisedPOs) {
+      const basePO = String(
+        revisedPO.poNumber || ""
+      ).replace(/R\d+$/i, "");
+
+      revisedBasePOSet.add(basePO.toLowerCase());
+    }
+
+    // =====================================================
+    // TRANSFORM DATA
+    // =====================================================
+
+    const transformedOrders =
+      purchaseOrders.map((order) => {
+        const transformedOrder =
+          order.toObject();
+
+        const poNumber = String(
+          transformedOrder.poNumber || ""
+        );
+
+        const basePO = poNumber.replace(
+          /R\d+$/i,
+          ""
+        );
+
+        const isRevisionPO = /R\d+$/i.test(poNumber);
+
+        // Revision PO hai ya nahi
+        transformedOrder.isRevised = isRevisionPO;
+
+        // =================================================
+        // REVISED FLAG
+        // =================================================
+
+        transformedOrder.isLocked =
+          !isRevisionPO &&
+          revisedBasePOSet.has(
+            basePO.toLowerCase()
+          );
+
+        // =================================================
+        // WORK ORDER
+        // =================================================
+
+        if (transformedOrder.workOrderNo) {
+          transformedOrder.needDate =
+            transformedOrder?.workOrderNo?.needDate ||
+            transformedOrder?.needDate;
+
+          transformedOrder.commitDate =
+            transformedOrder?.workOrderNo?.commitDate;
+        }
+
+        // =================================================
+        // ITEMS
+        // =================================================
+
+        if (
+          transformedOrder.items &&
+          transformedOrder.items.length > 0
+        ) {
+          transformedOrder.items =
+            transformedOrder.items.map((item) => {
+              const transformedItem = {
+                ...item,
+              };
+
+              transformedItem.needDate =
+                transformedOrder?.workOrderNo?.needDate;
+
+              transformedItem.commitDate =
+                transformedOrder?.workOrderNo?.commitDate;
+
+              // MPN
+              if (
+                item.mpn &&
+                typeof item.mpn === "object"
+              ) {
+                transformedItem.mpnData = {
+                  MPN: item.mpn.MPN,
+                };
+              }
+
+              // UOM
+              if (
+                item.uom &&
+                typeof item.uom === "object"
+              ) {
+                transformedItem.uomData = {
+                  name: item.uom.name,
+                  symbol: item.uom.symbol,
+                };
+              }
+
+              return transformedItem;
+            });
+        }
+
+        return transformedOrder;
+      });
 
     res.json({
       success: true,
       data: transformedOrders,
       total,
       page,
-      limit
+      limit,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, error: error.message });
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 };
-
 
 export const getPurchaseOrderById = async (req, res) => {
   try {
