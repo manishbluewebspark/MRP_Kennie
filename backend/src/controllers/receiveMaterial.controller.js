@@ -551,7 +551,7 @@ export const createReceiveMaterial = async (req, res) => {
             ...oldItemData,
 
             // ONLY REMAINING QTY
-            qty: receivedQty,
+            qty: pendingQty,
 
             // Fresh receiving for new PO
             receivedQtyTotal: 0,

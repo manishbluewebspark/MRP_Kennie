@@ -5667,7 +5667,7 @@ export const getLastPurachseOrderNumber = async (req, res) => {
   try {
     // Find last PO by createdAt OR by poNumber (descending)
     const lastPO = await PurchaseOrders.findOne({})
-      .sort({ createdAt: -1 }) // or { poNumber: -1 } if numeric sortable
+      .sort({ poNumber: -1 }) // or { poNumber: -1 } if numeric sortable
       .lean();
 
     if (!lastPO) {

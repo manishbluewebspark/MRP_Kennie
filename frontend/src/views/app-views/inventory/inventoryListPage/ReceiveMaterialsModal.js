@@ -292,11 +292,11 @@ const ReceiveMaterialsModal = ({ visible, onCancel, onSubmit, purchaseOrderData,
         }
 
         // Received Qty Last Received se kam nahi ho sakti
-        // if (currentReceivedQty < lastReceivedQty) {
-        //   throw new Error(
-        //     `${item.description}: Received Qty cannot be less than Last Received Qty (${lastReceivedQty})`
-        //   );
-        // }
+        if (currentReceivedQty < lastReceivedQty) {
+          throw new Error(
+            `${item.description}: Received Qty cannot be less than Last Received Qty (${lastReceivedQty})`
+          );
+        }
 
         // Ordered Qty se jyada nahi ho sakti
         if (currentReceivedQty > Number(item.qty || 0)) {
