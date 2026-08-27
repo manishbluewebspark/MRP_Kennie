@@ -572,6 +572,7 @@ export const updatePurchaseOrder = async (req, res) => {
           return obj;
         }) || []
       );
+      
 
       const newItems = normalizeForCompare(
         data.items.map((item) => {
@@ -707,122 +708,284 @@ export const updatePurchaseOrder = async (req, res) => {
     // 7. ITEMS PROCESSING
     // =========================================================
 
-    let subTotal = 0;
+   // =========================================================
+// 7. ITEMS PROCESSING
+// =========================================================
 
-    const items = (data.items || []).map((item) => {
-      const qty = num(item.qty);
-      const unitPrice = num(item.unitPrice);
+let subTotal = 0;
 
-      const discount = num(
-        item.discount ??
-        item.discPercentage
-      );
+const items = (data.items || []).map((item) => {
+  const qty = num(item.qty);
+  const unitPrice = num(item.unitPrice);
 
-      const extPrice = +(
-        qty *
-        unitPrice *
-        (1 - discount / 100)
-      );
+  const discount = num(
+    item.discount ?? item.discPercentage
+  );
 
-      const oldItem =
-        existingPO.items.find(
-          (x) =>
-            String(x._id) === String(item._id) ||
-            String(x.mpn) === String(item.mpn)
+  const extPrice = +(
+    qty *
+    unitPrice *
+    (1 - discount / 100)
+  );
+
+  // -------------------------------------------------------
+  // FIND EXISTING ITEM
+  // -------------------------------------------------------
+
+  const oldItem = existingPO.items.find(
+    (x) =>
+      (item._id &&
+        String(x._id) === String(item._id)) ||
+      String(x.mpn) === String(item.mpn)
+  );
+
+  // -------------------------------------------------------
+  // IMPORTANT:
+  // Start with ALL OLD ITEM DATA.
+  // This preserves lastReceivedQty, receivedQty, etc.
+  // -------------------------------------------------------
+
+  const oldItemData = oldItem
+    ? oldItem.toObject
+      ? oldItem.toObject()
+      : { ...oldItem }
+    : {};
+
+  // -------------------------------------------------------
+  // Preserve existing receive values
+  // -------------------------------------------------------
+
+  let receivedQtyTotal = num(
+    oldItemData.receivedQtyTotal
+  );
+
+  let rejectedQtyTotal = num(
+    oldItemData.rejectedQtyTotal
+  );
+
+  let lastReceivedQty = num(
+    oldItemData.lastReceivedQty
+  );
+
+  let receivedQty = num(
+    oldItemData.receivedQty
+  );
+
+  // -------------------------------------------------------
+  // IMPORTANT:
+  // Do NOT restrict qty during REVISION.
+  //
+  // If user changes:
+  // old qty = 2
+  // new qty = 10
+  //
+  // revision should save qty = 10.
+  // -------------------------------------------------------
+
+  // Only apply received-quantity restriction for
+  // normal Partially Received update, NOT revision.
+  if (
+    existingPO.status === "Partially Received" &&
+    oldItem &&
+    !isRevision
+  ) {
+    const oldQty = num(oldItemData.qty);
+
+    if (qty < oldQty) {
+      let reduceBy = oldQty - qty;
+
+      if (rejectedQtyTotal > 0) {
+        const rejectedReduction = Math.min(
+          rejectedQtyTotal,
+          reduceBy
         );
 
-      let receivedQtyTotal = Number(
-        oldItem?.receivedQtyTotal || 0
-      );
-
-      let rejectedQtyTotal = Number(
-        oldItem?.rejectedQtyTotal || 0
-      );
-
-      // =====================================================
-      // PARTIALLY RECEIVED
-      // =====================================================
-
-      if (
-        existingPO.status ===
-        "Partially Received" &&
-        oldItem
-      ) {
-        const oldQty = Number(
-          oldItem.qty || 0
-        );
-
-        // Qty reduced
-        if (qty < oldQty) {
-          let reduceBy =
-            oldQty - qty;
-
-          // First adjust rejected quantity
-          if (rejectedQtyTotal > 0) {
-            const rejectedReduction =
-              Math.min(
-                rejectedQtyTotal,
-                reduceBy
-              );
-
-            rejectedQtyTotal -=
-              rejectedReduction;
-
-            reduceBy -=
-              rejectedReduction;
-          }
-
-          // Cannot reduce below received quantity
-          if (receivedQtyTotal > qty) {
-            throw new Error(
-              `${item.description ||
-              item.mpn
-              }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
-            );
-          }
-        }
+        rejectedQtyTotal -= rejectedReduction;
+        reduceBy -= rejectedReduction;
       }
 
-      const pendingQty = Math.max(
-        qty -
-        (receivedQtyTotal +
-          rejectedQtyTotal),
-        0
-      );
+      if (receivedQtyTotal > qty) {
+        throw new Error(
+          `${item.description || item.mpn}: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
+        );
+      }
+    }
+  }
 
-      subTotal += extPrice;
+  const pendingQty = Math.max(
+    qty -
+      (receivedQtyTotal +
+        rejectedQtyTotal),
+    0
+  );
 
-      // return {
-      //      ...oldItemData,
-      //   ...item,
-      //   qty,
-      //   unitPrice,
-      //   discount,
-      //   extPrice,
-      //   receivedQtyTotal,
-      //   rejectedQtyTotal,
-      //   // pendingQty,
-      // };
-      return {
-        ...oldItemData,
+  subTotal += extPrice;
 
-        idNumber: item.idNumber ?? oldItemData.idNumber,
-        description: item.description ?? oldItemData.description,
-        mpn: item.mpn ?? oldItemData.mpn,
-        manufacturer: item.manufacturer ?? oldItemData.manufacturer,
-        uom: item.uom ?? oldItemData.uom,
+  // =======================================================
+  // RETURN OLD ITEM + ONLY UPDATE VALUES
+  // =======================================================
 
-        qty,
-        unitPrice,
-        discount,
-        extPrice,
+  return {
+    ...oldItemData,
 
-        receivedQtyTotal,
-        rejectedQtyTotal,
-        lastReceivedQty,
-        receivedQty,
-      };
-    });
+    // Frontend editable fields
+    idNumber:
+      item.idNumber ?? oldItemData.idNumber,
+
+    description:
+      item.description ?? oldItemData.description,
+
+    mpn:
+      item.mpn ?? oldItemData.mpn,
+
+    manufacturer:
+      item.manufacturer ?? oldItemData.manufacturer,
+
+    uom:
+      item.uom ?? oldItemData.uom,
+
+    qty,
+    unitPrice,
+    discount,
+    extPrice,
+
+    // Receive-related values MUST remain
+    receivedQtyTotal,
+    rejectedQtyTotal,
+    lastReceivedQty,
+    receivedQty,
+
+    // If you want pendingQty stored:
+    pendingQty,
+
+    // Keep _id of existing item
+    ...(oldItemData._id
+      ? { _id: oldItemData._id }
+      : {}),
+  };
+});
+    // const items = (data.items || []).map((item) => {
+    //   const qty = num(item.qty);
+    //   const unitPrice = num(item.unitPrice);
+
+    //   const discount = num(
+    //     item.discount ??
+    //     item.discPercentage
+    //   );
+
+    //   const extPrice = +(
+    //     qty *
+    //     unitPrice *
+    //     (1 - discount / 100)
+    //   );
+
+    //   const oldItem =
+    //     existingPO.items.find(
+    //       (x) =>
+    //         String(x._id) === String(item._id) ||
+    //         String(x.mpn) === String(item.mpn)
+    //     );
+
+    //      const oldItemData = oldItem
+    // ? (
+    //     oldItem.toObject
+    //       ? oldItem.toObject()
+    //       : { ...oldItem }
+    //   )
+    // : {};
+
+    //   let receivedQtyTotal = Number(
+    //     oldItem?.receivedQtyTotal || 0
+    //   );
+
+    //   let rejectedQtyTotal = Number(
+    //     oldItem?.rejectedQtyTotal || 0
+    //   );
+
+    //   // =====================================================
+    //   // PARTIALLY RECEIVED
+    //   // =====================================================
+
+    //   if (
+    //     existingPO.status ===
+    //     "Partially Received" &&
+    //     oldItem
+    //   ) {
+    //     const oldQty = Number(
+    //       oldItem.qty || 0
+    //     );
+
+    //     // Qty reduced
+    //     if (qty < oldQty) {
+    //       let reduceBy =
+    //         oldQty - qty;
+
+    //       // First adjust rejected quantity
+    //       if (rejectedQtyTotal > 0) {
+    //         const rejectedReduction =
+    //           Math.min(
+    //             rejectedQtyTotal,
+    //             reduceBy
+    //           );
+
+    //         rejectedQtyTotal -=
+    //           rejectedReduction;
+
+    //         reduceBy -=
+    //           rejectedReduction;
+    //       }
+
+    //       // Cannot reduce below received quantity
+    //       if (receivedQtyTotal > qty) {
+    //         throw new Error(
+    //           `${item.description ||
+    //           item.mpn
+    //           }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
+    //         );
+    //       }
+    //     }
+    //   }
+
+    //   const pendingQty = Math.max(
+    //     qty -
+    //     (receivedQtyTotal +
+    //       rejectedQtyTotal),
+    //     0
+    //   );
+
+    //   subTotal += extPrice;
+
+    //   // return {
+    //   //      ...oldItemData,
+    //   //   ...item,
+    //   //   qty,
+    //   //   unitPrice,
+    //   //   discount,
+    //   //   extPrice,
+    //   //   receivedQtyTotal,
+    //   //   rejectedQtyTotal,
+    //   //   // pendingQty,
+    //   // };
+    //   return {
+    //     ...oldItemData,
+
+    //     idNumber: item.idNumber ?? oldItemData.idNumber,
+    //     description: item.description ?? oldItemData.description,
+    //     mpn: item.mpn ?? oldItemData.mpn,
+    //     manufacturer: item.manufacturer ?? oldItemData.manufacturer,
+    //     uom: item.uom ?? oldItemData.uom,
+
+    //     qty,
+    //     unitPrice,
+    //     discount,
+    //     extPrice,
+
+    //     receivedQtyTotal,
+    //     rejectedQtyTotal,
+    //     lastReceivedQty,
+    //     receivedQty,
+    //   };
+    // });
 
     // =========================================================
     // 8. TOTALS
