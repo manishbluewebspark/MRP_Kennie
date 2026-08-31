@@ -436,8 +436,8 @@ const isFullyAccepted =
 const canClosePO =
   purchaseOrderData?.status !== "Closed" &&
   (
-    (purchaseOrderData?.isLocked) ||
-    (!purchaseOrderData?.isLocked && false)
+    isFullyAccepted ||
+    purchaseOrderData?.isLocked
   );
 
   return (
@@ -533,15 +533,15 @@ const canClosePO =
             Cancel
           </Button>
 
-          {canClosePO && (
-            <Button
-              danger
-              onClick={() => handleClosePO(purchaseOrderData?._id)}
-              style={{ marginRight: 8 }}
-            >
-              Close PO
-            </Button>
-          )}
+           <Button
+  danger
+  onClick={() => handleClosePO(purchaseOrderData?._id)}
+  style={{ marginRight: 8 }}
+  disabled={!canClosePO}
+>
+  Close PO
+</Button>
+          
 
           <Button
             type="primary"

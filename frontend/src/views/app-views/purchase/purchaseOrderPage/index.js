@@ -78,20 +78,22 @@ const PurchaseOrderPage = () => {
             //             ? "Closed"
             //             : undefined;
 
-            const statusFilter =
-                tab === "opening_orders"
-                    ? ["Pending", "Emailed", "Acknowledged", "Rejected"]
-                    : tab === "closed_orders"
-                        ? ["Closed"]
-                        : tab === "partial_completion"
-                            ? ["Partially Received"]
-                            : undefined;
+           const statusFilter =
+  tab === "opening_orders"
+    ? ["Pending", "Emailed", "Acknowledged", "Rejected"]
+    : tab === "closed_orders"
+      ? ["Closed"]
+      : undefined;
+
+const partiallyReceived =
+  tab === "partial_completion" ? true : false;
 
             const res = await PurchaseOrderService.getAllPurchaseOrders({
                 page: p,
                 limit: l,
                 search: s,
                 status: statusFilter,
+                partiallyReceived
             });
 
             setData(res?.data || []);
@@ -541,7 +543,10 @@ const PurchaseOrderPage = () => {
                             // showInfo
                             // showDelete
                             // showCross
-                            showMail={record?.status === "Partially Received"}
+                            showReset
+                            onReset={() => handleRevisedPO(record?._id)}
+                            resetTitle="Revised PO"
+                            showMail={record?.partiallyReceived}
                             iconOnly
                         />
                     </div>

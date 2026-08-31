@@ -1,6 +1,6 @@
 // pages/PurchaseHistoryByPeriod.jsx - UPDATED WITH SUMMARY CARDS
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Row, Col, Select, DatePicker, Radio, Pagination, message, Skeleton, Statistic } from "antd";
+import { Card, Row, Col, Select, DatePicker, Radio, Pagination, message, Skeleton, Statistic, Tag } from "antd";
 import {
     DollarOutlined,
     ShoppingOutlined,
@@ -622,8 +622,23 @@ const PurchaseHistoryByPeriod = () => {
                                     <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
                                         {o.poDate ? dayjs(o.poDate).format("DD/MM/YYYY") : "No date"}
                                     </div>
-                                    <div style={{ marginBottom: 8 }}>{statusPill(o.status)}</div>
+                                    <div style={{ marginBottom: 8 }}>
+    {statusPill(o.status)}
 
+    {o.partiallyReceived && (
+        <Tag
+            color="gold"
+            style={{
+                marginLeft: 6,
+                fontSize: 11,
+                fontWeight: 500,
+                borderRadius: 5,
+            }}
+        >
+            Partial
+        </Tag>
+    )}
+</div>
                                     <div
                                         onClick={() => navigate(`/app/purchase/view-purchase-order/${o._id}`)}
                                         style={{

@@ -51,7 +51,8 @@ const PurchaseOrdersReceivePage = () => {
     useEffect(() => {
         dispatch(
             fetchPurchaseOrders({
-                status: ["Partially Received", "Acknowledged", "Emailed"],
+                status: ["Acknowledged", "Emailed"],
+                 partiallyReceived: true,
                 page: 1,
                 limit: 100,
             })
@@ -86,7 +87,8 @@ const PurchaseOrdersReceivePage = () => {
                 // PO list ko refresh karo (sirf Pending hi chahiye toh)
                 dispatch(
                     fetchPurchaseOrders({
-                        status: ["Partially Received", "Acknowledged", "Emailed"],
+                        status: ["Acknowledged", "Emailed"],
+                         partiallyReceived: true,
                     })
                 );
 
@@ -114,7 +116,8 @@ const PurchaseOrdersReceivePage = () => {
 
         dispatch(
             fetchPurchaseOrders({
-                status: ["Partially Received", "Acknowledged", "Emailed"],
+                status: ["Acknowledged", "Emailed"],
+                 partiallyReceived: true,
                 page: 1,
                 limit,
                 search: value,
@@ -151,7 +154,8 @@ const PurchaseOrdersReceivePage = () => {
 
             dispatch(
                 fetchPurchaseOrders({
-                    status: ["Partially Received", "Acknowledged", "Emailed"],
+                    status: ["Acknowledged", "Emailed"],
+                     partiallyReceived: true,
                 })
             );
         } catch (err) {
@@ -347,7 +351,8 @@ const PurchaseOrdersReceivePage = () => {
                         onChange={(page, pageSize) => {
                             dispatch(
                                 fetchPurchaseOrders({
-                                    status: ["Partially Received", "Acknowledged", "Emailed"],
+                                    status: ["Acknowledged", "Emailed"],
+                                    partiallyReceived:true,
                                     page,
                                     limit: pageSize,
                                     search,

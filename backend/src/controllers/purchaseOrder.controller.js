@@ -383,10 +383,15 @@ export const addPurchaseOrder = async (req, res) => {
  * Update Purchase Order
  */
 
+
 export const updatePurchaseOrder = async (req, res) => {
   try {
     const { id } = req.params;
     const data = req.body || {};
+
+    // =========================================================
+    // 1. VALIDATE ID
+    // =========================================================
 
     if (!id) {
       return res.status(400).json({
@@ -396,16 +401,20 @@ export const updatePurchaseOrder = async (req, res) => {
     }
 
     // =========================================================
-    // 1. SPECIAL CASE: COMMITTED DATE UPDATE
+    // 2. SPECIAL CASE: COMMITTED DATE UPDATE
     // =========================================================
 
     if (
       !Array.isArray(data.items) &&
       data.idNumber &&
       data.mpn &&
-      Object.prototype.hasOwnProperty.call(data, "committedDate")
+      Object.prototype.hasOwnProperty.call(
+        data,
+        "committedDate"
+      )
     ) {
-      const po = await PurchaseOrders.findById(id);
+      const po =
+        await PurchaseOrders.findById(id);
 
       if (!po) {
         return res.status(404).json({
@@ -414,49 +423,98 @@ export const updatePurchaseOrder = async (req, res) => {
         });
       }
 
-      const idx = po.items.findIndex(
-        (it) =>
-          String(it.idNumber).trim() === String(data.idNumber).trim() &&
-          String(it.mpn) === String(data.mpn)
-      );
+      const idx =
+        po.items.findIndex(
+          (it) =>
+            String(it.idNumber).trim() ===
+              String(data.idNumber).trim() &&
+            String(it.mpn) ===
+              String(data.mpn)
+        );
 
       if (idx === -1) {
         return res.status(404).json({
           success: false,
-          error: "PO item not found for given idNumber + mpn",
+          error:
+            "PO item not found for given idNumber + mpn",
         });
       }
 
-      po.items[idx].committedDate = data.committedDate
-        ? new Date(data.committedDate)
-        : null;
+      po.items[idx].committedDate =
+        data.committedDate
+          ? new Date(data.committedDate)
+          : null;
 
       await po.save();
 
       return res.json({
         success: true,
-        message: "Committed date updated successfully",
+        message:
+          "Committed date updated successfully",
         data: po,
       });
     }
 
     // =========================================================
-    // 2. HELPERS
+    // 3. HELPERS
     // =========================================================
 
-    const num = (v, def = 0) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : def;
+    const num = (value, defaultValue = 0) => {
+      const number = Number(value);
+
+      return Number.isFinite(number)
+        ? number
+        : defaultValue;
     };
 
-    const isId = (v) =>
-      typeof v === "string" && v.trim().length > 0;
+    const stringValue = (value) => {
+      if (
+        value === null ||
+        value === undefined
+      ) {
+        return "";
+      }
+
+      return String(value);
+    };
+
+    const normalizeDate = (value) => {
+      if (!value) {
+        return "";
+      }
+
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) {
+        return String(value);
+      }
+
+      return date
+        .toISOString()
+        .slice(0, 10);
+    };
+
+    const getIdValue = (value) => {
+      if (!value) {
+        return "";
+      }
+
+      if (
+        typeof value === "object" &&
+        value._id
+      ) {
+        return String(value._id);
+      }
+
+      return String(value);
+    };
 
     // =========================================================
-    // 3. GET EXISTING PO
+    // 4. GET EXISTING PO
     // =========================================================
 
-    const existingPO = await PurchaseOrders.findById(id);
+    const existingPO =
+      await PurchaseOrders.findById(id);
 
     if (!existingPO) {
       return res.status(404).json({
@@ -466,566 +524,690 @@ export const updatePurchaseOrder = async (req, res) => {
     }
 
     // =========================================================
-    // 4. CHECK WHETHER ACTUAL PO DATA HAS CHANGED
+    // 5. COMPARABLE ITEM
+    //
+    // IMPORTANT:
+    // Only compare EDITABLE fields.
+    //
+    // Do NOT compare:
+    // receivedQtyTotal
+    // rejectedQtyTotal
+    // lastReceivedQty
+    // receivedQty
+    // pendingQty
+    // committedDate
+    // status
+    // approval fields
+    // revisionHistory
+    // etc.
     // =========================================================
 
-    const normalizeForCompare = (value) => {
-      if (value === undefined) return null;
+    const getComparableItem = (
+      item = {}
+    ) => {
+      return {
+        idNumber: stringValue(
+          item.idNumber
+        ),
 
-      if (value instanceof Date) {
-        return value.toISOString();
-      }
+        description: stringValue(
+          item.description
+        ),
 
-      if (Array.isArray(value)) {
-        return value.map(normalizeForCompare);
-      }
+        mpn: getIdValue(
+          item.mpn
+        ),
 
-      if (
-        value !== null &&
-        typeof value === "object"
-      ) {
-        const obj = {};
+        manufacturer: stringValue(
+          item.manufacturer
+        ),
 
-        Object.keys(value)
-          .sort()
-          .forEach((key) => {
-            // Ignore mongoose/internal fields
-            if (
-              key === "_id" ||
-              key === "__v" ||
-              key === "revisionHistory" ||
-              key === "updatedAt" ||
-              key === "createdAt"
-            ) {
-              return;
-            }
+        uom: getIdValue(
+          item.uom
+        ),
 
-            obj[key] = normalizeForCompare(value[key]);
-          });
+        qty: num(item.qty),
 
-        return obj;
-      }
+        unitPrice: num(
+          item.unitPrice
+        ),
 
-      return value;
-    };
+        discount: num(
+          item.discount ??
+            item.discPercentage
+        ),
 
-    const getComparablePO = (po) => {
-      const obj = po.toObject
-        ? po.toObject()
-        : { ...po };
-
-      // Remove fields which should NOT trigger revision
-      delete obj._id;
-      delete obj.__v;
-      delete obj.revisionHistory;
-      delete obj.updatedAt;
-      delete obj.createdAt;
-
-      return normalizeForCompare(obj);
-    };
-
-    const getComparableIncomingData = (incoming) => {
-      const obj = {
-        ...incoming,
+        extPrice: num(
+          item.extPrice
+        ),
       };
-
-      // These are handled by backend
-      delete obj._id;
-      delete obj.__v;
-      delete obj.revisionHistory;
-      delete obj.updatedAt;
-      delete obj.createdAt;
-
-      return normalizeForCompare(obj);
     };
 
-    let hasActualChanges = false;
+    // =========================================================
+    // 6. COMPARABLE PO
+    //
+    // ONLY EDITABLE PO FIELDS
+    // =========================================================
 
-    // ---------------------------------------------------------
-    // Compare incoming fields against existing PO
-    // ---------------------------------------------------------
+    const getComparablePO = (
+      po = {}
+    ) => {
+      return {
+        supplier: getIdValue(
+          po.supplier
+        ),
 
-    const existingComparable = getComparablePO(existingPO);
+        referenceNo: stringValue(
+          po.referenceNo
+        ),
 
-    const incomingComparable = getComparableIncomingData(data);
+        poDate: normalizeDate(
+          po.poDate
+        ),
 
-    // Only compare fields actually sent from frontend
-    Object.keys(incomingComparable).forEach((key) => {
-      if (
-        JSON.stringify(existingComparable[key]) !==
-        JSON.stringify(incomingComparable[key])
-      ) {
-        hasActualChanges = true;
-      }
-    });
+        needDate: normalizeDate(
+          po.needDate
+        ),
 
-    // Items are an important part of PO changes
-    if (Array.isArray(data.items)) {
-      const oldItems = normalizeForCompare(
-        existingPO.items?.map((item) => {
-          const obj = item.toObject
-            ? item.toObject()
-            : { ...item };
+        etaDate: normalizeDate(
+          po.etaDate
+        ),
 
-          delete obj._id;
+        workOrderNo: getIdValue(
+          po.workOrderNo
+        ),
 
-          return obj;
-        }) || []
-      );
-      
+        shipToAddress: stringValue(
+          po.shipToAddress
+        ),
 
-      const newItems = normalizeForCompare(
-        data.items.map((item) => {
-          const obj = {
-            ...item,
-          };
+        termsConditions: stringValue(
+          po.termsConditions
+        ),
 
-          delete obj._id;
+        taxPercentage: num(
+          po.taxPercentage
+        ),
 
-          return obj;
-        })
-      );
+        totals: {
+          freightAmount: num(
+            po.totals?.freightAmount
+          ),
 
-      if (
-        JSON.stringify(oldItems) !==
-        JSON.stringify(newItems)
-      ) {
-        hasActualChanges = true;
-      }
-    }
+          subTotalAmount: num(
+            po.totals?.subTotalAmount
+          ),
+
+          ostTax: num(
+            po.totals?.ostTax
+          ),
+
+          finalAmount: num(
+            po.totals?.finalAmount
+          ),
+
+          totalDiscount: num(
+            po.totals?.totalDiscount
+          ),
+        },
+
+        items: (
+          po.items || []
+        ).map(
+          getComparableItem
+        ),
+      };
+    };
 
     // =========================================================
-    // 5. REVISION LOGIC
+    // 7. CHANGE DETECTION
+    // =========================================================
+
+    const oldComparable =
+      getComparablePO(
+        existingPO
+      );
+
+    const newComparable =
+      getComparablePO(
+        data
+      );
+
+    const oldString =
+      JSON.stringify(
+        oldComparable
+      );
+
+    const newString =
+      JSON.stringify(
+        newComparable
+      );
+
+    const hasActualChanges =
+      oldString !== newString;
+
+    // console.log(
+    //   "=========================================="
+    // );
+
+    // console.log(
+    //   "PO STATUS:",
+    //   existingPO.status
+    // );
+
+    // console.log(
+    //   "PO NUMBER:",
+    //   existingPO.poNumber
+    // );
+
+    // console.log(
+    //   "HAS ACTUAL CHANGES:",
+    //   hasActualChanges
+    // );
+
+    // console.log(
+    //   "=========================================="
+    // );
+
+    // =========================================================
+    // 8. REVISION LOGIC
+    //
+    // ONLY:
+    //
+    // Emailed
+    // OR
+    // Acknowledged
+    //
+    // AND
+    //
+    // Actual editable data changed
     // =========================================================
 
     let isRevision = false;
+
     let revisionNo =
-      Number(existingPO.revisionNo || 0);
+      num(
+        existingPO.revisionNo,
+        0
+      );
 
-    let newPoNumber = existingPO.poNumber;
+    let newPoNumber =
+      existingPO.poNumber;
 
-    /*
-     * Revision ONLY when:
-     *
-     * status = Emailed
-     * AND actual changes exist
-     */
+    const canCreateRevision =
+      [
+        "Emailed",
+        "Acknowledged",
+      ].includes(
+        existingPO.status
+      );
+
     if (
-      existingPO.status === "Emailed" &&
+      canCreateRevision &&
       hasActualChanges
     ) {
       isRevision = true;
 
-      // -------------------------------------------------------
-      // Determine next revision number
-      // -------------------------------------------------------
+      // =======================================================
+      // FIND HIGHEST REVISION NUMBER
+      // =======================================================
 
-      const existingRevisionNumbers =
-        (existingPO.revisionHistory || [])
-          .map((revision) =>
-            Number(revision.revisionNo || 0)
+      const historyRevisionNumbers =
+        (
+          existingPO.revisionHistory ||
+          []
+        )
+          .map(
+            (revision) =>
+              num(
+                revision.revisionNo,
+                0
+              )
           )
-          .filter((number) => Number.isFinite(number));
+          .filter(
+            Number.isFinite
+          );
 
       const maxHistoryRevision =
-        existingRevisionNumbers.length > 0
-          ? Math.max(...existingRevisionNumbers)
+        historyRevisionNumbers.length
+          ? Math.max(
+              ...historyRevisionNumbers
+            )
           : 0;
 
-      revisionNo = Math.max(
-        Number(existingPO.revisionNo || 0),
-        maxHistoryRevision
-      ) + 1;
+      revisionNo =
+        Math.max(
+          num(
+            existingPO.revisionNo,
+            0
+          ),
+          maxHistoryRevision
+        ) + 1;
 
-      // -------------------------------------------------------
-      // Remove existing -R number from PO number
+      // =======================================================
+      // BASE PO NUMBER
       //
-      // P26-08-00004
-      // P26-08-00004-R1
-      // P26-08-00004-R2
-      // -------------------------------------------------------
+      // P26-08-00001
+      // P26-08-00001R1
+      // P26-08-00001R2
+      // =======================================================
 
-      const basePoNumber = String(
-        existingPO.poNumber || ""
-      ).replace(/-R\d+$/i, "");
+      const basePoNumber =
+        String(
+          existingPO.poNumber ||
+            ""
+        ).replace(
+          /R\d+$/i,
+          ""
+        );
 
       newPoNumber =
         `${basePoNumber}R${revisionNo}`;
 
-      // -------------------------------------------------------
-      // SAVE OLD PO SNAPSHOT
-      // -------------------------------------------------------
+      // =======================================================
+      // OLD PO SNAPSHOT
+      // =======================================================
 
       const oldSnapshot =
         existingPO.toObject();
 
-      delete oldSnapshot._id;
-
       /*
-       * We save the PO BEFORE changes.
-       * This is what getRevisePurchaseOrderById()
-       * will later return.
+       * IMPORTANT:
+       *
+       * Old PO snapshot should remain exactly
+       * as it was before revision.
+       *
+       * But this snapshot is now considered locked.
        */
 
-      const revisionEntry = {
-        revisionNo,
-        revisedAt: new Date(),
-        snapshot: oldSnapshot,
-      };
+      oldSnapshot.isLocked = true;
+
+      // =======================================================
+      // PUSH REVISION HISTORY
+      // =======================================================
 
       existingPO.revisionHistory =
-        existingPO.revisionHistory || [];
+        existingPO.revisionHistory ||
+        [];
 
-      existingPO.revisionHistory.push(
-        revisionEntry
-      );
+      existingPO.revisionHistory.push({
+        revisionNo:
+          revisionNo,
+
+        poNumber:
+          existingPO.poNumber,
+
+        revisedAt:
+          new Date(),
+
+        snapshot:
+          oldSnapshot,
+      });
+
+      // console.log(
+      //   `🔄 Creating revision ${newPoNumber}`
+      // );
     }
 
     // =========================================================
-    // 6. INVENTORY LOOKUP
+    // 9. INVENTORY LOOKUP
     // =========================================================
 
-    const mpnIds = (data.items || [])
-      .map((item) => item.mpn)
-      .filter((mpn) => isId(mpn));
+    const mpnIds =
+      (data.items || [])
+        .map(
+          (item) =>
+            item.mpn
+        )
+        .filter(
+          (mpn) =>
+            mpn !== null &&
+            mpn !== undefined &&
+            String(mpn).trim() !== ""
+        );
 
-    const inventories = await Inventory.find({
-      mpnId: {
-        $in: mpnIds,
-      },
-    }).lean();
+    const inventories =
+      mpnIds.length
+        ? await Inventory.find({
+            mpnId: {
+              $in: mpnIds,
+            },
+          }).lean()
+        : [];
 
-    const inventoryMap = new Map();
+    const inventoryMap =
+      new Map();
 
-    inventories.forEach((inv) => {
-      inventoryMap.set(
-        String(inv.mpnId),
-        inv
+    inventories.forEach(
+      (inventory) => {
+        inventoryMap.set(
+          String(
+            inventory.mpnId
+          ),
+          inventory
+        );
+      }
+    );
+
+    // =========================================================
+    // 10. ITEMS PROCESSING
+    // =========================================================
+
+    let subTotal = 0;
+
+    const items =
+      (
+        data.items || []
+      ).map(
+        (item) => {
+          const qty =
+            num(
+              item.qty
+            );
+
+          const unitPrice =
+            num(
+              item.unitPrice
+            );
+
+          const discount =
+            num(
+              item.discount ??
+                item.discPercentage
+            );
+
+          const extPrice =
+            qty *
+            unitPrice *
+            (
+              1 -
+              discount /
+                100
+            );
+
+          // ===================================================
+          // FIND OLD ITEM
+          //
+          // First _id
+          // Then idNumber
+          // Then MPN
+          // ===================================================
+
+          const oldItem =
+            existingPO.items.find(
+              (old) => {
+                if (
+                  item._id &&
+                  String(
+                    old._id
+                  ) ===
+                    String(
+                      item._id
+                    )
+                ) {
+                  return true;
+                }
+
+                if (
+                  item.idNumber &&
+                  String(
+                    old.idNumber ||
+                      ""
+                  ) ===
+                    String(
+                      item.idNumber
+                    )
+                ) {
+                  return true;
+                }
+
+                return (
+                  String(
+                    old.mpn
+                  ) ===
+                  String(
+                    item.mpn
+                  )
+                );
+              }
+            );
+
+          // ===================================================
+          // PRESERVE OLD ITEM DATA
+          // ===================================================
+
+          const oldItemData =
+            oldItem
+              ? oldItem.toObject
+                ? oldItem.toObject()
+                : {
+                    ...oldItem,
+                  }
+              : {};
+
+          // ===================================================
+          // RECEIVE VALUES
+          // ===================================================
+
+          let receivedQtyTotal =
+            num(
+              oldItemData.receivedQtyTotal
+            );
+
+          let rejectedQtyTotal =
+            num(
+              oldItemData.rejectedQtyTotal
+            );
+
+          let lastReceivedQty =
+            num(
+              oldItemData.lastReceivedQty
+            );
+
+          let receivedQty =
+            num(
+              oldItemData.receivedQty
+            );
+
+          // ===================================================
+          // PARTIALLY RECEIVED
+          //
+          // NORMAL UPDATE ONLY
+          //
+          // Revision does NOT use this restriction.
+          // ===================================================
+
+          if (
+            existingPO.partiallyReceived &&
+            oldItem &&
+            !isRevision
+          ) {
+            const oldQty =
+              num(
+                oldItemData.qty
+              );
+
+            if (
+              qty < oldQty
+            ) {
+              let reduceBy =
+                oldQty - qty;
+
+              // ---------------------------------------------
+              // Reduce rejected quantity first
+              // ---------------------------------------------
+
+              if (
+                rejectedQtyTotal >
+                0
+              ) {
+                const rejectedReduction =
+                  Math.min(
+                    rejectedQtyTotal,
+                    reduceBy
+                  );
+
+                rejectedQtyTotal -=
+                  rejectedReduction;
+
+                reduceBy -=
+                  rejectedReduction;
+              }
+
+              // ---------------------------------------------
+              // Cannot go below received quantity
+              // ---------------------------------------------
+
+              if (
+                receivedQtyTotal >
+                qty
+              ) {
+                throw new Error(
+                  `${
+                    item.description ||
+                    item.mpn
+                  }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
+                );
+              }
+            }
+          }
+
+          // ===================================================
+          // PENDING QTY
+          // ===================================================
+
+          const pendingQty =
+            Math.max(
+              qty -
+                (
+                  receivedQtyTotal +
+                  rejectedQtyTotal
+                ),
+              0
+            );
+
+          subTotal +=
+            extPrice;
+
+          // ===================================================
+          // RETURN ITEM
+          // ===================================================
+
+          return {
+            ...oldItemData,
+
+            // -----------------------------------------------
+            // Editable fields
+            // -----------------------------------------------
+
+            idNumber:
+              item.idNumber ??
+              oldItemData.idNumber,
+
+            description:
+              item.description ??
+              oldItemData.description,
+
+            mpn:
+              item.mpn ??
+              oldItemData.mpn,
+
+            manufacturer:
+              item.manufacturer ??
+              oldItemData.manufacturer,
+
+            uom:
+              item.uom ??
+              oldItemData.uom,
+
+            qty,
+
+            unitPrice,
+
+            discount,
+
+            extPrice,
+
+            // -----------------------------------------------
+            // Preserve receiving information
+            // -----------------------------------------------
+
+            receivedQtyTotal,
+
+            rejectedQtyTotal,
+
+            lastReceivedQty,
+
+            receivedQty,
+
+            pendingQty,
+
+            // -----------------------------------------------
+            // Preserve existing item _id
+            // -----------------------------------------------
+
+            ...(oldItemData._id
+              ? {
+                  _id:
+                    oldItemData._id,
+                }
+              : {}),
+          };
+        }
       );
-    });
 
     // =========================================================
-    // 7. ITEMS PROCESSING
+    // 11. TOTALS
     // =========================================================
 
-   // =========================================================
-// 7. ITEMS PROCESSING
-// =========================================================
+    const freightAmount =
+      num(
+        data.totals
+          ?.freightAmount ??
+          data.freightAmount
+      );
 
-let subTotal = 0;
+    const subTotalAmount =
+      num(
+        data.totals
+          ?.subTotalAmount
+      );
 
-const items = (data.items || []).map((item) => {
-  const qty = num(item.qty);
-  const unitPrice = num(item.unitPrice);
+    const ostTax =
+      num(
+        data.totals
+          ?.ostTax
+      );
 
-  const discount = num(
-    item.discount ?? item.discPercentage
-  );
+    const finalAmount =
+      num(
+        data.totals
+          ?.finalAmount
+      );
 
-  const extPrice = +(
-    qty *
-    unitPrice *
-    (1 - discount / 100)
-  );
-
-  // -------------------------------------------------------
-  // FIND EXISTING ITEM
-  // -------------------------------------------------------
-
-  const oldItem = existingPO.items.find(
-    (x) =>
-      (item._id &&
-        String(x._id) === String(item._id)) ||
-      String(x.mpn) === String(item.mpn)
-  );
-
-  // -------------------------------------------------------
-  // IMPORTANT:
-  // Start with ALL OLD ITEM DATA.
-  // This preserves lastReceivedQty, receivedQty, etc.
-  // -------------------------------------------------------
-
-  const oldItemData = oldItem
-    ? oldItem.toObject
-      ? oldItem.toObject()
-      : { ...oldItem }
-    : {};
-
-  // -------------------------------------------------------
-  // Preserve existing receive values
-  // -------------------------------------------------------
-
-  let receivedQtyTotal = num(
-    oldItemData.receivedQtyTotal
-  );
-
-  let rejectedQtyTotal = num(
-    oldItemData.rejectedQtyTotal
-  );
-
-  let lastReceivedQty = num(
-    oldItemData.lastReceivedQty
-  );
-
-  let receivedQty = num(
-    oldItemData.receivedQty
-  );
-
-  // -------------------------------------------------------
-  // IMPORTANT:
-  // Do NOT restrict qty during REVISION.
-  //
-  // If user changes:
-  // old qty = 2
-  // new qty = 10
-  //
-  // revision should save qty = 10.
-  // -------------------------------------------------------
-
-  // Only apply received-quantity restriction for
-  // normal Partially Received update, NOT revision.
-  if (
-    existingPO.status === "Partially Received" &&
-    oldItem &&
-    !isRevision
-  ) {
-    const oldQty = num(oldItemData.qty);
-
-    if (qty < oldQty) {
-      let reduceBy = oldQty - qty;
-
-      if (rejectedQtyTotal > 0) {
-        const rejectedReduction = Math.min(
-          rejectedQtyTotal,
-          reduceBy
-        );
-
-        rejectedQtyTotal -= rejectedReduction;
-        reduceBy -= rejectedReduction;
-      }
-
-      if (receivedQtyTotal > qty) {
-        throw new Error(
-          `${item.description || item.mpn}: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
-        );
-      }
-    }
-  }
-
-  const pendingQty = Math.max(
-    qty -
-      (receivedQtyTotal +
-        rejectedQtyTotal),
-    0
-  );
-
-  subTotal += extPrice;
-
-  // =======================================================
-  // RETURN OLD ITEM + ONLY UPDATE VALUES
-  // =======================================================
-
-  return {
-    ...oldItemData,
-
-    // Frontend editable fields
-    idNumber:
-      item.idNumber ?? oldItemData.idNumber,
-
-    description:
-      item.description ?? oldItemData.description,
-
-    mpn:
-      item.mpn ?? oldItemData.mpn,
-
-    manufacturer:
-      item.manufacturer ?? oldItemData.manufacturer,
-
-    uom:
-      item.uom ?? oldItemData.uom,
-
-    qty,
-    unitPrice,
-    discount,
-    extPrice,
-
-    // Receive-related values MUST remain
-    receivedQtyTotal,
-    rejectedQtyTotal,
-    lastReceivedQty,
-    receivedQty,
-
-    // If you want pendingQty stored:
-    pendingQty,
-
-    // Keep _id of existing item
-    ...(oldItemData._id
-      ? { _id: oldItemData._id }
-      : {}),
-  };
-});
-    // const items = (data.items || []).map((item) => {
-    //   const qty = num(item.qty);
-    //   const unitPrice = num(item.unitPrice);
-
-    //   const discount = num(
-    //     item.discount ??
-    //     item.discPercentage
-    //   );
-
-    //   const extPrice = +(
-    //     qty *
-    //     unitPrice *
-    //     (1 - discount / 100)
-    //   );
-
-    //   const oldItem =
-    //     existingPO.items.find(
-    //       (x) =>
-    //         String(x._id) === String(item._id) ||
-    //         String(x.mpn) === String(item.mpn)
-    //     );
-
-    //      const oldItemData = oldItem
-    // ? (
-    //     oldItem.toObject
-    //       ? oldItem.toObject()
-    //       : { ...oldItem }
-    //   )
-    // : {};
-
-    //   let receivedQtyTotal = Number(
-    //     oldItem?.receivedQtyTotal || 0
-    //   );
-
-    //   let rejectedQtyTotal = Number(
-    //     oldItem?.rejectedQtyTotal || 0
-    //   );
-
-    //   // =====================================================
-    //   // PARTIALLY RECEIVED
-    //   // =====================================================
-
-    //   if (
-    //     existingPO.status ===
-    //     "Partially Received" &&
-    //     oldItem
-    //   ) {
-    //     const oldQty = Number(
-    //       oldItem.qty || 0
-    //     );
-
-    //     // Qty reduced
-    //     if (qty < oldQty) {
-    //       let reduceBy =
-    //         oldQty - qty;
-
-    //       // First adjust rejected quantity
-    //       if (rejectedQtyTotal > 0) {
-    //         const rejectedReduction =
-    //           Math.min(
-    //             rejectedQtyTotal,
-    //             reduceBy
-    //           );
-
-    //         rejectedQtyTotal -=
-    //           rejectedReduction;
-
-    //         reduceBy -=
-    //           rejectedReduction;
-    //       }
-
-    //       // Cannot reduce below received quantity
-    //       if (receivedQtyTotal > qty) {
-    //         throw new Error(
-    //           `${item.description ||
-    //           item.mpn
-    //           }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
-    //         );
-    //       }
-    //     }
-    //   }
-
-    //   const pendingQty = Math.max(
-    //     qty -
-    //     (receivedQtyTotal +
-    //       rejectedQtyTotal),
-    //     0
-    //   );
-
-    //   subTotal += extPrice;
-
-    //   // return {
-    //   //      ...oldItemData,
-    //   //   ...item,
-    //   //   qty,
-    //   //   unitPrice,
-    //   //   discount,
-    //   //   extPrice,
-    //   //   receivedQtyTotal,
-    //   //   rejectedQtyTotal,
-    //   //   // pendingQty,
-    //   // };
-    //   return {
-    //     ...oldItemData,
-
-    //     idNumber: item.idNumber ?? oldItemData.idNumber,
-    //     description: item.description ?? oldItemData.description,
-    //     mpn: item.mpn ?? oldItemData.mpn,
-    //     manufacturer: item.manufacturer ?? oldItemData.manufacturer,
-    //     uom: item.uom ?? oldItemData.uom,
-
-    //     qty,
-    //     unitPrice,
-    //     discount,
-    //     extPrice,
-
-    //     receivedQtyTotal,
-    //     rejectedQtyTotal,
-    //     lastReceivedQty,
-    //     receivedQty,
-    //   };
-    // });
+    const totalDiscount =
+      num(
+        data.totals
+          ?.totalDiscount
+      );
 
     // =========================================================
-    // 8. TOTALS
+    // 12. SECOND LEVEL APPROVAL
     // =========================================================
 
-    const freightAmount = num(
-      data.totals?.freightAmount ??
-      data.freightAmount
-    );
-
-    const subTotals = num(
-      data.totals?.subTotalAmount
-    );
-
-    const ostTax = num(
-      data.totals?.ostTax
-    );
-
-    const finalAmount = num(
-      data.totals?.finalAmount
-    );
-
-    const totalDiscount = num(
-      data.totals?.totalDiscount
-    );
-
-    // =========================================================
-    // 9. SECOND LEVEL APPROVAL
-    // =========================================================
-
-    let requiresSecondLevelApproval = false;
+    let requiresSecondLevelApproval =
+      false;
 
     const purchaseSetting =
-      await PurchaseSettings.findOne().lean();
+      await PurchaseSettings.findOne()
+        .lean();
 
-    const APPROVAL_LIMIT = Number(
-      purchaseSetting
-        ?.secondLevelApprovalAmountLimit ||
-      5000
-    );
+    const APPROVAL_LIMIT =
+      Number(
+        purchaseSetting
+          ?.secondLevelApprovalAmountLimit ||
+          5000
+      );
 
     if (
       finalAmount >
@@ -1034,9 +1216,9 @@ const items = (data.items || []).map((item) => {
       requiresSecondLevelApproval =
         true;
 
-      // =====================================================
+      // =======================================================
       // FIND APPROVAL USERS
-      // =====================================================
+      // =======================================================
 
       const approvalUsers =
         await User.find({
@@ -1049,12 +1231,13 @@ const items = (data.items || []).map((item) => {
           "_id name email"
         );
 
-      // =====================================================
+      // =======================================================
       // CREATE ALERTS
-      // =====================================================
+      // =======================================================
 
       for (
-        const user of approvalUsers
+        const user of
+          approvalUsers
       ) {
         await createAlertOnce({
           title:
@@ -1064,7 +1247,8 @@ const items = (data.items || []).map((item) => {
             `Total Purchase Amount is more than ${APPROVAL_LIMIT}. ` +
             `Approval by ${user.name} is required before proceeding further.`,
 
-          priority: "critical",
+          priority:
+            "critical",
 
           module:
             "purchase_order",
@@ -1079,19 +1263,30 @@ const items = (data.items || []).map((item) => {
     }
 
     // =========================================================
-    // 10. PO STATUS
+    // 13. PO STATUS
     // =========================================================
 
     let poStatus =
       existingPO.status;
+   let partiallyReceived = Boolean(
+  existingPO.partiallyReceived
+);
 
-    // Revision from Emailed
+
+    // =========================================================
+    // REVISION
+    // =========================================================
+
     if (isRevision) {
       poStatus =
         "Pending";
+        partiallyReceived = false;
     }
 
-    // Existing approval logic
+    // =========================================================
+    // SECOND LEVEL APPROVAL
+    // =========================================================
+
     if (
       requiresSecondLevelApproval
     ) {
@@ -1099,58 +1294,96 @@ const items = (data.items || []).map((item) => {
         "Pending Approval";
     }
 
-    // Preserve Partially Received
+    // =========================================================
+    // PARTIALLY RECEIVED
+    // =========================================================
+
+    if (!isRevision && existingPO.partiallyReceived) {
+  partiallyReceived = true;
+}
+
+    // =========================================================
+    // CLOSED
+    // =========================================================
+
     if (
       existingPO.status ===
-      "Partially Received"
+      "Closed"
     ) {
       poStatus =
-        "Partially Received";
-    }
-
-    // Preserve Closed
-    if (
-      existingPO.status === "Closed"
-    ) {
-      poStatus = "Closed";
+        "Closed";
     }
 
     // =========================================================
-    // 11. PREPARE UPDATE
+    // 14. PREPARE UPDATE
     // =========================================================
 
     const updateData = {
       ...data,
 
-      // Revision fields
-      poNumber: newPoNumber,
+      // =======================================================
+      // PO NUMBER
+      // =======================================================
+
+      poNumber:
+        newPoNumber,
+
+      // =======================================================
+      // REVISION NUMBER
+      // =======================================================
+
       revisionNo,
-      isRevised: isRevision
-        ? true
-        : Boolean(
-          existingPO.isRevised
-        ),
+
+      // =======================================================
+      // IS REVISED
+      // =======================================================
+
+      isRevised:
+        isRevision
+          ? true
+          : Boolean(
+              existingPO.isRevised
+            ),
+
+      // =======================================================
+      // APPROVAL
+      // =======================================================
 
       requiresSecondLevelApproval,
 
-      status: poStatus,
+      // =======================================================
+      // STATUS
+      // =======================================================
+
+      status:
+        poStatus,
+partiallyReceived,
+      // =======================================================
+      // ITEMS
+      // =======================================================
 
       items,
 
+      // =======================================================
+      // TOTALS
+      // =======================================================
+
       totals: {
         freightAmount,
-        subTotalAmount:
-          subTotals,
+
+        subTotalAmount,
+
         ostTax,
+
         finalAmount,
+
         totalDiscount,
       },
     };
 
-    // ---------------------------------------------------------
-    // IMPORTANT:
-    // Keep revisionHistory from existing PO
-    // ---------------------------------------------------------
+    // =========================================================
+    // 15. KEEP REVISION HISTORY
+    // =========================================================
 
     if (isRevision) {
       updateData.revisionHistory =
@@ -1158,7 +1391,22 @@ const items = (data.items || []).map((item) => {
     }
 
     // =========================================================
-    // 12. UPDATE PO
+    // 16. IMPORTANT:
+    //
+    // For normal update, NEVER accidentally remove
+    // existing revisionHistory.
+    // =========================================================
+
+    if (
+      !isRevision &&
+      existingPO.revisionHistory
+    ) {
+      updateData.revisionHistory =
+        existingPO.revisionHistory;
+    }
+
+    // =========================================================
+    // 17. UPDATE PO
     // =========================================================
 
     const updated =
@@ -1180,7 +1428,7 @@ const items = (data.items || []).map((item) => {
     }
 
     // =========================================================
-    // 13. RESPONSE
+    // 18. RESPONSE
     // =========================================================
 
     return res.json({
@@ -1192,21 +1440,19 @@ const items = (data.items || []).map((item) => {
 
       data: updated,
 
-      revision: isRevision
-        ? {
-          isRevised: true,
-          revisionNo,
-          poNumber: newPoNumber,
-        }
-        : {
-          isRevised: Boolean(
+      revision: {
+        isRevised:
+          Boolean(
             updated.isRevised
           ),
-          revisionNo:
-            updated.revisionNo || 0,
-          poNumber:
-            updated.poNumber,
-        },
+
+        revisionNo:
+          updated.revisionNo ||
+          0,
+
+        poNumber:
+          updated.poNumber,
+      },
     });
   } catch (error) {
     console.error(
@@ -1216,10 +1462,849 @@ const items = (data.items || []).map((item) => {
 
     return res.status(500).json({
       success: false,
-      error: error.message,
+      error:
+        error.message,
     });
   }
 };
+
+// export const updatePurchaseOrder = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const data = req.body || {};
+
+//     if (!id) {
+//       return res.status(400).json({
+//         success: false,
+//         error: "Missing purchase order ID",
+//       });
+//     }
+
+//     // =========================================================
+//     // 1. SPECIAL CASE: COMMITTED DATE UPDATE
+//     // =========================================================
+
+//     if (
+//       !Array.isArray(data.items) &&
+//       data.idNumber &&
+//       data.mpn &&
+//       Object.prototype.hasOwnProperty.call(data, "committedDate")
+//     ) {
+//       const po = await PurchaseOrders.findById(id);
+
+//       if (!po) {
+//         return res.status(404).json({
+//           success: false,
+//           error: "Purchase order not found",
+//         });
+//       }
+
+//       const idx = po.items.findIndex(
+//         (it) =>
+//           String(it.idNumber).trim() === String(data.idNumber).trim() &&
+//           String(it.mpn) === String(data.mpn)
+//       );
+
+//       if (idx === -1) {
+//         return res.status(404).json({
+//           success: false,
+//           error: "PO item not found for given idNumber + mpn",
+//         });
+//       }
+
+//       po.items[idx].committedDate = data.committedDate
+//         ? new Date(data.committedDate)
+//         : null;
+
+//       await po.save();
+
+//       return res.json({
+//         success: true,
+//         message: "Committed date updated successfully",
+//         data: po,
+//       });
+//     }
+
+//     // =========================================================
+//     // 2. HELPERS
+//     // =========================================================
+
+//     const num = (v, def = 0) => {
+//       const n = Number(v);
+//       return Number.isFinite(n) ? n : def;
+//     };
+
+//     const isId = (v) =>
+//       typeof v === "string" && v.trim().length > 0;
+
+//     // =========================================================
+//     // 3. GET EXISTING PO
+//     // =========================================================
+
+//     const existingPO = await PurchaseOrders.findById(id);
+
+//     if (!existingPO) {
+//       return res.status(404).json({
+//         success: false,
+//         error: "Purchase order not found",
+//       });
+//     }
+
+//     // =========================================================
+//     // 4. CHECK WHETHER ACTUAL PO DATA HAS CHANGED
+//     // =========================================================
+
+//     const normalizeForCompare = (value) => {
+//       if (value === undefined) return null;
+
+//       if (value instanceof Date) {
+//         return value.toISOString();
+//       }
+
+//       if (Array.isArray(value)) {
+//         return value.map(normalizeForCompare);
+//       }
+
+//       if (
+//         value !== null &&
+//         typeof value === "object"
+//       ) {
+//         const obj = {};
+
+//         Object.keys(value)
+//           .sort()
+//           .forEach((key) => {
+//             // Ignore mongoose/internal fields
+//             if (
+//               key === "_id" ||
+//               key === "__v" ||
+//               key === "revisionHistory" ||
+//               key === "updatedAt" ||
+//               key === "createdAt"
+//             ) {
+//               return;
+//             }
+
+//             obj[key] = normalizeForCompare(value[key]);
+//           });
+
+//         return obj;
+//       }
+
+//       return value;
+//     };
+
+//     const getComparablePO = (po) => {
+//       const obj = po.toObject
+//         ? po.toObject()
+//         : { ...po };
+
+//       // Remove fields which should NOT trigger revision
+//       delete obj._id;
+//       delete obj.__v;
+//       delete obj.revisionHistory;
+//       delete obj.updatedAt;
+//       delete obj.createdAt;
+
+//       return normalizeForCompare(obj);
+//     };
+
+//     const getComparableIncomingData = (incoming) => {
+//       const obj = {
+//         ...incoming,
+//       };
+
+//       // These are handled by backend
+//       delete obj._id;
+//       delete obj.__v;
+//       delete obj.revisionHistory;
+//       delete obj.updatedAt;
+//       delete obj.createdAt;
+
+//       return normalizeForCompare(obj);
+//     };
+
+//     let hasActualChanges = false;
+
+//     // ---------------------------------------------------------
+//     // Compare incoming fields against existing PO
+//     // ---------------------------------------------------------
+
+//     const existingComparable = getComparablePO(existingPO);
+
+//     const incomingComparable = getComparableIncomingData(data);
+
+//     // Only compare fields actually sent from frontend
+//     Object.keys(incomingComparable).forEach((key) => {
+//       if (
+//         JSON.stringify(existingComparable[key]) !==
+//         JSON.stringify(incomingComparable[key])
+//       ) {
+//         hasActualChanges = true;
+//       }
+//     });
+
+//     // Items are an important part of PO changes
+//     if (Array.isArray(data.items)) {
+//       const oldItems = normalizeForCompare(
+//         existingPO.items?.map((item) => {
+//           const obj = item.toObject
+//             ? item.toObject()
+//             : { ...item };
+
+//           delete obj._id;
+
+//           return obj;
+//         }) || []
+//       );
+      
+
+//       const newItems = normalizeForCompare(
+//         data.items.map((item) => {
+//           const obj = {
+//             ...item,
+//           };
+
+//           delete obj._id;
+
+//           return obj;
+//         })
+//       );
+
+//       if (
+//         JSON.stringify(oldItems) !==
+//         JSON.stringify(newItems)
+//       ) {
+//         hasActualChanges = true;
+//       }
+//     }
+
+//     // =========================================================
+//     // 5. REVISION LOGIC
+//     // =========================================================
+
+//     let isRevision = false;
+//     let revisionNo =
+//       Number(existingPO.revisionNo || 0);
+
+//     let newPoNumber = existingPO.poNumber;
+
+//     /*
+//      * Revision ONLY when:
+//      *
+//      * status = Emailed
+//      * AND actual changes exist
+//      */
+//     if (
+//   ["Emailed", "Acknowledged"].includes(existingPO.status) &&
+//   hasActualChanges
+// ) {
+//       isRevision = true;
+
+//       // -------------------------------------------------------
+//       // Determine next revision number
+//       // -------------------------------------------------------
+
+//       const existingRevisionNumbers =
+//         (existingPO.revisionHistory || [])
+//           .map((revision) =>
+//             Number(revision.revisionNo || 0)
+//           )
+//           .filter((number) => Number.isFinite(number));
+
+//       const maxHistoryRevision =
+//         existingRevisionNumbers.length > 0
+//           ? Math.max(...existingRevisionNumbers)
+//           : 0;
+
+//       revisionNo = Math.max(
+//         Number(existingPO.revisionNo || 0),
+//         maxHistoryRevision
+//       ) + 1;
+
+//       // -------------------------------------------------------
+//       // Remove existing -R number from PO number
+//       //
+//       // P26-08-00004
+//       // P26-08-00004-R1
+//       // P26-08-00004-R2
+//       // -------------------------------------------------------
+
+//       const basePoNumber = String(
+//         existingPO.poNumber || ""
+//       ).replace(/-R\d+$/i, "");
+
+//       newPoNumber =
+//         `${basePoNumber}R${revisionNo}`;
+
+//       // -------------------------------------------------------
+//       // SAVE OLD PO SNAPSHOT
+//       // -------------------------------------------------------
+
+//       const oldSnapshot =
+//         existingPO.toObject();
+
+//       delete oldSnapshot._id;
+
+//       /*
+//        * We save the PO BEFORE changes.
+//        * This is what getRevisePurchaseOrderById()
+//        * will later return.
+//        */
+
+//       const revisionEntry = {
+//         revisionNo,
+//         revisedAt: new Date(),
+//         snapshot: oldSnapshot,
+//       };
+
+//       existingPO.revisionHistory =
+//         existingPO.revisionHistory || [];
+
+//       existingPO.revisionHistory.push(
+//         revisionEntry
+//       );
+//     }
+
+//     // =========================================================
+//     // 6. INVENTORY LOOKUP
+//     // =========================================================
+
+//     const mpnIds = (data.items || [])
+//       .map((item) => item.mpn)
+//       .filter((mpn) => isId(mpn));
+
+//     const inventories = await Inventory.find({
+//       mpnId: {
+//         $in: mpnIds,
+//       },
+//     }).lean();
+
+//     const inventoryMap = new Map();
+
+//     inventories.forEach((inv) => {
+//       inventoryMap.set(
+//         String(inv.mpnId),
+//         inv
+//       );
+//     });
+
+//     // =========================================================
+//     // 7. ITEMS PROCESSING
+//     // =========================================================
+
+//    // =========================================================
+// // 7. ITEMS PROCESSING
+// // =========================================================
+
+// let subTotal = 0;
+
+// const items = (data.items || []).map((item) => {
+//   const qty = num(item.qty);
+//   const unitPrice = num(item.unitPrice);
+
+//   const discount = num(
+//     item.discount ?? item.discPercentage
+//   );
+
+//   const extPrice = +(
+//     qty *
+//     unitPrice *
+//     (1 - discount / 100)
+//   );
+
+//   // -------------------------------------------------------
+//   // FIND EXISTING ITEM
+//   // -------------------------------------------------------
+
+//   const oldItem = existingPO.items.find(
+//     (x) =>
+//       (item._id &&
+//         String(x._id) === String(item._id)) ||
+//       String(x.mpn) === String(item.mpn)
+//   );
+
+//   // -------------------------------------------------------
+//   // IMPORTANT:
+//   // Start with ALL OLD ITEM DATA.
+//   // This preserves lastReceivedQty, receivedQty, etc.
+//   // -------------------------------------------------------
+
+//   const oldItemData = oldItem
+//     ? oldItem.toObject
+//       ? oldItem.toObject()
+//       : { ...oldItem }
+//     : {};
+
+//   // -------------------------------------------------------
+//   // Preserve existing receive values
+//   // -------------------------------------------------------
+
+//   let receivedQtyTotal = num(
+//     oldItemData.receivedQtyTotal
+//   );
+
+//   let rejectedQtyTotal = num(
+//     oldItemData.rejectedQtyTotal
+//   );
+
+//   let lastReceivedQty = num(
+//     oldItemData.lastReceivedQty
+//   );
+
+//   let receivedQty = num(
+//     oldItemData.receivedQty
+//   );
+
+//   // -------------------------------------------------------
+//   // IMPORTANT:
+//   // Do NOT restrict qty during REVISION.
+//   //
+//   // If user changes:
+//   // old qty = 2
+//   // new qty = 10
+//   //
+//   // revision should save qty = 10.
+//   // -------------------------------------------------------
+
+//   // Only apply received-quantity restriction for
+//   // normal Partially Received update, NOT revision.
+//   if (
+//     existingPO.status === "Partially Received" &&
+//     oldItem &&
+//     !isRevision
+//   ) {
+//     const oldQty = num(oldItemData.qty);
+
+//     if (qty < oldQty) {
+//       let reduceBy = oldQty - qty;
+
+//       if (rejectedQtyTotal > 0) {
+//         const rejectedReduction = Math.min(
+//           rejectedQtyTotal,
+//           reduceBy
+//         );
+
+//         rejectedQtyTotal -= rejectedReduction;
+//         reduceBy -= rejectedReduction;
+//       }
+
+//       if (receivedQtyTotal > qty) {
+//         throw new Error(
+//           `${item.description || item.mpn}: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
+//         );
+//       }
+//     }
+//   }
+
+//   const pendingQty = Math.max(
+//     qty -
+//       (receivedQtyTotal +
+//         rejectedQtyTotal),
+//     0
+//   );
+
+//   subTotal += extPrice;
+
+//   // =======================================================
+//   // RETURN OLD ITEM + ONLY UPDATE VALUES
+//   // =======================================================
+
+//   return {
+//     ...oldItemData,
+
+//     // Frontend editable fields
+//     idNumber:
+//       item.idNumber ?? oldItemData.idNumber,
+
+//     description:
+//       item.description ?? oldItemData.description,
+
+//     mpn:
+//       item.mpn ?? oldItemData.mpn,
+
+//     manufacturer:
+//       item.manufacturer ?? oldItemData.manufacturer,
+
+//     uom:
+//       item.uom ?? oldItemData.uom,
+
+//     qty,
+//     unitPrice,
+//     discount,
+//     extPrice,
+
+//     // Receive-related values MUST remain
+//     receivedQtyTotal,
+//     rejectedQtyTotal,
+//     lastReceivedQty,
+//     receivedQty,
+
+//     // If you want pendingQty stored:
+//     pendingQty,
+
+//     // Keep _id of existing item
+//     ...(oldItemData._id
+//       ? { _id: oldItemData._id }
+//       : {}),
+//   };
+// });
+//     // const items = (data.items || []).map((item) => {
+//     //   const qty = num(item.qty);
+//     //   const unitPrice = num(item.unitPrice);
+
+//     //   const discount = num(
+//     //     item.discount ??
+//     //     item.discPercentage
+//     //   );
+
+//     //   const extPrice = +(
+//     //     qty *
+//     //     unitPrice *
+//     //     (1 - discount / 100)
+//     //   );
+
+//     //   const oldItem =
+//     //     existingPO.items.find(
+//     //       (x) =>
+//     //         String(x._id) === String(item._id) ||
+//     //         String(x.mpn) === String(item.mpn)
+//     //     );
+
+//     //      const oldItemData = oldItem
+//     // ? (
+//     //     oldItem.toObject
+//     //       ? oldItem.toObject()
+//     //       : { ...oldItem }
+//     //   )
+//     // : {};
+
+//     //   let receivedQtyTotal = Number(
+//     //     oldItem?.receivedQtyTotal || 0
+//     //   );
+
+//     //   let rejectedQtyTotal = Number(
+//     //     oldItem?.rejectedQtyTotal || 0
+//     //   );
+
+//     //   // =====================================================
+//     //   // PARTIALLY RECEIVED
+//     //   // =====================================================
+
+//     //   if (
+//     //     existingPO.status ===
+//     //     "Partially Received" &&
+//     //     oldItem
+//     //   ) {
+//     //     const oldQty = Number(
+//     //       oldItem.qty || 0
+//     //     );
+
+//     //     // Qty reduced
+//     //     if (qty < oldQty) {
+//     //       let reduceBy =
+//     //         oldQty - qty;
+
+//     //       // First adjust rejected quantity
+//     //       if (rejectedQtyTotal > 0) {
+//     //         const rejectedReduction =
+//     //           Math.min(
+//     //             rejectedQtyTotal,
+//     //             reduceBy
+//     //           );
+
+//     //         rejectedQtyTotal -=
+//     //           rejectedReduction;
+
+//     //         reduceBy -=
+//     //           rejectedReduction;
+//     //       }
+
+//     //       // Cannot reduce below received quantity
+//     //       if (receivedQtyTotal > qty) {
+//     //         throw new Error(
+//     //           `${item.description ||
+//     //           item.mpn
+//     //           }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
+//     //         );
+//     //       }
+//     //     }
+//     //   }
+
+//     //   const pendingQty = Math.max(
+//     //     qty -
+//     //     (receivedQtyTotal +
+//     //       rejectedQtyTotal),
+//     //     0
+//     //   );
+
+//     //   subTotal += extPrice;
+
+//     //   // return {
+//     //   //      ...oldItemData,
+//     //   //   ...item,
+//     //   //   qty,
+//     //   //   unitPrice,
+//     //   //   discount,
+//     //   //   extPrice,
+//     //   //   receivedQtyTotal,
+//     //   //   rejectedQtyTotal,
+//     //   //   // pendingQty,
+//     //   // };
+//     //   return {
+//     //     ...oldItemData,
+
+//     //     idNumber: item.idNumber ?? oldItemData.idNumber,
+//     //     description: item.description ?? oldItemData.description,
+//     //     mpn: item.mpn ?? oldItemData.mpn,
+//     //     manufacturer: item.manufacturer ?? oldItemData.manufacturer,
+//     //     uom: item.uom ?? oldItemData.uom,
+
+//     //     qty,
+//     //     unitPrice,
+//     //     discount,
+//     //     extPrice,
+
+//     //     receivedQtyTotal,
+//     //     rejectedQtyTotal,
+//     //     lastReceivedQty,
+//     //     receivedQty,
+//     //   };
+//     // });
+
+//     // =========================================================
+//     // 8. TOTALS
+//     // =========================================================
+
+//     const freightAmount = num(
+//       data.totals?.freightAmount ??
+//       data.freightAmount
+//     );
+
+//     const subTotals = num(
+//       data.totals?.subTotalAmount
+//     );
+
+//     const ostTax = num(
+//       data.totals?.ostTax
+//     );
+
+//     const finalAmount = num(
+//       data.totals?.finalAmount
+//     );
+
+//     const totalDiscount = num(
+//       data.totals?.totalDiscount
+//     );
+
+//     // =========================================================
+//     // 9. SECOND LEVEL APPROVAL
+//     // =========================================================
+
+//     let requiresSecondLevelApproval = false;
+
+//     const purchaseSetting =
+//       await PurchaseSettings.findOne().lean();
+
+//     const APPROVAL_LIMIT = Number(
+//       purchaseSetting
+//         ?.secondLevelApprovalAmountLimit ||
+//       5000
+//     );
+
+//     if (
+//       finalAmount >
+//       APPROVAL_LIMIT
+//     ) {
+//       requiresSecondLevelApproval =
+//         true;
+
+//       // =====================================================
+//       // FIND APPROVAL USERS
+//       // =====================================================
+
+//       const approvalUsers =
+//         await User.find({
+//           permissions: {
+//             $in: [
+//               "purchase.purchase_order_approval:edit_delete_add",
+//             ],
+//           },
+//         }).select(
+//           "_id name email"
+//         );
+
+//       // =====================================================
+//       // CREATE ALERTS
+//       // =====================================================
+
+//       for (
+//         const user of approvalUsers
+//       ) {
+//         await createAlertOnce({
+//           title:
+//             "Second Level of Approval",
+
+//           message:
+//             `Total Purchase Amount is more than ${APPROVAL_LIMIT}. ` +
+//             `Approval by ${user.name} is required before proceeding further.`,
+
+//           priority: "critical",
+
+//           module:
+//             "purchase_order",
+
+//           relatedId:
+//             existingPO._id,
+
+//           assignedTo:
+//             user._id,
+//         });
+//       }
+//     }
+
+//     // =========================================================
+//     // 10. PO STATUS
+//     // =========================================================
+
+//     let poStatus =
+//       existingPO.status;
+
+//     // Revision from Emailed
+//     if (isRevision) {
+//       poStatus =
+//         "Pending";
+//     }
+
+//     // Existing approval logic
+//     if (
+//       requiresSecondLevelApproval
+//     ) {
+//       poStatus =
+//         "Pending Approval";
+//     }
+
+//     // Preserve Partially Received
+//     if (
+//       existingPO.status ===
+//       "Partially Received"
+//     ) {
+//       poStatus =
+//         "Partially Received";
+//     }
+
+//     // Preserve Closed
+//     if (
+//       existingPO.status === "Closed"
+//     ) {
+//       poStatus = "Closed";
+//     }
+
+//     // =========================================================
+//     // 11. PREPARE UPDATE
+//     // =========================================================
+
+//     const updateData = {
+//       ...data,
+
+//       // Revision fields
+//       poNumber: newPoNumber,
+//       revisionNo,
+//       isRevised: isRevision
+//         ? true
+//         : Boolean(
+//           existingPO.isRevised
+//         ),
+
+//       requiresSecondLevelApproval,
+
+//       status: poStatus,
+
+//       items,
+
+//       totals: {
+//         freightAmount,
+//         subTotalAmount:
+//           subTotals,
+//         ostTax,
+//         finalAmount,
+//         totalDiscount,
+//       },
+//     };
+
+//     // ---------------------------------------------------------
+//     // IMPORTANT:
+//     // Keep revisionHistory from existing PO
+//     // ---------------------------------------------------------
+
+//     if (isRevision) {
+//       updateData.revisionHistory =
+//         existingPO.revisionHistory;
+//     }
+
+//     // =========================================================
+//     // 12. UPDATE PO
+//     // =========================================================
+
+//     const updated =
+//       await PurchaseOrders.findByIdAndUpdate(
+//         id,
+//         updateData,
+//         {
+//           new: true,
+//           runValidators: true,
+//         }
+//       );
+
+//     if (!updated) {
+//       return res.status(404).json({
+//         success: false,
+//         error:
+//           "Purchase order not found",
+//       });
+//     }
+
+//     // =========================================================
+//     // 13. RESPONSE
+//     // =========================================================
+
+//     return res.json({
+//       success: true,
+
+//       message: isRevision
+//         ? `Purchase order revised successfully as ${newPoNumber}`
+//         : "Purchase order updated successfully",
+
+//       data: updated,
+
+//       revision: isRevision
+//         ? {
+//           isRevised: true,
+//           revisionNo,
+//           poNumber: newPoNumber,
+//         }
+//         : {
+//           isRevised: Boolean(
+//             updated.isRevised
+//           ),
+//           revisionNo:
+//             updated.revisionNo || 0,
+//           poNumber:
+//             updated.poNumber,
+//         },
+//     });
+//   } catch (error) {
+//     console.error(
+//       "❌ updatePurchaseOrder error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       error: error.message,
+//     });
+//   }
+// };
 
 // export const updatePurchaseOrder = async (req, res) => {
 //   try {
@@ -1629,7 +2714,7 @@ export const revisedPurchaseOrder = async (req, res) => {
       });
     }
 
-    if (purchaseOrder.status !== "Acknowledged") {
+    if (purchaseOrder.status !== "Acknowledged" && purchaseOrder.partiallyReceived) {
       return res.status(400).json({
         success: false,
         message: "Only acknowledged Purchase Orders can be revised.",
@@ -2231,6 +3316,7 @@ export const getAllPurchaseOrders = async (req, res) => {
       search = "",
       sortBy = "createdAt",
       sortOrder = "desc",
+      partiallyReceived
     } = req.query;
 
     page = parseInt(page);
@@ -2262,9 +3348,45 @@ export const getAllPurchaseOrders = async (req, res) => {
         .filter(Boolean);
     }
 
-    if (statusArray.length > 0) {
+const hasStatusFilter =
+  Array.isArray(statusArray) && statusArray.length > 0;
+
+const hasPartiallyReceived =
+  partiallyReceived !== undefined &&
+  partiallyReceived !== null &&
+  partiallyReceived !== "";
+
+if (hasStatusFilter) {
+  const statusFilter = {
+    status: { $in: statusArray },
+  };
+
+  if (hasPartiallyReceived) {
+    const partialValue =
+      partiallyReceived === true ||
+      partiallyReceived === "true";
+
+    if (partialValue === true) {
+      // Status wale + partially received wale
+      filter.$or = [
+        statusFilter,
+        {
+          partiallyReceived: true,
+        },
+      ];
+    } else {
+      // FALSE => only requested statuses
       filter.status = { $in: statusArray };
+      filter.partiallyReceived = false;
     }
+  } else {
+    filter.status = { $in: statusArray };
+  }
+} else if (hasPartiallyReceived) {
+  filter.partiallyReceived =
+    partiallyReceived === true ||
+    partiallyReceived === "true";
+}
 
     const total =
       await PurchaseOrders.countDocuments(filter);
@@ -2655,7 +3777,7 @@ export const sendPurchaseOrderMail = async (req, res) => {
     }
 
     const isPartialReceived =
-      purchaseOrder.status === "Partially Received";
+      purchaseOrder.partiallyReceived;
 
     const pdfBuffer =
       await generatePurchaseOrderPDFBuffer(purchaseOrder);
@@ -3216,23 +4338,162 @@ export const getPurchaseOrdersHistory = async (req, res) => {
     // ============================================
     // STATUS
     // ============================================
+// =========================================================
+// STATUS FILTER
+// =========================================================
 
-    const baseStatuses = [
-      "Partially Received",
-      "Pending",
-      "Emailed",
-      "Completed",
-      "Closed",
-      "Pending Approval",
-    ];
+const baseStatuses = [
+  "Pending",
+  "Emailed",
+  "Acknowledged",
+  "Completed",
+  "Closed",
+  "Pending Approval",
+];
 
-    if (status) {
-      filter.status = status;
-    } else {
-      filter.status = {
+// console.log("========== STATUS FILTER ==========");
+// console.log("RAW status:", status);
+// console.log("isArray:", Array.isArray(status));
+
+// =========================================================
+// NORMALIZE STATUS
+// =========================================================
+
+let statusArray = [];
+
+if (Array.isArray(status)) {
+  statusArray = status;
+} else if (
+  typeof status === "string" &&
+  status.trim() !== ""
+) {
+  statusArray = [status];
+}
+
+statusArray = statusArray
+  .map((item) => String(item).trim())
+  .filter(Boolean);
+
+// console.log("statusArray:", statusArray);
+
+// =========================================================
+// PARTIALLY RECEIVED
+// =========================================================
+
+const hasPartiallyReceived =
+  statusArray.includes("Partially Received");
+
+// console.log(
+//   "hasPartiallyReceived:",
+//   hasPartiallyReceived
+// );
+
+// =========================================================
+// NORMAL STATUSES
+// =========================================================
+
+const normalStatuses =
+  statusArray.filter(
+    (item) => item !== "Partially Received"
+  );
+
+// console.log(
+//   "normalStatuses:",
+//   normalStatuses
+// );
+
+// =========================================================
+// IMPORTANT:
+// REMOVE ANY OLD STATUS FILTER
+// =========================================================
+
+delete filter.status;
+delete filter.partiallyReceived;
+
+// =========================================================
+// CASE 1:
+// ONLY PARTIALLY RECEIVED
+// =========================================================
+
+if (
+  hasPartiallyReceived &&
+  normalStatuses.length === 0
+) {
+  filter.partiallyReceived = true;
+
+  // console.log(
+  //   "FILTER => partiallyReceived: true"
+  // );
+}
+
+// =========================================================
+// CASE 2:
+// PARTIALLY RECEIVED + NORMAL STATUSES
+// =========================================================
+
+else if (
+  hasPartiallyReceived &&
+  normalStatuses.length > 0
+) {
+  filter.$or = [
+    {
+      status: {
+        $in: normalStatuses,
+      },
+    },
+    {
+      partiallyReceived: true,
+    },
+  ];
+
+  // console.log(
+  //   "FILTER => normal statuses OR partiallyReceived"
+  // );
+}
+
+// =========================================================
+// CASE 3:
+// ONLY NORMAL STATUSES
+// =========================================================
+
+else if (
+  normalStatuses.length > 0
+) {
+  filter.status = {
+    $in: normalStatuses,
+  };
+
+  // console.log(
+  //   "FILTER => normal statuses only"
+  // );
+}
+
+// =========================================================
+// CASE 4:
+// NO STATUS
+// =========================================================
+
+else {
+  filter.$or = [
+    {
+      status: {
         $in: baseStatuses,
-      };
-    }
+      },
+    },
+    {
+      partiallyReceived: true,
+    },
+  ];
+
+  // console.log(
+  //   "FILTER => default statuses OR partiallyReceived"
+  // );
+}
+
+// console.log(
+//   "FINAL FILTER:",
+//   JSON.stringify(filter, null, 2)
+// );
 
     // ============================================
     // PERIOD
@@ -3335,7 +4596,7 @@ export const getPurchaseOrdersHistory = async (req, res) => {
         poDate: po.poDate,
 
         status: po.status,
-
+        partiallyReceived:po.partiallyReceived,
         revisionNo: revisionNo,
 
         isRevised: isRevised,
@@ -3523,15 +4784,161 @@ export const getPurchaseOrdersSummary = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
-    const baseStatuses = ["Partially Received", "Pending", "Emailed", "Completed", "Closed"];
+ 
 
-    if (status) {
-      // single status filter
-      filter.status = status;
-    } else {
-      // all statuses
-      filter.status = { $in: baseStatuses };
-    }
+    const baseStatuses = [
+  "Pending",
+  "Emailed",
+  "Acknowledged",
+  "Completed",
+  "Closed",
+  "Pending Approval",
+];
+
+// console.log("========== STATUS FILTER ==========");
+// console.log("RAW status:", status);
+// console.log("isArray:", Array.isArray(status));
+
+// =========================================================
+// NORMALIZE STATUS
+// =========================================================
+
+let statusArray = [];
+
+if (Array.isArray(status)) {
+  statusArray = status;
+} else if (
+  typeof status === "string" &&
+  status.trim() !== ""
+) {
+  statusArray = [status];
+}
+
+statusArray = statusArray
+  .map((item) => String(item).trim())
+  .filter(Boolean);
+
+// console.log("statusArray:", statusArray);
+
+// =========================================================
+// PARTIALLY RECEIVED
+// =========================================================
+
+const hasPartiallyReceived =
+  statusArray.includes("Partially Received");
+
+// console.log(
+//   "hasPartiallyReceived:",
+//   hasPartiallyReceived
+// );
+
+// =========================================================
+// NORMAL STATUSES
+// =========================================================
+
+const normalStatuses =
+  statusArray.filter(
+    (item) => item !== "Partially Received"
+  );
+
+// console.log(
+//   "normalStatuses:",
+//   normalStatuses
+// );
+
+// =========================================================
+// IMPORTANT:
+// REMOVE ANY OLD STATUS FILTER
+// =========================================================
+
+delete filter.status;
+delete filter.partiallyReceived;
+
+// =========================================================
+// CASE 1:
+// ONLY PARTIALLY RECEIVED
+// =========================================================
+
+if (
+  hasPartiallyReceived &&
+  normalStatuses.length === 0
+) {
+  filter.partiallyReceived = true;
+
+  // console.log(
+  //   "FILTER => partiallyReceived: true"
+  // );
+}
+
+// =========================================================
+// CASE 2:
+// PARTIALLY RECEIVED + NORMAL STATUSES
+// =========================================================
+
+else if (
+  hasPartiallyReceived &&
+  normalStatuses.length > 0
+) {
+  filter.$or = [
+    {
+      status: {
+        $in: normalStatuses,
+      },
+    },
+    {
+      partiallyReceived: true,
+    },
+  ];
+
+  // console.log(
+  //   "FILTER => normal statuses OR partiallyReceived"
+  // );
+}
+
+// =========================================================
+// CASE 3:
+// ONLY NORMAL STATUSES
+// =========================================================
+
+else if (
+  normalStatuses.length > 0
+) {
+  filter.status = {
+    $in: normalStatuses,
+  };
+
+  // console.log(
+  //   "FILTER => normal statuses only"
+  // );
+}
+
+// =========================================================
+// CASE 4:
+// NO STATUS
+// =========================================================
+
+else {
+  filter.$or = [
+    {
+      status: {
+        $in: baseStatuses,
+      },
+    },
+    {
+      partiallyReceived: true,
+    },
+  ];
+
+  // console.log(
+  //   "FILTER => default statuses OR partiallyReceived"
+  // );
+}
+
+// console.log(
+//   "FINAL FILTER:",
+//   JSON.stringify(filter, null, 2)
+// );
+
     const summary = await PurchaseOrders.aggregate([
       { $match: filter },
       {
@@ -6672,8 +8079,9 @@ export const acceptPurchaseOrder = async (req, res) => {
     // If PO is partially received, ACK must NOT close the PO.
     // Keep the existing receiving status so remaining incoming
     // quantity can still be received.
-    if (po.status === "Partially Received") {
-      po.status = "Partially Received";
+    if (po.partiallyReceived) {
+      po.status = "Acknowledged";
+      po.partiallyReceived = true;
     } else {
       po.status = "Acknowledged";
     }

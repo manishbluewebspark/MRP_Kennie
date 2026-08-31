@@ -48,7 +48,9 @@ const itemExt = (qty, unit, disc) => {
 
 
 
-
+const isRevisedPONumber = (poNumber = '') => {
+  return /R\d+$/.test(String(poNumber).trim());
+};
 
 const roundMoney = (value) => {
   return Math.round((n(value) + Number.EPSILON) * 100) / 100;
@@ -93,13 +95,22 @@ const generatePOItemNumber = (existingNumbers = []) => {
 const PurchaseOrderForm = () => {
   const location = useLocation();
   const isRevisionMode = location.state?.isRevision || false;
-  // console.log('------isRevisionMode', isRevisionMode)
+  console.log('------isRevisionMode', isRevisionMode)
   // 🔹 Shortage → PO flags & data
   const fromShortage = location.state?.fromShortage || false;
   const shortageItems = location.state?.shortageItems || [];
   const shortageSupplierId = location.state?.supplier || null;
-const [revisionMinQty, setRevisionMinQty] = useState({});
+
   // console.log('-------location.state', location?.state);
+
+  const [isRevisedPO, setIsRevisedPO] = useState(false);
+
+// Edit mode me Qty restriction
+const [isQtyRestrictedEdit, setIsQtyRestrictedEdit] = useState(false);
+
+// Har item ki minimum allowed quantity
+const [revisionMinQty, setRevisionMinQty] = useState({});
+
 
   const dispatch = useDispatch();
   const [form] = Form.useForm();
@@ -284,49 +295,64 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
         </Select>
       ),
     },
-   {
-  title: 'Qty',
-  dataIndex: 'qty',
-  key: 'qty',
+{
+  title: "Qty",
+  dataIndex: "qty",
+  key: "qty",
   width: 90,
+
   render: (text, record) => {
-    const minQty = record.minimumQty ?? 0;
+
+    // =====================================================
+    // FIND MINIMUM QTY
+    // =====================================================
+
+    let minQty = 0;
+
+    // Revision PO
+    if (isRevisionMode || isRevisedPO) {
+      minQty = n(
+        revisionMinQty[record.key],
+        n(record.minimumQty, 0)
+      );
+    }
+
+    // Normal Edit PO
+    // Only Emailed / Acknowledged
+    else if (isQtyRestrictedEdit) {
+      minQty = n(
+        revisionMinQty[record.key],
+        n(record.minimumQty, 0)
+      );
+    }
 
     return (
       <InputNumber
         size="small"
+
         min={minQty}
+
         value={record.qty}
-        style={{ width: '100%' }}
-onBlur={(e) => {
-  const qty = n(e.target.value);
 
-  if (qty < minQty) {
-    message.error(
-      `Minimum quantity is ${minQty}`
-    );
+        style={{
+          width: "100%",
+        }}
 
-    setOrderItems((prev) =>
-      prev.map((item) =>
-        item.key === record.key
-          ? {
-              ...item,
-              qty: minQty,
-            }
-          : item
-      )
-    );
-  }
-}}
         onChange={(value) => {
+
           const qty = n(value);
 
+          // =================================================
+          // MINIMUM QTY VALIDATION
+          // =================================================
+
           if (qty < minQty) {
+
             message.error(
-              `Quantity cannot be less than ${minQty}`
+              `Quantity cannot be less than ${minQty}.`
             );
 
-            // 👇 IMPORTANT: old valid value wapas set
+            // Force minimum quantity
             setOrderItems((prev) =>
               prev.map((item) =>
                 item.key === record.key
@@ -343,7 +369,7 @@ onBlur={(e) => {
 
           handleItemChange(
             record.key,
-            'qty',
+            "qty",
             qty
           );
         }}
@@ -467,84 +493,201 @@ onBlur={(e) => {
 
 
 
-  const loadForEdit = async (poId) => {
-    setLoading(true);
-    try {
-      const res = await PurchaseOrderService.getPurchaseOrderById(poId);
-      const po = res?.data || res;
+ const loadForEdit = async (poId) => {
+  setLoading(true);
 
-      form.setFieldsValue({
-        poNumber: po.poNumber,
-        poDate: po.poDate ? dayjs(po.poDate) : null,
-        referenceNo: po.referenceNo,
-        workOrderNo: po.workOrderNo?._id || po.workOrderNo || undefined,
-        needDate: po.needDate ? dayjs(po.needDate) : null,
-        etaDate: po.etaDate ? dayjs(po.etaDate) : null,
-        supplier: po.supplier?._id || po.supplier,
-        shipToAddress: po.shipToAddress,
-        termsConditions: po.termsConditions,
-        freightAmount: n(po?.totals?.freightAmount),
-        discountAmount: n(po?.totals?.totalDiscount)
-      });
+  try {
+    const res = await PurchaseOrderService.getPurchaseOrderById(poId);
+    const po = res?.data || res;
 
-      const isRevisedPO = /R\d+$/i.test(String(po.poNumber || ''));
+    // =====================================================
+    // PO TYPE
+    // =====================================================
 
-      const minQtyMap = {};
+    const revisedPO = isRevisedPONumber(po.poNumber);
 
-      // const items = (po.items || []).map((it, idx) => ({
-      //   key: String(it._id || `${it.mpn}-${Math.random()}`),
-      //   idNumber: it.idNumber || String(idx + 1).padStart(4, '0'),
-      //   description: it.description || '',
-      //   mpn: it.mpn?._id || it.mpn || '', // id
-      //   manufacturer: it.manufacturer || '',
-      //   uom: it.uom?._id || it.uom || '', // id
-      //   qty: n(it.qty, 1),
-      //     originalQty: n(it.qty, 1),
-      //   unitPrice: n(it.unitPrice, 0),
-      //   discPercentage: n(it.discount, 0),
-      // }));
-      const items = (po.items || []).map((it, idx) => {
-  const itemKey = String(
-    it._id || `${it.mpn}-${Math.random()}`
-  );
+    setIsRevisedPO(revisedPO);
 
-  if (isRevisedPO) {
-    minQtyMap[itemKey] = n(it.qty, 0);
-  }
+    // =====================================================
+    // EDIT MODE QTY RESTRICTION
+    // Only Emailed / Acknowledged
+    // =====================================================
 
-  return {
-    key: itemKey,
-    idNumber:
-      it.idNumber ||
-      String(idx + 1).padStart(4, '0'),
-    description: it.description || '',
-    mpn: it.mpn?._id || it.mpn || '',
-    manufacturer: it.manufacturer || '',
-    uom: it.uom?._id || it.uom || '',
-     minimumQty: n(it.qty, 1),
-    qty: n(it.qty, 1),
-    unitPrice: n(it.unitPrice, 0),
-    discPercentage: n(it.discount, 0),
-  };
-});
+    const restrictEditQty =
+      !isRevisionMode &&
+      ["Emailed", "Acknowledged"].includes(po.status);
 
-setRevisionMinQty(minQtyMap);
+      console.log('-----setIsQtyRestrictedEdit',restrictEditQty)
+    setIsQtyRestrictedEdit(restrictEditQty);
 
-      setOrderItems(items.length ? items : []);
+    // =====================================================
+    // HEADER
+    // =====================================================
 
-      if (po.supplier?._id && suppliers?.length) {
-        const supplier = suppliers.find(
-          (s) => String(s._id) === String(po.supplier?._id)
+    form.setFieldsValue({
+      poNumber: po.poNumber,
+      poDate: po.poDate ? dayjs(po.poDate) : null,
+      referenceNo: po.referenceNo,
+
+      workOrderNo:
+        po.workOrderNo?._id ||
+        po.workOrderNo ||
+        undefined,
+
+      needDate: po.needDate
+        ? dayjs(po.needDate)
+        : null,
+
+      etaDate: po.etaDate
+        ? dayjs(po.etaDate)
+        : null,
+
+      supplier:
+        po.supplier?._id ||
+        po.supplier,
+
+      shipToAddress: po.shipToAddress,
+      termsConditions: po.termsConditions,
+
+      freightAmount: n(
+        po?.totals?.freightAmount
+      ),
+
+      discountAmount: n(
+        po?.totals?.totalDiscount
+      ),
+    });
+
+    // =====================================================
+    // ITEM MINIMUM QTY
+    // =====================================================
+
+    const minQtyMap = {};
+
+    const items = (po.items || []).map((it, idx) => {
+      const itemKey = String(
+        it._id ||
+        `${it.mpn}-${idx}`
+      );
+
+      let minimumQty = 0;
+
+      // =================================================
+      // REVISION MODE
+      // Minimum = lastReceivedQty
+      // =================================================
+
+      if (isRevisionMode || revisedPO) {
+        minimumQty = n(
+          it.lastReceivedQty,
+          0
         );
-
-        setSelectedSupplier(supplier || null);
       }
-    } catch (e) {
-      message.error('Failed to load purchase order');
-    } finally {
-      setLoading(false);
+
+      // =================================================
+      // NORMAL EDIT MODE
+      // Only Emailed / Acknowledged
+      // Minimum = existing/original PO Qty
+      // =================================================
+
+      else if (restrictEditQty) {
+        minimumQty = n(
+          it.lastReceivedQty,
+          0
+        );
+      }
+
+      // Save minimum qty
+      minQtyMap[itemKey] = minimumQty;
+
+      return {
+        key: itemKey,
+
+        idNumber:
+          it.idNumber ||
+          String(idx + 1).padStart(4, "0"),
+
+        description:
+          it.description || "",
+
+        mpn:
+          it.mpn?._id ||
+          it.mpn ||
+          "",
+
+        manufacturer:
+          it.manufacturer || "",
+
+        uom:
+          it.uom?._id ||
+          it.uom ||
+          "",
+
+        // IMPORTANT
+        minimumQty,
+
+        qty: n(
+          it.qty,
+          1
+        ),
+
+        unitPrice: n(
+          it.unitPrice,
+          0
+        ),
+
+        discPercentage: n(
+          it.discount,
+          0
+        ),
+      };
+    });
+
+    // =====================================================
+    // SAVE MINIMUM QTY MAP
+    // =====================================================
+
+    setRevisionMinQty(minQtyMap);
+
+    setOrderItems(
+      items.length
+        ? items
+        : []
+    );
+
+    // =====================================================
+    // SUPPLIER
+    // =====================================================
+
+    if (
+      po.supplier?._id &&
+      suppliers?.length
+    ) {
+      const supplier = suppliers.find(
+        (s) =>
+          String(s._id) ===
+          String(po.supplier._id)
+      );
+
+      setSelectedSupplier(
+        supplier || null
+      );
     }
-  };
+
+  } catch (e) {
+    console.error(
+      "loadForEdit error:",
+      e
+    );
+
+    message.error(
+      "Failed to load purchase order"
+    );
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   /** ---------- prefill supplier when fromShortage ---------- */
   useEffect(() => {
@@ -660,68 +803,193 @@ setRevisionMinQty(minQtyMap);
     });
   };
 
-  const handleItemChange = (key, field, value) => {
+const handleItemChange = (
+  key,
+  field,
+  value
+) => {
 
-     if (field === 'qty') {
-    const minQty = revisionMinQty[key];
+  // =====================================================
+  // QTY MINIMUM VALIDATION
+  // =====================================================
 
-    if (
-      minQty !== undefined &&
-      n(value) < minQty
-    ) {
+  if (
+    field === "qty" &&
+    (
+      isRevisionMode ||
+      isRevisedPO ||
+      isQtyRestrictedEdit
+    )
+  ) {
+
+    const item = orderItems.find(
+      (item) =>
+        item.key === key
+    );
+
+    const minQty = n(
+      revisionMinQty[key],
+      n(item?.minimumQty, 0)
+    );
+
+    if (n(value) < minQty) {
+
       message.error(
         `Quantity cannot be less than ${minQty}.`
       );
+
+      setOrderItems((prev) =>
+        prev.map((item) =>
+          item.key === key
+            ? {
+                ...item,
+                qty: minQty,
+              }
+            : item
+        )
+      );
+
       return;
     }
   }
 
-    // ✅ MPN validation for Office PO
-    if (field === 'mpn' && isOfficePO) {
-      const selectedMPN = librarys?.mpnList?.find(
-        (m) => m._id === value
+  // =====================================================
+  // OFFICE PO MPN VALIDATION
+  // =====================================================
+
+  if (
+    field === "mpn" &&
+    isOfficePO
+  ) {
+
+    const selectedMPN =
+      librarys?.mpnList?.find(
+        (m) =>
+          m._id === value
       );
 
-      if (
-        selectedMPN &&
-        !['Office Supplies/Equipment'].includes(
-          selectedMPN.Category?.name
-        )
-      ) {
-        message.error('Accept Office Supplies/Equipment items only');
-        return; // ❌ yahin stop, state update nahi hoga
-      }
+    if (
+      selectedMPN &&
+      ![
+        "Office Supplies/Equipment",
+      ].includes(
+        selectedMPN.Category?.name
+      )
+    ) {
+
+      message.error(
+        "Accept Office Supplies/Equipment items only"
+      );
+
+      return;
     }
+  }
 
-    setOrderItems((prev) =>
-      prev.map((item) => {
-        if (item.key !== key) return item;
+  // =====================================================
+  // UPDATE ITEM
+  // =====================================================
 
-        let updated = { ...item, [field]: value };
+  setOrderItems((prev) =>
+    prev.map((item) => {
 
-        // when MPN changes, auto-fill from library
-        if (field === 'mpn') {
-          const match = librarys?.mpnList?.find((m) => m._id === value);
-          if (match) {
-            const uomId =
-              match?.UOM?._id || match?.UOM?.name || updated.uom || '';
+      if (
+        item.key !== key
+      ) {
+        return item;
+      }
 
-            updated = {
-              ...updated,
-              description: match.Description || '',
-              manufacturer: match.Manufacturer || '',
-              uom: uomId,
-              qty: 1,
-              unitPrice: n(match.RFQUnitPrice, 0),
-              discPercentage: 0,
-            };
+      let updated = {
+        ...item,
+        [field]: value,
+      };
+
+      // =================================================
+      // MPN CHANGE
+      // =================================================
+
+      if (
+        field === "mpn"
+      ) {
+
+        const match =
+          librarys?.mpnList?.find(
+            (m) =>
+              m._id === value
+          );
+
+        if (match) {
+
+          const uomId =
+            match?.UOM?._id ||
+            match?.UOM?.name ||
+            updated.uom ||
+            "";
+
+          // =============================================
+          // KEEP MINIMUM QTY
+          // =============================================
+
+          let minQty = 0;
+
+          if (
+            isRevisionMode ||
+            isRevisedPO ||
+            isQtyRestrictedEdit
+          ) {
+
+            minQty = n(
+              revisionMinQty[key],
+              n(
+                updated.minimumQty,
+                0
+              )
+            );
           }
-        }
 
-        return updated;
-      })
-    );
-  };
+          updated = {
+            ...updated,
+
+            description:
+              match.Description || "",
+
+            manufacturer:
+              match.Manufacturer || "",
+
+            uom: uomId,
+
+            // =========================================
+            // IMPORTANT
+            // MPN change ke baad bhi qty minimum se
+            // neeche nahi jayegi
+            // =========================================
+
+            qty:
+              (
+                isRevisionMode ||
+                isRevisedPO ||
+                isQtyRestrictedEdit
+              )
+                ? Math.max(
+                    n(updated.qty, 0),
+                    minQty
+                  )
+                : 1,
+
+            unitPrice:
+              n(
+                match.RFQUnitPrice,
+                0
+              ),
+
+            discPercentage: 0,
+          };
+        }
+      }
+
+      return updated;
+    })
+  );
+};
 
 
   // const handleItemChange = (key, field, value) => {

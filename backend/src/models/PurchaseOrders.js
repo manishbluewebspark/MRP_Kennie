@@ -98,6 +98,10 @@ const PurchaseOrderSchema = new Schema(
       ],
       default: "Pending",
     },
+    partiallyReceived:{
+      type:Boolean,
+      default:false
+    },
     reason: {
       type: String
     },

@@ -395,8 +395,16 @@ export const getInventoryList = async (req, res) => {
     let pendingPOs = [];
     if (mpnIdsOnList.length) {
       pendingPOs = await PurchaseOrders.find({
-        // status: { $in: ["Emailed", "Approved", "Acknowledged", "Partially Received"] },
-        status: { $in: ["Emailed", "Acknowledged", "Partially Received"] },
+        $or: [
+          {
+            status: {
+              $in: ["Emailed", "Acknowledged"],
+            },
+          },
+          {
+            partiallyReceived: true,
+          },
+        ],
         "items.mpn": { $in: mpnIdsOnList },
       })
         .select(
@@ -617,14 +625,14 @@ export const getInventoryList = async (req, res) => {
         Status: status,
         purchaseData: item.purchaseData,
         adjustLog: Array.isArray(item?.adjustmentLogs)
-  ? [...item.adjustmentLogs]
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt || b.adjustedAt || 0) -
-          new Date(a.createdAt || a.adjustedAt || 0)
-      )
-      .slice(0, 10)
-  : [],
+          ? [...item.adjustmentLogs]
+            .sort(
+              (a, b) =>
+                new Date(b.createdAt || b.adjustedAt || 0) -
+                new Date(a.createdAt || a.adjustedAt || 0)
+            )
+            .slice(0, 10)
+          : [],
       };
     });
 
@@ -992,7 +1000,16 @@ export const getLowStockAlerts = async (req, res) => {
       .filter(Boolean);
 
     const pendingPOs = await PurchaseOrders.find({
-      status: { $in: ["Emailed", "Acknowledged", "Partially Received"] },
+      $or: [
+      {
+        status: {
+          $in: ["Emailed", "Acknowledged"],
+        },
+      },
+      {
+        partiallyReceived: true,
+      },
+    ],
       "items.mpn": { $in: mpnIdsOnList },
     })
       .select(
@@ -1114,64 +1131,64 @@ export const getLowStockAlerts = async (req, res) => {
 
           const rows = [];
 
-        for (const row of demandRows) {
-  const effectiveDemand = Math.max(
-    0,
-    row.demandQty - remainingPicked
-  );
+          for (const row of demandRows) {
+            const effectiveDemand = Math.max(
+              0,
+              row.demandQty - remainingPicked
+            );
 
-  remainingPicked = Math.max(
-    0,
-    remainingPicked - row.demandQty
-  );
+            remainingPicked = Math.max(
+              0,
+              remainingPicked - row.demandQty
+            );
 
-  let shortfall = 0;
+            let shortfall = 0;
 
-  if (availableStock >= effectiveDemand) {
-    availableStock -= effectiveDemand;
-  } else {
-    shortfall = effectiveDemand - availableStock;
-    availableStock = 0;
-  }
+            if (availableStock >= effectiveDemand) {
+              availableStock -= effectiveDemand;
+            } else {
+              shortfall = effectiveDemand - availableStock;
+              availableStock = 0;
+            }
 
-  if (shortfall <= 0) continue;
+            if (shortfall <= 0) continue;
 
-  const weeksLeft = weeksBetween(new Date(), row.needDate);
+            const weeksLeft = weeksBetween(new Date(), row.needDate);
 
-  let urgency = "normal";
+            let urgency = "normal";
 
-  if (weeksLeft <= criticalWeeksLeft) {
-    urgency = "critical";
-  } else if (weeksLeft <= urgentWeeksLeft) {
-    urgency = "urgent";
-  }
+            if (weeksLeft <= criticalWeeksLeft) {
+              urgency = "critical";
+            } else if (weeksLeft <= urgentWeeksLeft) {
+              urgency = "urgent";
+            }
 
-  const convertedShortfall = await convertFromMeter(
-    shortfall,
-    mpn.UOM?.code
-  );
+            const convertedShortfall = await convertFromMeter(
+              shortfall,
+              mpn.UOM?.code
+            );
 
-  const convertedDemand = await convertFromMeter(
-    effectiveDemand,
-    mpn.UOM?.code
-  );
+            const convertedDemand = await convertFromMeter(
+              effectiveDemand,
+              mpn.UOM?.code
+            );
 
-  rows.push({
-    mpnId: mpn._id,
-    mpnNumber: mpn.MPN,
-    description: mpn.Description,
-    manufacturer: mpn.Manufacturer,
-    uom: mpn.UOM?.code,
-    currentStock,
-    totalRequired: convertedDemand,
-    shortfall: convertedShortfall,
-    earliestNeedDate: row.needDate,
-    weeksLeft,
-    urgency,
-    workOrders: row.workOrders,
-    lastUpdated: inv.updatedAt,
-  });
-}
+            rows.push({
+              mpnId: mpn._id,
+              mpnNumber: mpn.MPN,
+              description: mpn.Description,
+              manufacturer: mpn.Manufacturer,
+              uom: mpn.UOM?.code,
+              currentStock,
+              totalRequired: convertedDemand,
+              shortfall: convertedShortfall,
+              earliestNeedDate: row.needDate,
+              weeksLeft,
+              urgency,
+              workOrders: row.workOrders,
+              lastUpdated: inv.updatedAt,
+            });
+          }
 
           return rows.length ? rows : null;
         })
@@ -1460,7 +1477,16 @@ export const exportExcel = async (req, res) => {
     let pendingPOs = [];
     if (mpnIds.length) {
       pendingPOs = await PurchaseOrders.find({
-        status: { $in: ["Pending", "Approved", "Partially Received"] },
+        $or: [
+      {
+        status: {
+          $in: ["Pending", "Approved"],
+        },
+      },
+      {
+        partiallyReceived: true,
+      },
+    ],
         "items.mpn": { $in: mpnIds },
       })
         .select("poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt")
@@ -1741,7 +1767,16 @@ export const exportInventoryListExcel = async (req, res) => {
     let pendingPOs = [];
     if (mpnIdsOnList.length) {
       pendingPOs = await PurchaseOrders.find({
-        status: { $in: ["Pending", "Approved", "Partially Received"] },
+        $or: [
+      {
+        status: {
+          $in: ["Pending", "Approved"],
+        },
+      },
+      {
+        partiallyReceived: true,
+      },
+    ],
         "items.mpn": { $in: mpnIdsOnList },
       })
         .select("poNumber items.mpn items.qty items.receivedQty items.commitDate")
