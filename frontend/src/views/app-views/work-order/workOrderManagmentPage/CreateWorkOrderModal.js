@@ -47,7 +47,8 @@ const CreateWorkOrderModal = ({
 
   const isEditMode = !!editingWorkOrder?._id;
   const editDrawingId = editingWorkOrder?.drawingId ? String(editingWorkOrder.drawingId) : null;
-  const canEdit = !!editingWorkOrder?.isInProduction
+  // const canEdit = !!editingWorkOrder?.isInProduction
+  const canEdit = editingWorkOrder?.status === "No Progress Yet";
   const filterConfig = useMemo(() => {
     return [
       {
@@ -355,7 +356,7 @@ const CreateWorkOrderModal = ({
             onChange={(e) =>
               handleRowChange(record.drawingId, "posNo", e.target.value)
             }
-            disabled={canEdit}
+            disabled={!canEdit}
           />
         ),
       }
@@ -370,7 +371,7 @@ const CreateWorkOrderModal = ({
             value={record.workOrderQty}
             onChange={(val) => handleRowChange(record.drawingId, "workOrderQty", val)}
             style={{ width: "100%" }}
-            disabled={canEdit}
+            disabled={!canEdit}
           />
         ),
       },
