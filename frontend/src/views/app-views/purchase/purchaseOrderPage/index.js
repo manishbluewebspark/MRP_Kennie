@@ -78,15 +78,15 @@ const PurchaseOrderPage = () => {
             //             ? "Closed"
             //             : undefined;
 
-           const statusFilter =
-  tab === "opening_orders"
-    ? ["Pending", "Emailed", "Acknowledged", "Rejected"]
-    : tab === "closed_orders"
-      ? ["Closed"]
-      : undefined;
+            const statusFilter =
+                tab === "opening_orders"
+                    ? ["Pending", "Emailed", "Acknowledged", "Rejected"]
+                    : tab === "closed_orders"
+                        ? ["Closed"]
+                        : undefined;
 
-const partiallyReceived =
-  tab === "partial_completion" ? true : false;
+            const partiallyReceived =
+                tab === "partial_completion" ? true : false;
 
             const res = await PurchaseOrderService.getAllPurchaseOrders({
                 page: p,
@@ -225,11 +225,11 @@ const partiallyReceived =
             okText: "Yes",
             cancelText: "No",
             async onOk() {
-                  navigate(`/app/purchase/edit-purchase-order/${poId}`, {
-        state: {
-            isRevision: true,
-        },
-    });
+                navigate(`/app/purchase/edit-purchase-order/${poId}`, {
+                    state: {
+                        isRevision: true,
+                    },
+                });
             },
         });
     };
@@ -674,8 +674,14 @@ const partiallyReceived =
     const PurchaseShortageCard = ({ record }) => {
         const [open, setOpen] = useState(false);
 
+        // const shortList = Array.isArray(record.shortageByWorkOrders)
+        //     ? record.shortageByWorkOrders
+        //     : [];
+
         const shortList = Array.isArray(record.shortageByWorkOrders)
-            ? record.shortageByWorkOrders
+            ? record.shortageByWorkOrders.filter(
+                (s) => Number(s.shortageQty) > 0
+            )
             : [];
 
         return (
@@ -1149,7 +1155,7 @@ const partiallyReceived =
         navigate(`/app/purchase/edit-purchase-order/${id}`);
     };
 
-   
+
 
     const handleDelete = async (id) => {
         try {

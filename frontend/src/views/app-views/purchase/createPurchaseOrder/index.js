@@ -382,6 +382,7 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
       dataIndex: 'unitPrice',
       key: 'unitPrice',
       width: 120,
+        align: 'right',
       render: (text, record) => (
         <InputNumber
           size="small"
@@ -422,6 +423,7 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
       title: 'Ext. Price',
       key: 'extPrice',
       width: 120,
+        align: 'right',
       render: (_, record) => {
         const ext = itemExt(record.qty, record.unitPrice, record.discPercentage);
         return `$${ext.toFixed(2)}`;
