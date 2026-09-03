@@ -48,7 +48,10 @@ const CreateWorkOrderModal = ({
   const isEditMode = !!editingWorkOrder?._id;
   const editDrawingId = editingWorkOrder?.drawingId ? String(editingWorkOrder.drawingId) : null;
   // const canEdit = !!editingWorkOrder?.isInProduction
-  const canEdit = editingWorkOrder?.status === "No Progress Yet";
+  // const canEdit = editingWorkOrder?.status === "No Progress Yet";
+  const canEdit =
+  !editingWorkOrder?.status ||
+  editingWorkOrder?.status === "No Progress Yet";
   const filterConfig = useMemo(() => {
     return [
       {

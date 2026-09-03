@@ -818,7 +818,7 @@ const PurchaseOrderPage = () => {
                                 }}
                             >
                                 <div>
-                                    <div style={{ fontSize: 11, fontWeight: 800, color: "#DC2626" }}>
+                                    <div style={{ fontSize: 11, fontWeight: 800, color: "green" }}>
                                         {s.label || `Demand#${idx + 1}`}
                                     </div>
                                     <div style={{ fontSize: 10, color: "#6B7280" }}>
@@ -830,7 +830,7 @@ const PurchaseOrderPage = () => {
                                     style={{
                                         fontSize: 12,
                                         fontWeight: 800,
-                                        color: "#DC2626",
+                                        color: "green",
                                     }}
                                 >
                                     {s.shortageQty}
