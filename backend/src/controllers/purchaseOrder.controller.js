@@ -5040,6 +5040,7 @@ export const getPurchaseShortageList = async (req, res) => {
 
     const workOrders = await WorkOrder.find({
       isDeleted: { $ne: true },
+      isProductionComplete: { $ne: true },
     }).lean();
 
     if (!workOrders.length) {

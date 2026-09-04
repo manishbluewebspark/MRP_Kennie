@@ -105,11 +105,11 @@ const PurchaseOrderForm = () => {
 
   const [isRevisedPO, setIsRevisedPO] = useState(false);
 
-// Edit mode me Qty restriction
-const [isQtyRestrictedEdit, setIsQtyRestrictedEdit] = useState(false);
+  // Edit mode me Qty restriction
+  const [isQtyRestrictedEdit, setIsQtyRestrictedEdit] = useState(false);
 
-// Har item ki minimum allowed quantity
-const [revisionMinQty, setRevisionMinQty] = useState({});
+  // Har item ki minimum allowed quantity
+  const [revisionMinQty, setRevisionMinQty] = useState({});
 
 
   const dispatch = useDispatch();
@@ -165,47 +165,47 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
   // const totals = calcTotals();
 
   const calcTotals = () => {
-  // Gross Amount = Qty × Unit Price
-  const grossAmount = roundMoney(
-    orderItems.reduce((sum, it) => {
-      return sum + n(it.qty) * n(it.unitPrice);
-    }, 0)
-  );
+    // Gross Amount = Qty × Unit Price
+    const grossAmount = roundMoney(
+      orderItems.reduce((sum, it) => {
+        return sum + n(it.qty) * n(it.unitPrice);
+      }, 0)
+    );
 
-  const freight = roundMoney(freightAmount);
-  const totalDiscount = roundMoney(discountAmou);
+    const freight = roundMoney(freightAmount);
+    const totalDiscount = roundMoney(discountAmou);
 
-  // Sub Total = Gross + Freight - Discount
-  const subTotalAmount = roundMoney(
-    grossAmount + freight - totalDiscount
-  );
+    // Sub Total = Gross + Freight - Discount
+    const subTotalAmount = roundMoney(
+      grossAmount + freight - totalDiscount
+    );
 
-  const gstPercent = n(
-    workOrderSettings?.gstSettings?.gstPercentage
-  );
+    const gstPercent = n(
+      workOrderSettings?.gstSettings?.gstPercentage
+    );
 
-  // GST
-  const gstBeforeRound = selectedSupplier?.gst
-    ? subTotalAmount * (gstPercent / 100)
-    : 0;
+    // GST
+    const gstBeforeRound = selectedSupplier?.gst
+      ? subTotalAmount * (gstPercent / 100)
+      : 0;
 
-  // GST ko 2 decimal par round karo
-  const ostTax = roundMoney(gstBeforeRound);
+    // GST ko 2 decimal par round karo
+    const ostTax = roundMoney(gstBeforeRound);
 
-  // Final Amount = Sub Total + Rounded GST
-  const finalAmount = roundMoney(
-    subTotalAmount + ostTax
-  );
+    // Final Amount = Sub Total + Rounded GST
+    const finalAmount = roundMoney(
+      subTotalAmount + ostTax
+    );
 
-  return {
-    grossAmount,
-    freight,
-    totalDiscount,
-    subTotalAmount,
-    ostTax,
-    finalAmount,
+    return {
+      grossAmount,
+      freight,
+      totalDiscount,
+      subTotalAmount,
+      ostTax,
+      finalAmount,
+    };
   };
-};
 
   const totals = calcTotals();
 
@@ -295,94 +295,94 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
         </Select>
       ),
     },
-{
-  title: "Qty",
-  dataIndex: "qty",
-  key: "qty",
-  width: 90,
+    {
+      title: "Qty",
+      dataIndex: "qty",
+      key: "qty",
+      width: 90,
 
-  render: (text, record) => {
+      render: (text, record) => {
 
-    // =====================================================
-    // FIND MINIMUM QTY
-    // =====================================================
+        // =====================================================
+        // FIND MINIMUM QTY
+        // =====================================================
 
-    let minQty = 0;
+        let minQty = 0;
 
-    // Revision PO
-    if (isRevisionMode || isRevisedPO) {
-      minQty = n(
-        revisionMinQty[record.key],
-        n(record.minimumQty, 0)
-      );
-    }
-
-    // Normal Edit PO
-    // Only Emailed / Acknowledged
-    else if (isQtyRestrictedEdit) {
-      minQty = n(
-        revisionMinQty[record.key],
-        n(record.minimumQty, 0)
-      );
-    }
-
-    return (
-      <InputNumber
-        size="small"
-
-        min={minQty}
-
-        value={record.qty}
-
-        style={{
-          width: "100%",
-        }}
-
-        onChange={(value) => {
-
-          const qty = n(value);
-
-          // =================================================
-          // MINIMUM QTY VALIDATION
-          // =================================================
-
-          if (qty < minQty) {
-
-            message.error(
-              `Quantity cannot be less than ${minQty}.`
-            );
-
-            // Force minimum quantity
-            setOrderItems((prev) =>
-              prev.map((item) =>
-                item.key === record.key
-                  ? {
-                      ...item,
-                      qty: minQty,
-                    }
-                  : item
-              )
-            );
-
-            return;
-          }
-
-          handleItemChange(
-            record.key,
-            "qty",
-            qty
+        // Revision PO
+        if (isRevisionMode || isRevisedPO) {
+          minQty = n(
+            revisionMinQty[record.key],
+            n(record.minimumQty, 0)
           );
-        }}
-      />
-    );
-  },
-},
+        }
+
+        // Normal Edit PO
+        // Only Emailed / Acknowledged
+        else if (isQtyRestrictedEdit) {
+          minQty = n(
+            revisionMinQty[record.key],
+            n(record.minimumQty, 0)
+          );
+        }
+
+        return (
+          <InputNumber
+            size="small"
+
+            min={minQty}
+
+            value={record.qty}
+
+            style={{
+              width: "100%",
+            }}
+
+            onChange={(value) => {
+
+              const qty = n(value);
+
+              // =================================================
+              // MINIMUM QTY VALIDATION
+              // =================================================
+
+              if (qty < minQty) {
+
+                message.error(
+                  `Quantity cannot be less than ${minQty}.`
+                );
+
+                // Force minimum quantity
+                setOrderItems((prev) =>
+                  prev.map((item) =>
+                    item.key === record.key
+                      ? {
+                        ...item,
+                        qty: minQty,
+                      }
+                      : item
+                  )
+                );
+
+                return;
+              }
+
+              handleItemChange(
+                record.key,
+                "qty",
+                qty
+              );
+            }}
+          />
+        );
+      },
+    },
     {
       title: 'Unit Price',
       dataIndex: 'unitPrice',
       key: 'unitPrice',
       width: 120,
-        align: 'right',
+      align: 'left',
       render: (text, record) => (
         <InputNumber
           size="small"
@@ -393,10 +393,10 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
           onChange={(v) => handleItemChange(record.key, 'unitPrice', n(v))}
           style={{ width: '100%' }}
           formatter={(value) =>
-        value === undefined || value === null || value === ''
-          ? ''
-          : Number(value).toFixed(2)
-      }
+            value === undefined || value === null || value === ''
+              ? ''
+              : Number(value).toFixed(2)
+          }
           parser={(v) => (v ? String(v).replace('$', '').trim() : 0)}
         />
       ),
@@ -423,10 +423,13 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
       title: 'Ext. Price',
       key: 'extPrice',
       width: 120,
-        align: 'right',
+      align: 'right',
       render: (_, record) => {
         const ext = itemExt(record.qty, record.unitPrice, record.discPercentage);
-        return `$${ext.toFixed(2)}`;
+        return `$${ext.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`;
       },
     },
     {
@@ -495,201 +498,201 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
 
 
 
- const loadForEdit = async (poId) => {
-  setLoading(true);
+  const loadForEdit = async (poId) => {
+    setLoading(true);
 
-  try {
-    const res = await PurchaseOrderService.getPurchaseOrderById(poId);
-    const po = res?.data || res;
+    try {
+      const res = await PurchaseOrderService.getPurchaseOrderById(poId);
+      const po = res?.data || res;
 
-    // =====================================================
-    // PO TYPE
-    // =====================================================
+      // =====================================================
+      // PO TYPE
+      // =====================================================
 
-    const revisedPO = isRevisedPONumber(po.poNumber);
+      const revisedPO = isRevisedPONumber(po.poNumber);
 
-    setIsRevisedPO(revisedPO);
+      setIsRevisedPO(revisedPO);
 
-    // =====================================================
-    // EDIT MODE QTY RESTRICTION
-    // Only Emailed / Acknowledged
-    // =====================================================
-
-    const restrictEditQty =
-      !isRevisionMode &&
-      ["Emailed", "Acknowledged"].includes(po.status);
-
-      console.log('-----setIsQtyRestrictedEdit',restrictEditQty)
-    setIsQtyRestrictedEdit(restrictEditQty);
-
-    // =====================================================
-    // HEADER
-    // =====================================================
-
-    form.setFieldsValue({
-      poNumber: po.poNumber,
-      poDate: po.poDate ? dayjs(po.poDate) : null,
-      referenceNo: po.referenceNo,
-
-      workOrderNo:
-        po.workOrderNo?._id ||
-        po.workOrderNo ||
-        undefined,
-
-      needDate: po.needDate
-        ? dayjs(po.needDate)
-        : null,
-
-      etaDate: po.etaDate
-        ? dayjs(po.etaDate)
-        : null,
-
-      supplier:
-        po.supplier?._id ||
-        po.supplier,
-
-      shipToAddress: po.shipToAddress,
-      termsConditions: po.termsConditions,
-
-      freightAmount: n(
-        po?.totals?.freightAmount
-      ),
-
-      discountAmount: n(
-        po?.totals?.totalDiscount
-      ),
-    });
-
-    // =====================================================
-    // ITEM MINIMUM QTY
-    // =====================================================
-
-    const minQtyMap = {};
-
-    const items = (po.items || []).map((it, idx) => {
-      const itemKey = String(
-        it._id ||
-        `${it.mpn}-${idx}`
-      );
-
-      let minimumQty = 0;
-
-      // =================================================
-      // REVISION MODE
-      // Minimum = lastReceivedQty
-      // =================================================
-
-      if (isRevisionMode || revisedPO) {
-        minimumQty = n(
-          it.lastReceivedQty,
-          0
-        );
-      }
-
-      // =================================================
-      // NORMAL EDIT MODE
+      // =====================================================
+      // EDIT MODE QTY RESTRICTION
       // Only Emailed / Acknowledged
-      // Minimum = existing/original PO Qty
-      // =================================================
+      // =====================================================
 
-      else if (restrictEditQty) {
-        minimumQty = n(
-          it.lastReceivedQty,
-          0
+      const restrictEditQty =
+        !isRevisionMode &&
+        ["Emailed", "Acknowledged"].includes(po.status);
+
+      console.log('-----setIsQtyRestrictedEdit', restrictEditQty)
+      setIsQtyRestrictedEdit(restrictEditQty);
+
+      // =====================================================
+      // HEADER
+      // =====================================================
+
+      form.setFieldsValue({
+        poNumber: po.poNumber,
+        poDate: po.poDate ? dayjs(po.poDate) : null,
+        referenceNo: po.referenceNo,
+
+        workOrderNo:
+          po.workOrderNo?._id ||
+          po.workOrderNo ||
+          undefined,
+
+        needDate: po.needDate
+          ? dayjs(po.needDate)
+          : null,
+
+        etaDate: po.etaDate
+          ? dayjs(po.etaDate)
+          : null,
+
+        supplier:
+          po.supplier?._id ||
+          po.supplier,
+
+        shipToAddress: po.shipToAddress,
+        termsConditions: po.termsConditions,
+
+        freightAmount: n(
+          po?.totals?.freightAmount
+        ),
+
+        discountAmount: n(
+          po?.totals?.totalDiscount
+        ),
+      });
+
+      // =====================================================
+      // ITEM MINIMUM QTY
+      // =====================================================
+
+      const minQtyMap = {};
+
+      const items = (po.items || []).map((it, idx) => {
+        const itemKey = String(
+          it._id ||
+          `${it.mpn}-${idx}`
+        );
+
+        let minimumQty = 0;
+
+        // =================================================
+        // REVISION MODE
+        // Minimum = lastReceivedQty
+        // =================================================
+
+        if (isRevisionMode || revisedPO) {
+          minimumQty = n(
+            it.lastReceivedQty,
+            0
+          );
+        }
+
+        // =================================================
+        // NORMAL EDIT MODE
+        // Only Emailed / Acknowledged
+        // Minimum = existing/original PO Qty
+        // =================================================
+
+        else if (restrictEditQty) {
+          minimumQty = n(
+            it.lastReceivedQty,
+            0
+          );
+        }
+
+        // Save minimum qty
+        minQtyMap[itemKey] = minimumQty;
+
+        return {
+          key: itemKey,
+
+          idNumber:
+            it.idNumber ||
+            String(idx + 1).padStart(4, "0"),
+
+          description:
+            it.description || "",
+
+          mpn:
+            it.mpn?._id ||
+            it.mpn ||
+            "",
+
+          manufacturer:
+            it.manufacturer || "",
+
+          uom:
+            it.uom?._id ||
+            it.uom ||
+            "",
+
+          // IMPORTANT
+          minimumQty,
+
+          qty: n(
+            it.qty,
+            1
+          ),
+
+          unitPrice: n(
+            it.unitPrice,
+            0
+          ),
+
+          discPercentage: n(
+            it.discount,
+            0
+          ),
+        };
+      });
+
+      // =====================================================
+      // SAVE MINIMUM QTY MAP
+      // =====================================================
+
+      setRevisionMinQty(minQtyMap);
+
+      setOrderItems(
+        items.length
+          ? items
+          : []
+      );
+
+      // =====================================================
+      // SUPPLIER
+      // =====================================================
+
+      if (
+        po.supplier?._id &&
+        suppliers?.length
+      ) {
+        const supplier = suppliers.find(
+          (s) =>
+            String(s._id) ===
+            String(po.supplier._id)
+        );
+
+        setSelectedSupplier(
+          supplier || null
         );
       }
 
-      // Save minimum qty
-      minQtyMap[itemKey] = minimumQty;
-
-      return {
-        key: itemKey,
-
-        idNumber:
-          it.idNumber ||
-          String(idx + 1).padStart(4, "0"),
-
-        description:
-          it.description || "",
-
-        mpn:
-          it.mpn?._id ||
-          it.mpn ||
-          "",
-
-        manufacturer:
-          it.manufacturer || "",
-
-        uom:
-          it.uom?._id ||
-          it.uom ||
-          "",
-
-        // IMPORTANT
-        minimumQty,
-
-        qty: n(
-          it.qty,
-          1
-        ),
-
-        unitPrice: n(
-          it.unitPrice,
-          0
-        ),
-
-        discPercentage: n(
-          it.discount,
-          0
-        ),
-      };
-    });
-
-    // =====================================================
-    // SAVE MINIMUM QTY MAP
-    // =====================================================
-
-    setRevisionMinQty(minQtyMap);
-
-    setOrderItems(
-      items.length
-        ? items
-        : []
-    );
-
-    // =====================================================
-    // SUPPLIER
-    // =====================================================
-
-    if (
-      po.supplier?._id &&
-      suppliers?.length
-    ) {
-      const supplier = suppliers.find(
-        (s) =>
-          String(s._id) ===
-          String(po.supplier._id)
+    } catch (e) {
+      console.error(
+        "loadForEdit error:",
+        e
       );
 
-      setSelectedSupplier(
-        supplier || null
+      message.error(
+        "Failed to load purchase order"
       );
+
+    } finally {
+      setLoading(false);
     }
-
-  } catch (e) {
-    console.error(
-      "loadForEdit error:",
-      e
-    );
-
-    message.error(
-      "Failed to load purchase order"
-    );
-
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   /** ---------- prefill supplier when fromShortage ---------- */
   useEffect(() => {
@@ -805,193 +808,193 @@ const [revisionMinQty, setRevisionMinQty] = useState({});
     });
   };
 
-const handleItemChange = (
-  key,
-  field,
-  value
-) => {
+  const handleItemChange = (
+    key,
+    field,
+    value
+  ) => {
 
-  // =====================================================
-  // QTY MINIMUM VALIDATION
-  // =====================================================
-
-  if (
-    field === "qty" &&
-    (
-      isRevisionMode ||
-      isRevisedPO ||
-      isQtyRestrictedEdit
-    )
-  ) {
-
-    const item = orderItems.find(
-      (item) =>
-        item.key === key
-    );
-
-    const minQty = n(
-      revisionMinQty[key],
-      n(item?.minimumQty, 0)
-    );
-
-    if (n(value) < minQty) {
-
-      message.error(
-        `Quantity cannot be less than ${minQty}.`
-      );
-
-      setOrderItems((prev) =>
-        prev.map((item) =>
-          item.key === key
-            ? {
-                ...item,
-                qty: minQty,
-              }
-            : item
-        )
-      );
-
-      return;
-    }
-  }
-
-  // =====================================================
-  // OFFICE PO MPN VALIDATION
-  // =====================================================
-
-  if (
-    field === "mpn" &&
-    isOfficePO
-  ) {
-
-    const selectedMPN =
-      librarys?.mpnList?.find(
-        (m) =>
-          m._id === value
-      );
+    // =====================================================
+    // QTY MINIMUM VALIDATION
+    // =====================================================
 
     if (
-      selectedMPN &&
-      ![
-        "Office Supplies/Equipment",
-      ].includes(
-        selectedMPN.Category?.name
+      field === "qty" &&
+      (
+        isRevisionMode ||
+        isRevisedPO ||
+        isQtyRestrictedEdit
       )
     ) {
 
-      message.error(
-        "Accept Office Supplies/Equipment items only"
+      const item = orderItems.find(
+        (item) =>
+          item.key === key
       );
 
-      return;
-    }
-  }
+      const minQty = n(
+        revisionMinQty[key],
+        n(item?.minimumQty, 0)
+      );
 
-  // =====================================================
-  // UPDATE ITEM
-  // =====================================================
+      if (n(value) < minQty) {
 
-  setOrderItems((prev) =>
-    prev.map((item) => {
+        message.error(
+          `Quantity cannot be less than ${minQty}.`
+        );
 
-      if (
-        item.key !== key
-      ) {
-        return item;
+        setOrderItems((prev) =>
+          prev.map((item) =>
+            item.key === key
+              ? {
+                ...item,
+                qty: minQty,
+              }
+              : item
+          )
+        );
+
+        return;
       }
+    }
 
-      let updated = {
-        ...item,
-        [field]: value,
-      };
+    // =====================================================
+    // OFFICE PO MPN VALIDATION
+    // =====================================================
 
-      // =================================================
-      // MPN CHANGE
-      // =================================================
+    if (
+      field === "mpn" &&
+      isOfficePO
+    ) {
+
+      const selectedMPN =
+        librarys?.mpnList?.find(
+          (m) =>
+            m._id === value
+        );
 
       if (
-        field === "mpn"
+        selectedMPN &&
+        ![
+          "Office Supplies/Equipment",
+        ].includes(
+          selectedMPN.Category?.name
+        )
       ) {
 
-        const match =
-          librarys?.mpnList?.find(
-            (m) =>
-              m._id === value
-          );
+        message.error(
+          "Accept Office Supplies/Equipment items only"
+        );
 
-        if (match) {
+        return;
+      }
+    }
 
-          const uomId =
-            match?.UOM?._id ||
-            match?.UOM?.name ||
-            updated.uom ||
-            "";
+    // =====================================================
+    // UPDATE ITEM
+    // =====================================================
 
-          // =============================================
-          // KEEP MINIMUM QTY
-          // =============================================
+    setOrderItems((prev) =>
+      prev.map((item) => {
 
-          let minQty = 0;
+        if (
+          item.key !== key
+        ) {
+          return item;
+        }
 
-          if (
-            isRevisionMode ||
-            isRevisedPO ||
-            isQtyRestrictedEdit
-          ) {
+        let updated = {
+          ...item,
+          [field]: value,
+        };
 
-            minQty = n(
-              revisionMinQty[key],
-              n(
-                updated.minimumQty,
-                0
-              )
+        // =================================================
+        // MPN CHANGE
+        // =================================================
+
+        if (
+          field === "mpn"
+        ) {
+
+          const match =
+            librarys?.mpnList?.find(
+              (m) =>
+                m._id === value
             );
-          }
 
-          updated = {
-            ...updated,
+          if (match) {
 
-            description:
-              match.Description || "",
+            const uomId =
+              match?.UOM?._id ||
+              match?.UOM?.name ||
+              updated.uom ||
+              "";
 
-            manufacturer:
-              match.Manufacturer || "",
+            // =============================================
+            // KEEP MINIMUM QTY
+            // =============================================
 
-            uom: uomId,
+            let minQty = 0;
 
-            // =========================================
-            // IMPORTANT
-            // MPN change ke baad bhi qty minimum se
-            // neeche nahi jayegi
-            // =========================================
+            if (
+              isRevisionMode ||
+              isRevisedPO ||
+              isQtyRestrictedEdit
+            ) {
 
-            qty:
-              (
-                isRevisionMode ||
-                isRevisedPO ||
-                isQtyRestrictedEdit
-              )
-                ? Math.max(
+              minQty = n(
+                revisionMinQty[key],
+                n(
+                  updated.minimumQty,
+                  0
+                )
+              );
+            }
+
+            updated = {
+              ...updated,
+
+              description:
+                match.Description || "",
+
+              manufacturer:
+                match.Manufacturer || "",
+
+              uom: uomId,
+
+              // =========================================
+              // IMPORTANT
+              // MPN change ke baad bhi qty minimum se
+              // neeche nahi jayegi
+              // =========================================
+
+              qty:
+                (
+                  isRevisionMode ||
+                  isRevisedPO ||
+                  isQtyRestrictedEdit
+                )
+                  ? Math.max(
                     n(updated.qty, 0),
                     minQty
                   )
-                : 1,
+                  : 1,
 
-            unitPrice:
-              n(
-                match.RFQUnitPrice,
-                0
-              ),
+              unitPrice:
+                n(
+                  match.RFQUnitPrice,
+                  0
+                ),
 
-            discPercentage: 0,
-          };
+              discPercentage: 0,
+            };
+          }
         }
-      }
 
-      return updated;
-    })
-  );
-};
+        return updated;
+      })
+    );
+  };
 
 
   // const handleItemChange = (key, field, value) => {
@@ -1340,7 +1343,12 @@ const handleItemChange = (
                 <Text>Gross Amount:</Text>
               </Col>
               <Col span={12} style={{ textAlign: "right" }}>
-                ${totals.grossAmount.toFixed(2)}
+                {/* ${totals.grossAmount.toFixed(2)}
+                 */}
+                ${totals.grossAmount.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </Col>
             </Row>
 
@@ -1349,7 +1357,10 @@ const handleItemChange = (
                 <Text>Freight Amount:</Text>
               </Col>
               <Col span={12} style={{ textAlign: "right" }}>
-                + ${totals.freight.toFixed(2)}
+                + ${totals.freight.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </Col>
             </Row>
 
@@ -1358,7 +1369,10 @@ const handleItemChange = (
                 <Text>Discount:</Text>
               </Col>
               <Col span={12} style={{ textAlign: "right", color: "#ff4d4f" }}>
-                - ${totals.totalDiscount.toFixed(2)}
+                - ${totals.totalDiscount.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </Col>
             </Row>
 
@@ -1369,7 +1383,10 @@ const handleItemChange = (
               <Col span={12} style={{ textAlign: "right" }}>
                 ${(
                   totals.subTotalAmount
-                ).toFixed(2)}
+                ).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </Col>
             </Row>
 
@@ -1382,8 +1399,8 @@ const handleItemChange = (
                 </Text>
               </Col>
               <Col span={12} style={{ textAlign: "right" }}>
-               {fmtMoney(totals.ostTax)}
-                  {/* {(Math.trunc(Number(totals.ostTax) * 100) / 100)} */}
+                {fmtMoney(totals.ostTax)}
+                {/* {(Math.trunc(Number(totals.ostTax) * 100) / 100)} */}
               </Col>
             </Row>
 
