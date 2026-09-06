@@ -43,7 +43,7 @@ export const createReceiveMaterial = async (req, res) => {
     const poItems = po.items || [];
     const grnItems = [];
 
-    const remainingItemsForNewPO = [];
+    
     // ============================
     // ✅ Prefetch MPN master UOM (SAFE)
     // ============================
@@ -207,7 +207,7 @@ export const createReceiveMaterial = async (req, res) => {
         poItem.pendingQty =
           pendingQty;
 
-        poItem.lastReceivedQty = receivedQty;
+        poItem.lastReceivedQty = newReceivedTotal;
         // =====================================================
         // ITEM STATUS
         // =====================================================
@@ -256,7 +256,7 @@ export const createReceiveMaterial = async (req, res) => {
 
           receivedQtyTotal:
             newReceivedTotal,
-          lastReceivedQty: receivedQty,
+          lastReceivedQty: newReceivedTotal,
           rejectedQtyTotal:
             newRejectedTotal,
 
@@ -267,66 +267,7 @@ export const createReceiveMaterial = async (req, res) => {
         // REMAINING QTY FOR NEW PO
         // =====================================================
 
-        if (pendingQty > 0) {
-          const oldItemData =
-            poItem.toObject();
-
-          // Old receiving values remove/reset
-          const newItem = {
-            ...oldItemData,
-
-            // ONLY REMAINING QTY
-            qty: pendingQty,
-
-            // Fresh receiving for new PO
-            receivedQtyTotal: 0,
-            rejectedQtyTotal: 0,
-            lastReceivedQty: receivedQty,
-            pendingQty,
-
-            status: "Pending",
-
-            // Keep pricing
-            unitPrice:
-              Number(
-                poItem.unitPrice || 0
-              ),
-
-            discount:
-              Number(
-                poItem.discount ??
-                poItem.discPercentage ??
-                0
-              ),
-
-            discPercentage:
-              Number(
-                poItem.discPercentage ??
-                poItem.discount ??
-                0
-              ),
-
-            extPrice:
-              pendingQty *
-              Number(
-                poItem.unitPrice || 0
-              ) *
-              (
-                1 -
-                Number(
-                  poItem.discount ??
-                  poItem.discPercentage ??
-                  0
-                ) / 100
-              ),
-          };
-
-          delete newItem._id;
-
-          remainingItemsForNewPO.push(
-            newItem
-          );
-        }
+        
       } else {
         const ordered = Number(line.orderedQty || 0);
         const pendingQty = Math.max(ordered - acceptedQty + rejectedQty);
@@ -345,7 +286,7 @@ export const createReceiveMaterial = async (req, res) => {
           remarks: line.remarks || "",
           receivedQtyTotal: receivedQty,
           rejectedQtyTotal: rejectedQty,
-          lastReceivedQty: receivedQty,
+          lastReceivedQty: newReceivedTotal,
           pendingQty,
         });
       }
@@ -423,110 +364,7 @@ export const createReceiveMaterial = async (req, res) => {
 
     await newGRN.save();
 
-    let partialPurchaseOrder = null;
-    let revisedPOBlocked = false;
-    let revisedPOBlockMessage = null;
-
-
-
-
-    if (remainingItemsForNewPO.length > 0) {
-      const basePoNumber = String(
-        po.poNumber || ""
-      ).replace(/R\d+$/i, "");
-
-      const escapedBase = basePoNumber.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
-
-      const revisedPOs = await PurchaseOrders.find({
-        poNumber: {
-          $regex: `^${escapedBase}R\\d+$`,
-          $options: "i",
-        },
-      })
-        .select("poNumber status revisionNo")
-        .lean();
-
-      let latestRevisedPO = null;
-
-      for (const current of revisedPOs) {
-        const currentRevision = Number(
-          String(current.poNumber || "")
-            .match(/R(\d+)$/i)?.[1] || 0
-        );
-
-        if (!latestRevisedPO) {
-          latestRevisedPO = current;
-          continue;
-        }
-
-        const latestRevision = Number(
-          String(latestRevisedPO.poNumber || "")
-            .match(/R(\d+)$/i)?.[1] || 0
-        );
-
-        if (currentRevision > latestRevision) {
-          latestRevisedPO = current;
-        }
-      }
-
-      // console.log("====================================");
-      // console.log("BASE PO:", basePoNumber);
-      // console.log(
-      //   "LATEST REVISED PO:",
-      //   latestRevisedPO?.poNumber
-      // );
-      // console.log(
-      //   "LATEST REVISED PO STATUS:",
-      //   latestRevisedPO?.status
-      // );
-      // console.log("====================================");
-
-      // =====================================================
-      // PREVIOUS REVISION EXISTS AND IS NOT READY
-      // =====================================================
-
-      if (
-        latestRevisedPO &&
-        !["Emailed", "Acknowledged"].includes(
-          latestRevisedPO.status
-        )
-      ) {
-        revisedPOBlocked = true;
-
-        revisedPOBlockMessage =
-          `New Revised Purchase Order was not created. ` +
-          `Previous Revised Purchase Order "${latestRevisedPO.poNumber}" ` +
-          `is currently "${latestRevisedPO.status}". ` +
-          `Please Emailed or Acknowledged "${latestRevisedPO.poNumber}" ` +
-          `before creating the next Revised Purchase Order.`;
-
-        // console.log(
-        //   "❌ REVISED PO BLOCKED:",
-        //   revisedPOBlockMessage
-        // );
-      }
-
-      // =====================================================
-      // CREATE NEXT REVISION
-      // =====================================================
-
-      // if (!revisedPOBlocked) {
-      //   partialPurchaseOrder =
-      //     await createPartialPurchaseOrder({
-      //       originalPO: po,
-      //       remainingItems: remainingItemsForNewPO,
-      //       userId,
-      //     });
-
-      //   console.log(
-      //     "✅ Partial PO created:",
-      //     partialPurchaseOrder.poNumber
-      //   );
-      // }
-    }
+   
 
     const updatedItems = po.items || [];
 
@@ -596,19 +434,15 @@ export const createReceiveMaterial = async (req, res) => {
     return res.status(201).json({
       success: true,
 
-      message: partialPurchaseOrder
-        ? `Material received successfully. Remaining quantity PO ${partialPurchaseOrder.poNumber} created.`
-        : revisedPOBlocked
-          ? revisedPOBlockMessage
-          : "Material received successfully.",
+      message: "Material received successfully.",
 
       data: {
         grn: newGRN,
         purchaseOrder: po,
-        partialPurchaseOrder: partialPurchaseOrder || null,
+        // partialPurchaseOrder: partialPurchaseOrder || null,
 
-        revisedPOBlocked,
-        revisedPOBlockMessage,
+        // revisedPOBlocked,
+        // revisedPOBlockMessage,
       },
     });
   } catch (error) {
