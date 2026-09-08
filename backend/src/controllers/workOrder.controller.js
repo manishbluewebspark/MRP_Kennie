@@ -5096,6 +5096,7 @@ export const getAllChilPartByDrawingId = async (req, res) => {
 async function buildDemandMap() {
   const workOrders = await WorkOrder.find({
     isProductionComplete: false,
+    isInProduction: true
   })
     .select("_id drawingId quantity")
     .lean();
@@ -5162,6 +5163,7 @@ async function buildDemandMap() {
 const buildPickedMap = async () => {
   const workOrders = await WorkOrder.find({
     isProductionComplete: false,
+    isInProduction: true
   }).lean();
 
   const pickedMap = new Map();
@@ -5264,6 +5266,8 @@ export const getTotalMPNNeeded = async (req, res) => {
     const demandMap = await buildDemandMap();
     const pickedMap = await buildPickedMap();
 
+    // console.log('------demandMap', demandMap)
+
     const drawingIds = filteredDrawings.map((d) => d._id);
 
     // =========================================================
@@ -5272,8 +5276,12 @@ export const getTotalMPNNeeded = async (req, res) => {
 
     const workOrders = await WorkOrder.find({
       drawingId: { $in: drawingIds },
-      isProductionComplete: false
+      isProductionComplete: false,
+      isInProduction: true
     }).lean();
+
+
+    // console.log('--------workOrders', workOrders)
 
     if (!workOrders.length) {
       return res.json({
@@ -5478,7 +5486,7 @@ export const getTotalMPNNeeded = async (req, res) => {
           (inventoryMap.get(key)?.balanceQuantity || 0) +
           Number(inv.balanceQuantity || 0),
 
-        uomCode: inv.mpnId?.UOM?.code || "EA",
+        uomCode: inv.mpnId?.UOM || "EA",
       });
     }
 
@@ -5505,18 +5513,43 @@ export const getTotalMPNNeeded = async (req, res) => {
 
 
 
-      const convertedStock = convertUom({
-        qty: Number(inventory?.balanceQuantity || 0),
-        fromUom: inventory?.uomCode || row.baseUom,
-        toUom: row.baseUom,
-      });
+
+      // const convertedStock = convertUom({
+      //   qty: Number(inventory?.balanceQuantity || 0),
+      //   fromUom: inventory?.uomCode || row.baseUom,
+      //   toUom: row.baseUom,
+      // });
+
+      const convertedStock = convertFromMeter(
+        Number(inventory?.balanceQuantity || 0),
+        inventory?.uomCode?.code || "FT"
+      );
+
+
 
       row.workOrders.sort((a, b) =>
         a.workOrderNo.localeCompare(b.workOrderNo)
       );
       const totalNeeded = Number(row.totalNeeded || 0);
 
-      const pickedQty = pickedMap.get(row.mpnId) || 0;
+      const pickedQtys = pickedMap.get(row.mpnId) || 0;
+
+      const dmanqty = demandMap.get(row?.mpnId) || 0;
+
+
+      const demandQty = convertFromMeter(
+        Number(dmanqty || 0),
+        inventory?.uomCode?.code || "FT"
+      );
+
+
+      const pickedQty = convertFromMeter(
+        Number(pickedQtys || 0),
+        inventory?.uomCode?.code || "FT"
+      );
+
+      // console.log('-----totalNeeded', totalNeeded)
+      // console.log('-----demandQty', demandQty)
 
       // Remaining demand after picking
       const remainingDemand = Math.max(0, totalNeeded - pickedQty);
@@ -5579,13 +5612,13 @@ export const getTotalMPNNeeded = async (req, res) => {
           "",
 
         currentStock: Number(convertedStock.toFixed(4)),
-        uom: inventory?.uomCode || targetUom,
+        uom: inventory?.uomCode?.code || targetUom,
 
-        totalNeeded,
+        totalNeeded: remainingDemand,
 
-        currentStock: Number(
-          convertedStock.toFixed(4)
-        ),
+        // currentStock: Number(
+        //   convertedStock.toFixed(4)
+        // ),
 
         shortfall: Number(
           shortfall.toFixed(4)
@@ -9467,128 +9500,128 @@ export const saveWorkOrderStage = async (req, res) => {
     }
 
     const getPossibleProductsFromPicking = () => {
-  const pickingProcess = wo.processHistory?.find(
-    (p) => p.process === "picking"
-  );
-
-  // ============================================================
-  // FIRST PICKING
-  // ============================================================
-
-  if (!pickingProcess) {
-    let possibleProducts = Number(wo.quantity || 0);
-
-    for (const material of materials) {
-      const requiredPerProduct = Number(material.quantity || 0);
-      const currentPickedQty = Number(material.pickedQty || 0);
-
-      if (requiredPerProduct <= 0) continue;
-
-      const canMake = Math.floor(
-        currentPickedQty / requiredPerProduct
+      const pickingProcess = wo.processHistory?.find(
+        (p) => p.process === "picking"
       );
 
-      possibleProducts = Math.min(
-        possibleProducts,
-        canMake
-      );
-    }
+      // ============================================================
+      // FIRST PICKING
+      // ============================================================
 
-    return Math.max(0, possibleProducts);
-  }
+      if (!pickingProcess) {
+        let possibleProducts = Number(wo.quantity || 0);
 
-  // ============================================================
-  // EXISTING PICKING
-  // ============================================================
+        for (const material of materials) {
+          const requiredPerProduct = Number(material.quantity || 0);
+          const currentPickedQty = Number(material.pickedQty || 0);
 
-  let possibleProducts = Number(wo.quantity || 0);
+          if (requiredPerProduct <= 0) continue;
 
-  // Existing picking details ko map karo
-  const existingDetailsMap = new Map();
+          const canMake = Math.floor(
+            currentPickedQty / requiredPerProduct
+          );
 
-  (pickingProcess.details || []).forEach((detail) => {
-    existingDetailsMap.set(
-      String(detail.key),
-      detail
-    );
-  });
+          possibleProducts = Math.min(
+            possibleProducts,
+            canMake
+          );
+        }
 
-  // Current request ke materials bhi map karo
-  const currentMaterialsMap = new Map();
+        return Math.max(0, possibleProducts);
+      }
 
-  materials.forEach((material) => {
-    currentMaterialsMap.set(
-      String(material.key),
-      material
-    );
-  });
+      // ============================================================
+      // EXISTING PICKING
+      // ============================================================
 
-  // ============================================================
-  // CHECK ALL EXISTING MATERIALS
-  // ============================================================
+      let possibleProducts = Number(wo.quantity || 0);
 
-  for (const existingDetail of pickingProcess.details || []) {
-    const key = String(existingDetail.key);
+      // Existing picking details ko map karo
+      const existingDetailsMap = new Map();
 
-    const requiredPerProduct =
-      Number(existingDetail.quantity || 0);
+      (pickingProcess.details || []).forEach((detail) => {
+        existingDetailsMap.set(
+          String(detail.key),
+          detail
+        );
+      });
 
-    if (requiredPerProduct <= 0) continue;
+      // Current request ke materials bhi map karo
+      const currentMaterialsMap = new Map();
 
-    const alreadyPicked =
-      Number(existingDetail.pickedQty || 0);
+      materials.forEach((material) => {
+        currentMaterialsMap.set(
+          String(material.key),
+          material
+        );
+      });
 
-    const currentMaterial =
-      currentMaterialsMap.get(key);
+      // ============================================================
+      // CHECK ALL EXISTING MATERIALS
+      // ============================================================
 
-    const currentPicked =
-      Number(currentMaterial?.pickedQty || 0);
+      for (const existingDetail of pickingProcess.details || []) {
+        const key = String(existingDetail.key);
 
-    // Existing + current request
-    const totalPicked =
-      alreadyPicked + currentPicked;
+        const requiredPerProduct =
+          Number(existingDetail.quantity || 0);
 
-    const canMake = Math.floor(
-      totalPicked / requiredPerProduct
-    );
+        if (requiredPerProduct <= 0) continue;
 
-    possibleProducts = Math.min(
-      possibleProducts,
-      canMake
-    );
-  }
+        const alreadyPicked =
+          Number(existingDetail.pickedQty || 0);
 
-  // ============================================================
-  // NEW MATERIALS JO EXISTING PICKING ME NAHI HAIN
-  // ============================================================
+        const currentMaterial =
+          currentMaterialsMap.get(key);
 
-  for (const material of materials) {
-    const key = String(material.key);
+        const currentPicked =
+          Number(currentMaterial?.pickedQty || 0);
 
-    if (existingDetailsMap.has(key)) {
-      continue;
-    }
+        // Existing + current request
+        const totalPicked =
+          alreadyPicked + currentPicked;
 
-    const requiredPerProduct =
-      Number(material.quantity || 0);
+        const canMake = Math.floor(
+          totalPicked / requiredPerProduct
+        );
 
-    if (requiredPerProduct <= 0) continue;
+        possibleProducts = Math.min(
+          possibleProducts,
+          canMake
+        );
+      }
 
-    const currentPicked =
-      Number(material.pickedQty || 0);
+      // ============================================================
+      // NEW MATERIALS JO EXISTING PICKING ME NAHI HAIN
+      // ============================================================
 
-    const canMake = Math.floor(
-      currentPicked / requiredPerProduct
-    );
+      for (const material of materials) {
+        const key = String(material.key);
 
-    possibleProducts = Math.min(
-      possibleProducts,
-      canMake
-    );
-  }
+        if (existingDetailsMap.has(key)) {
+          continue;
+        }
 
-  return Math.max(0, possibleProducts);
-};
+        const requiredPerProduct =
+          Number(material.quantity || 0);
+
+        if (requiredPerProduct <= 0) continue;
+
+        const currentPicked =
+          Number(material.pickedQty || 0);
+
+        const canMake = Math.floor(
+          currentPicked / requiredPerProduct
+        );
+
+        possibleProducts = Math.min(
+          possibleProducts,
+          canMake
+        );
+      }
+
+      return Math.max(0, possibleProducts);
+    };
 
     // const getPossibleProductsFromPicking = () => {
     //   const pickingProcess = wo.processHistory?.find(
