@@ -543,7 +543,7 @@ const PurchaseOrderPage = () => {
                             // showInfo
                             // showDelete
                             // showCross
-                            showReset
+                          showReset={record?.status === "Acknowledged"}
                             onReset={() => handleRevisedPO(record?._id)}
                             resetTitle="Revised PO"
                             showMail={record?.partiallyReceived}

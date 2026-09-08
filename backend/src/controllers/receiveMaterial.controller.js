@@ -406,6 +406,7 @@ export const createReceiveMaterial = async (req, res) => {
 
     if (allReceived) {
       po.status = "Closed";
+        po.partiallyReceived = false;
     } else if (anyReceived) {
       // po.status = "Partially Received";
       po.partiallyReceived = true;
@@ -702,6 +703,7 @@ export const closePurchaseOrder = async (req, res) => {
     po.status = "Closed";
     po.closedAt = new Date();
     po.closedBy = req.user._id;
+    po.partiallyReceived = false;
     po.closeRemarks = "Close PO Manual";
 
     await po.save();

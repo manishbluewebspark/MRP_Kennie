@@ -1181,7 +1181,7 @@ export const getLowStockAlerts = async (req, res) => {
               uom: mpn.UOM?.code,
               currentStock,
               totalRequired: convertedDemand,
-              shortfall: convertedShortfall,
+              shortfall: convertedShortfall.toFixed(2),
               earliestNeedDate: row.needDate,
               weeksLeft,
               urgency,
