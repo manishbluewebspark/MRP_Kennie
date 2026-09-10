@@ -138,11 +138,17 @@ const AddCostingItemModal = ({
         limit: searchText ? 50 : 10,
       });
 
+      // const opts = (res?.data || []).map((item) => ({
+      //   value: item._id,
+      //   label: item.ChildPartNo,
+      //   data: item,
+      // }));
+
       const opts = (res?.data || []).map((item) => ({
-        value: item._id,
-        label: item.ChildPartNo,
-        data: item,
-      }));
+  value: item._id,
+  label: item?.mpn?.MPN || item?.mpn?.mpn || "No MPN",
+  data: item,
+}));
 
       setChildPartOptions(opts);
 
@@ -616,11 +622,11 @@ const AddCostingItemModal = ({
         </Col>
 
         <Col span={12}>
-          <Form.Item label={<Text strong>Child Part</Text>} name="childPart">
+          <Form.Item label={<Text strong>MPN</Text>} name="childPart">
             <Select
               showSearch
               labelInValue          // ✅ IMPORTANT
-              placeholder="Select child part"
+              placeholder="Select MPN"
               loading={loadingChild}
               options={childPartOptions}
               onChange={handleChildPartChange}

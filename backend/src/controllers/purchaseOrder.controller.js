@@ -16,6 +16,7 @@ import { convertToBaseUOM, convertToMeter } from "../utils/uomController.js";
 import User from "../models/User.js";
 import { createAlertOnce } from "../services/alertservice.js";
 import PurchaseSettings from "../models/PurchaseSettings.js";
+import SystemSettings from "../models/SystemSettings.js";
 
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -5035,7 +5036,87 @@ export const getPurchaseShortageList = async (req, res) => {
     limit = parseInt(limit, 10) || 10;
 
     // =========================================================
-    // 1) FETCH WORK ORDERS
+    // 1) FETCH SYSTEM SETTINGS
+    // =========================================================
+
+    const settings = await SystemSettings.findOne({}).lean();
+
+    const criticalWeeksLeft =
+      Number(settings?.inventoryAlerts?.criticalWeeksLeft ?? 2);
+
+    const urgentWeeksLeft =
+      Number(settings?.inventoryAlerts?.urgentWeeksLeft ?? 3);
+
+    const normalWeeksLeft =
+      Number(settings?.inventoryAlerts?.normalWeeksLeft ?? 6);
+
+
+     
+    // =========================================================
+    // HELPER: GET COLOR BASED ON NEED DATE
+    // =========================================================
+
+const getNeedDateColor = (needDate) => {
+    if (!needDate) {
+        return "#52c41a";
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const targetDate = new Date(needDate);
+    targetDate.setHours(0, 0, 0, 0);
+
+    const daysLeft =
+        (targetDate.getTime() - today.getTime()) /
+        (1000 * 60 * 60 * 24);
+
+    const weeksLeft = daysLeft / 7;
+
+  
+
+    // Overdue
+    if (weeksLeft <= 0) {
+        return "#ff4d4f";
+    }
+
+    // Sort thresholds from LOWEST to HIGHEST.
+    // If values overlap, the earliest threshold wins.
+    const thresholds = [
+        {
+            weeks: criticalWeeksLeft,
+            color: "#ff4d4f",
+            name: "CRITICAL",
+        },
+        {
+            weeks: urgentWeeksLeft,
+            color: "#fa8c16",
+            name: "URGENT",
+        },
+        {
+            weeks: normalWeeksLeft,
+            color: "#faad14",
+            name: "NORMAL",
+        },
+    ]
+        .filter((x) => Number.isFinite(x.weeks) && x.weeks >= 0)
+        .sort((a, b) => a.weeks - b.weeks);
+
+    for (const threshold of thresholds) {
+        if (weeksLeft <= threshold.weeks) {
+           
+
+            return threshold.color;
+        }
+    }
+
+    // console.log("COLOR MATCH: SAFE");
+
+    return "#52c41a";
+};
+
+    // =========================================================
+    // 2) FETCH WORK ORDERS
     // =========================================================
 
     const workOrders = await WorkOrder.find({
@@ -5053,7 +5134,7 @@ export const getPurchaseShortageList = async (req, res) => {
     }
 
     // =========================================================
-    // 2) UNIQUE DRAWING IDS
+    // 3) UNIQUE DRAWING IDS
     // =========================================================
 
     const drawingIds = [
@@ -5074,7 +5155,7 @@ export const getPurchaseShortageList = async (req, res) => {
       );
 
     // =========================================================
-    // 3) FETCH COSTING ITEMS
+    // 4) FETCH COSTING ITEMS
     // =========================================================
 
     const pickedMap = await buildPickedMap();
@@ -5102,21 +5183,23 @@ export const getPurchaseShortageList = async (req, res) => {
       return res.json({
         status: true,
         statusCode: 200,
-        message:
-          "No costing items found",
+        message: "No costing items found",
         data: [],
       });
     }
 
-
     // =========================================================
-    // PURCHASE ORDERS (EMAILED)
+    // 5) PURCHASE ORDERS
     // Reduce shortage by already ordered quantity
     // =========================================================
 
     const emailedPOs = await PurchaseOrders.find({
       status: {
-        $in: ["Emailed", "Acknowledged", "Partially Received"],
+        $in: [
+          "Emailed",
+          "Acknowledged",
+          "Partially Received",
+        ],
       },
     })
       .select("items status")
@@ -5147,21 +5230,23 @@ export const getPurchaseShortageList = async (req, res) => {
 
         poReservedMap.set(
           mpnId,
-          (poReservedMap.get(mpnId) || 0) + remainingQty
+          (poReservedMap.get(mpnId) || 0) +
+            remainingQty
         );
       }
     }
 
-
-    // console.log('------poReservedMap', poReservedMap)
     // =========================================================
-    // 4) FETCH ALL MPN LIBS
+    // 6) FETCH ALL MPN LIBS
     // =========================================================
 
     const mpnIds = [
       ...new Set(
         costingItems.map((ci) =>
-          String(ci?.mpn?._id || ci?.mpn)
+          String(
+            ci?.mpn?._id ||
+            ci?.mpn
+          )
         )
       ),
     ];
@@ -5176,7 +5261,9 @@ export const getPurchaseShortageList = async (req, res) => {
       );
 
     const mpnLibDocs = await MPN.find({
-      _id: { $in: mpnObjectIds },
+      _id: {
+        $in: mpnObjectIds,
+      },
     })
       .populate("UOM", "code name")
       .lean();
@@ -5189,19 +5276,23 @@ export const getPurchaseShortageList = async (req, res) => {
     );
 
     // =========================================================
-    // 5) FETCH INVENTORY
+    // 7) FETCH INVENTORY
     // IMPORTANT:
     // Inventory balanceQuantity ALWAYS IN METER
     // =========================================================
 
     const inventoryDocs =
       await Inventory.find({
-        mpnId: { $in: mpnObjectIds },
-        isDeleted: { $ne: true },
+        mpnId: {
+          $in: mpnObjectIds,
+        },
+        isDeleted: {
+          $ne: true,
+        },
       }).lean();
 
     // =========================================================
-    // 6) INVENTORY MAP
+    // 8) INVENTORY MAP
     // GLOBAL STOCK IN METER
     // =========================================================
 
@@ -5213,19 +5304,17 @@ export const getPurchaseShortageList = async (req, res) => {
       const current =
         inventoryMap.get(key) || 0;
 
-      // IMPORTANT:
-      // balanceQuantity already in METER
       inventoryMap.set(
         key,
         current +
-        Number(
-          inv.balanceQuantity || 0
-        )
+          Number(
+            inv.balanceQuantity || 0
+          )
       );
     }
 
     // =========================================================
-    // 7) MAP DRAWING => COSTING ITEMS
+    // 9) MAP DRAWING => COSTING ITEMS
     // =========================================================
 
     const costingByDrawing = new Map();
@@ -5238,11 +5327,14 @@ export const getPurchaseShortageList = async (req, res) => {
 
       arr.push(ci);
 
-      costingByDrawing.set(key, arr);
+      costingByDrawing.set(
+        key,
+        arr
+      );
     }
 
     // =========================================================
-    // 8) BUILD MPN REQUIREMENTS
+    // 10) BUILD MPN REQUIREMENTS
     // =========================================================
 
     const mpnUsagePerMpn = new Map();
@@ -5250,57 +5342,108 @@ export const getPurchaseShortageList = async (req, res) => {
     for (const wo of workOrders) {
       if (!wo.drawingId) continue;
 
-      const costingArr = costingByDrawing.get(String(wo.drawingId));
+      const costingArr =
+        costingByDrawing.get(
+          String(wo.drawingId)
+        );
+
       if (!costingArr?.length) continue;
 
       for (const ci of costingArr) {
         if (!ci.mpn) continue;
 
-        const mpnId = String(ci?.mpn?._id || ci.mpn);
-
-        const lib = mpnLibMap.get(mpnId);
-
-        const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code || "M";
-
-        const qtyInMeter = convertToBaseUOM(
-          Number(ci.quantity || 0),
-          fromUOM,
-          "M"
+        const mpnId = String(
+          ci?.mpn?._id ||
+          ci.mpn
         );
 
-        const totalRequired = qtyInMeter * Number(wo.quantity || 0);
+        const lib =
+          mpnLibMap.get(mpnId);
 
-        const key = `${wo._id}_${mpnId}`;
-        const pickedQty = Number(pickedMap.get(key) || 0);
+        const fromUOM =
+          ci?.uom?.code ||
+          ci?.mpn?.UOM?.code ||
+          "M";
 
-        // console.log('-------pickedQty', pickedQty)
-        const remainingRequired = Math.max(totalRequired - pickedQty, 0);
+        const qtyInMeter =
+          convertToBaseUOM(
+            Number(ci.quantity || 0),
+            fromUOM,
+            "M"
+          );
 
-        const existing = mpnUsagePerMpn.get(mpnId) || {
-          mpnId,
-          mpn: lib?.MPN || lib?.mpn || "",
-          description: lib?.description || ci?.description || "",
-          manufacturer: lib?.manufacturer || ci?.manufacturer || "",
-          suppliers: new Set(),
-          totalRequired: 0,
-          workOrders: [],
-        };
+        const totalRequired =
+          qtyInMeter *
+          Number(
+            wo.quantity || 0
+          );
 
-        existing.totalRequired += remainingRequired;
+        const key =
+          `${wo._id}_${mpnId}`;
+
+        const pickedQty =
+          Number(
+            pickedMap.get(key) || 0
+          );
+
+        const remainingRequired =
+          Math.max(
+            totalRequired -
+              pickedQty,
+            0
+          );
+
+        const existing =
+          mpnUsagePerMpn.get(
+            mpnId
+          ) || {
+            mpnId,
+            mpn:
+              lib?.MPN ||
+              lib?.mpn ||
+              "",
+            description:
+              lib?.description ||
+              ci?.description ||
+              "",
+            manufacturer:
+              lib?.manufacturer ||
+              ci?.manufacturer ||
+              "",
+            suppliers:
+              new Set(),
+            totalRequired: 0,
+            workOrders: [],
+          };
+
+        existing.totalRequired +=
+          remainingRequired;
 
         existing.workOrders.push({
-          workOrderId: wo._id,
-          workOrderNo: wo.workOrderNo || "",
-          needDate: wo.needDate || null,
-          requiredQty: remainingRequired,
+          workOrderId:
+            wo._id,
+
+          workOrderNo:
+            wo.workOrderNo ||
+            "",
+
+          needDate:
+            wo.needDate ||
+            null,
+
+          requiredQty:
+            remainingRequired,
         });
 
-        mpnUsagePerMpn.set(mpnId, existing);
+        mpnUsagePerMpn.set(
+          mpnId,
+          existing
+        );
       }
     }
 
     // =========================================================
-    // 9) FETCH SUPPLIERS
+    // 11) FETCH SUPPLIERS
     // =========================================================
 
     const supplierIds = [
@@ -5308,12 +5451,15 @@ export const getPurchaseShortageList = async (req, res) => {
         Array.from(
           mpnUsagePerMpn.values()
         ).flatMap((row) =>
-          Array.from(row.suppliers || [])
+          Array.from(
+            row.suppliers || []
+          )
         )
       ),
     ];
 
-    let supplierMap = new Map();
+    let supplierMap =
+      new Map();
 
     if (supplierIds.length) {
       const supplierDocs =
@@ -5322,81 +5468,174 @@ export const getPurchaseShortageList = async (req, res) => {
             $in: supplierIds,
           },
         })
-          .select("companyName")
+          .select(
+            "companyName"
+          )
           .lean();
 
-      supplierMap = new Map(
-        supplierDocs.map((s) => [
-          String(s._id),
-          s.companyName,
-        ])
-      );
+      supplierMap =
+        new Map(
+          supplierDocs.map(
+            (s) => [
+              String(s._id),
+              s.companyName,
+            ]
+          )
+        );
     }
 
     // =========================================================
-    // 10) FINAL SHORTAGE LIST
+    // 12) FINAL SHORTAGE LIST
     // =========================================================
 
     let list = [];
 
     for (const row of mpnUsagePerMpn.values()) {
-      // console.log('------row', row)
-      const mpnId = row.mpnId;
+      const mpnId =
+        row.mpnId;
 
-      const globalStock = Number(inventoryMap.get(mpnId) || 0);
+      const globalStock =
+        Number(
+          inventoryMap.get(
+            mpnId
+          ) || 0
+        );
 
-      const totalRequired = Number(row.totalRequired || 0);
+      const totalRequired =
+        Number(
+          row.totalRequired ||
+            0
+        );
 
-      const reservedPOQty = Number(poReservedMap.get(mpnId) || 0);
+      const reservedPOQty =
+        Number(
+          poReservedMap.get(
+            mpnId
+          ) || 0
+        );
 
-      // 🔥 FIXED SHORTAGE LOGIC (same as inventory API)
-      const effectiveRequired = totalRequired;
+      // =====================================================
+      // SHORTAGE CALCULATION
+      // =====================================================
 
-      const finalShortage = Math.max(
-        effectiveRequired - globalStock - reservedPOQty,
-        0
-      );
+      const effectiveRequired =
+        totalRequired;
 
-      if (finalShortage <= 0) continue;
+      const finalShortage =
+        Math.max(
+          effectiveRequired -
+            globalStock -
+            reservedPOQty,
+          0
+        );
 
-      const lib = mpnLibMap.get(mpnId);
-      const displayUOM = lib?.UOM?.code || "M";
+      if (finalShortage <= 0)
+        continue;
 
-      const shortageByWorkOrders = row.workOrders.map((wo) => ({
-        ...wo,
-        requiredQty: convertToBaseUOM(
-          Number(wo.requiredQty || 0),
-          "M",
-          displayUOM
-        ).toFixed(4),
-        shortageQty: convertToBaseUOM(
-          Math.max(Number(wo.requiredQty || 0), 0),
-          "M",
-          displayUOM
-        ).toFixed(4),
-      }));
+      const lib =
+        mpnLibMap.get(
+          mpnId
+        );
+
+      const displayUOM =
+        lib?.UOM?.code ||
+        "M";
+
+      // =====================================================
+      // WORK ORDER SHORTAGE DETAILS
+      // INCLUDING COLOR CODE
+      // =====================================================
+
+      const shortageByWorkOrders =
+        row.workOrders.map(
+          (wo) => ({
+            ...wo,
+
+            requiredQty:
+              convertToBaseUOM(
+                Number(
+                  wo.requiredQty ||
+                    0
+                ),
+                "M",
+                displayUOM
+              ).toFixed(4),
+
+            shortageQty:
+              convertToBaseUOM(
+                Math.max(
+                  Number(
+                    wo.requiredQty ||
+                      0
+                  ),
+                  0
+                ),
+                "M",
+                displayUOM
+              ).toFixed(4),
+
+            // ===============================================
+            // NEED DATE COLOR
+            // ===============================================
+
+            colorCode:
+              getNeedDateColor(
+                wo.needDate
+              ),
+          })
+        );
+
+      // =====================================================
+      // FINAL MPN ROW
+      // =====================================================
 
       list.push({
-        mpnId: row.mpnId,
-        mpn: row.mpn,
-        description: row.description,
-        manufacturer: row.manufacturer,
+        mpnId:
+          row.mpnId,
 
-        supplier: "", // same as your response (keep as is if already working)
+        mpn:
+          row.mpn,
+
+        description:
+          row.description,
+
+        manufacturer:
+          row.manufacturer,
+
+        supplier: "",
+
         supplierId: [],
 
-        uom: displayUOM,
+        uom:
+          displayUOM,
 
-        required: convertToBaseUOM(totalRequired, "M", displayUOM).toFixed(4),
-        currentStock: convertToBaseUOM(globalStock, "M", displayUOM).toFixed(4),
-        shortage: convertToBaseUOM(finalShortage, "M", displayUOM).toFixed(4),
+        required:
+          convertToBaseUOM(
+            totalRequired,
+            "M",
+            displayUOM
+          ).toFixed(4),
+
+        currentStock:
+          convertToBaseUOM(
+            globalStock,
+            "M",
+            displayUOM
+          ).toFixed(4),
+
+        shortage:
+          convertToBaseUOM(
+            finalShortage,
+            "M",
+            displayUOM
+          ).toFixed(4),
 
         shortageByWorkOrders,
       });
     }
 
     // =========================================================
-    // 11) FILTER MANUFACTURER
+    // 13) FILTER MANUFACTURER
     // =========================================================
 
     if (manufacturer) {
@@ -5405,32 +5644,38 @@ export const getPurchaseShortageList = async (req, res) => {
           .toString()
           .toLowerCase();
 
-      list = list.filter((x) =>
-        x.manufacturer
-          ?.toLowerCase()
-          ?.includes(lower)
-      );
+      list =
+        list.filter(
+          (x) =>
+            x.manufacturer
+              ?.toLowerCase()
+              ?.includes(
+                lower
+              )
+        );
     }
 
     // =========================================================
-    // 12) FILTER SUPPLIER
+    // 14) FILTER SUPPLIER
     // =========================================================
 
     if (supplier) {
       const lower =
         supplier.toString();
 
-      list = list.filter((x) =>
-        x.supplier
-          ?.toLowerCase()
-          ?.includes(
-            lower.toLowerCase()
-          )
-      );
+      list =
+        list.filter(
+          (x) =>
+            x.supplier
+              ?.toLowerCase()
+              ?.includes(
+                lower.toLowerCase()
+              )
+        );
     }
 
     // =========================================================
-    // 13) SORT BY SHORTAGE DESC
+    // 15) SORT BY SHORTAGE DESC
     // =========================================================
 
     list.sort(
@@ -5440,22 +5685,30 @@ export const getPurchaseShortageList = async (req, res) => {
     );
 
     // =========================================================
-    // 14) PAGINATION
+    // 16) PAGINATION
     // =========================================================
 
-    const totalItems = list.length;
+    const totalItems =
+      list.length;
 
-    const totalPages = Math.ceil(
-      totalItems / limit
-    );
+    const totalPages =
+      Math.ceil(
+        totalItems / limit
+      );
 
     const startIndex =
-      (page - 1) * limit;
+      (page - 1) *
+      limit;
 
-    const paginatedData = list.slice(
-      startIndex,
-      startIndex + limit
-    );
+    const paginatedData =
+      list.slice(
+        startIndex,
+        startIndex + limit
+      );
+
+    // =========================================================
+    // 17) RESPONSE
+    // =========================================================
 
     return res.json({
       status: true,
@@ -5465,12 +5718,18 @@ export const getPurchaseShortageList = async (req, res) => {
       message:
         "Purchase shortage list fetched successfully",
 
-      data: paginatedData,
+      data:
+        paginatedData,
 
       pagination: {
-        currentPage: page,
-        pageSize: limit,
+        currentPage:
+          page,
+
+        pageSize:
+          limit,
+
         totalItems,
+
         totalPages,
       },
     });
@@ -5482,11 +5741,478 @@ export const getPurchaseShortageList = async (req, res) => {
 
     return res.status(500).json({
       status: false,
-      message: error.message,
+      message:
+        error.message,
       data: [],
     });
   }
 };
+
+// export const getPurchaseShortageList = async (req, res) => {
+//   try {
+//     let {
+//       page = 1,
+//       limit = 10,
+//       manufacturer,
+//       supplier,
+//     } = req.query;
+
+//     page = parseInt(page, 10) || 1;
+//     limit = parseInt(limit, 10) || 10;
+
+//     // =========================================================
+//     // 1) FETCH WORK ORDERS
+//     // =========================================================
+
+//     const workOrders = await WorkOrder.find({
+//       isDeleted: { $ne: true },
+//       isProductionComplete: { $ne: true },
+//     }).lean();
+
+//     if (!workOrders.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message: "No work orders found",
+//         data: [],
+//       });
+//     }
+
+//     // =========================================================
+//     // 2) UNIQUE DRAWING IDS
+//     // =========================================================
+
+//     const drawingIds = [
+//       ...new Set(
+//         workOrders
+//           .filter((wo) => wo.drawingId)
+//           .map((wo) => String(wo.drawingId))
+//       ),
+//     ];
+
+//     const drawingObjectIds = drawingIds
+//       .filter((id) =>
+//         mongoose.Types.ObjectId.isValid(id)
+//       )
+//       .map(
+//         (id) =>
+//           new mongoose.Types.ObjectId(id)
+//       );
+
+//     // =========================================================
+//     // 3) FETCH COSTING ITEMS
+//     // =========================================================
+
+//     const pickedMap = await buildPickedMap();
+
+//     const costingItems =
+//       await CostingItems.find({
+//         drawingId: {
+//           $in: drawingObjectIds,
+//         },
+//         quoteType: "material",
+//       })
+//         .populate("uom", "code name")
+//         .populate({
+//           path: "mpn",
+//           select:
+//             "mpn mpnNumber MPN UOM manufacturer description",
+//           populate: {
+//             path: "UOM",
+//             select: "code name",
+//           },
+//         })
+//         .lean();
+
+//     if (!costingItems.length) {
+//       return res.json({
+//         status: true,
+//         statusCode: 200,
+//         message:
+//           "No costing items found",
+//         data: [],
+//       });
+//     }
+
+
+//     // =========================================================
+//     // PURCHASE ORDERS (EMAILED)
+//     // Reduce shortage by already ordered quantity
+//     // =========================================================
+
+//     const emailedPOs = await PurchaseOrders.find({
+//       status: {
+//         $in: ["Emailed", "Acknowledged", "Partially Received"],
+//       },
+//     })
+//       .select("items status")
+//       .populate("items.uom", "code")
+//       .lean();
+
+//     const poReservedMap = new Map();
+
+//     for (const po of emailedPOs) {
+//       for (const item of po.items || []) {
+//         if (!item?.mpn) continue;
+
+//         const mpnId = String(item.mpn);
+
+//         // Remaining quantity still expected on PO
+//         const rawRemainingQty =
+//           Number(item.qty || 0) -
+//           Number(item.receivedQtyTotal || 0);
+
+//         if (rawRemainingQty <= 0) continue;
+
+//         // Inventory is stored in Meter
+//         const remainingQty = convertToBaseUOM(
+//           rawRemainingQty,
+//           item?.uom?.code || "M",
+//           "M"
+//         );
+
+//         poReservedMap.set(
+//           mpnId,
+//           (poReservedMap.get(mpnId) || 0) + remainingQty
+//         );
+//       }
+//     }
+
+
+//     // console.log('------poReservedMap', poReservedMap)
+//     // =========================================================
+//     // 4) FETCH ALL MPN LIBS
+//     // =========================================================
+
+//     const mpnIds = [
+//       ...new Set(
+//         costingItems.map((ci) =>
+//           String(ci?.mpn?._id || ci?.mpn)
+//         )
+//       ),
+//     ];
+
+//     const mpnObjectIds = mpnIds
+//       .filter((id) =>
+//         mongoose.Types.ObjectId.isValid(id)
+//       )
+//       .map(
+//         (id) =>
+//           new mongoose.Types.ObjectId(id)
+//       );
+
+//     const mpnLibDocs = await MPN.find({
+//       _id: { $in: mpnObjectIds },
+//     })
+//       .populate("UOM", "code name")
+//       .lean();
+
+//     const mpnLibMap = new Map(
+//       mpnLibDocs.map((lib) => [
+//         String(lib._id),
+//         lib,
+//       ])
+//     );
+
+//     // =========================================================
+//     // 5) FETCH INVENTORY
+//     // IMPORTANT:
+//     // Inventory balanceQuantity ALWAYS IN METER
+//     // =========================================================
+
+//     const inventoryDocs =
+//       await Inventory.find({
+//         mpnId: { $in: mpnObjectIds },
+//         isDeleted: { $ne: true },
+//       }).lean();
+
+//     // =========================================================
+//     // 6) INVENTORY MAP
+//     // GLOBAL STOCK IN METER
+//     // =========================================================
+
+//     const inventoryMap = new Map();
+
+//     for (const inv of inventoryDocs) {
+//       const key = String(inv.mpnId);
+
+//       const current =
+//         inventoryMap.get(key) || 0;
+
+//       // IMPORTANT:
+//       // balanceQuantity already in METER
+//       inventoryMap.set(
+//         key,
+//         current +
+//         Number(
+//           inv.balanceQuantity || 0
+//         )
+//       );
+//     }
+
+//     // =========================================================
+//     // 7) MAP DRAWING => COSTING ITEMS
+//     // =========================================================
+
+//     const costingByDrawing = new Map();
+
+//     for (const ci of costingItems) {
+//       const key = String(ci.drawingId);
+
+//       const arr =
+//         costingByDrawing.get(key) || [];
+
+//       arr.push(ci);
+
+//       costingByDrawing.set(key, arr);
+//     }
+
+//     // =========================================================
+//     // 8) BUILD MPN REQUIREMENTS
+//     // =========================================================
+
+//     const mpnUsagePerMpn = new Map();
+
+//     for (const wo of workOrders) {
+//       if (!wo.drawingId) continue;
+
+//       const costingArr = costingByDrawing.get(String(wo.drawingId));
+//       if (!costingArr?.length) continue;
+
+//       for (const ci of costingArr) {
+//         if (!ci.mpn) continue;
+
+//         const mpnId = String(ci?.mpn?._id || ci.mpn);
+
+//         const lib = mpnLibMap.get(mpnId);
+
+//         const fromUOM = ci?.uom?.code || ci?.mpn?.UOM?.code || "M";
+
+//         const qtyInMeter = convertToBaseUOM(
+//           Number(ci.quantity || 0),
+//           fromUOM,
+//           "M"
+//         );
+
+//         const totalRequired = qtyInMeter * Number(wo.quantity || 0);
+
+//         const key = `${wo._id}_${mpnId}`;
+//         const pickedQty = Number(pickedMap.get(key) || 0);
+
+//         // console.log('-------pickedQty', pickedQty)
+//         const remainingRequired = Math.max(totalRequired - pickedQty, 0);
+
+//         const existing = mpnUsagePerMpn.get(mpnId) || {
+//           mpnId,
+//           mpn: lib?.MPN || lib?.mpn || "",
+//           description: lib?.description || ci?.description || "",
+//           manufacturer: lib?.manufacturer || ci?.manufacturer || "",
+//           suppliers: new Set(),
+//           totalRequired: 0,
+//           workOrders: [],
+//         };
+
+//         existing.totalRequired += remainingRequired;
+
+//         existing.workOrders.push({
+//           workOrderId: wo._id,
+//           workOrderNo: wo.workOrderNo || "",
+//           needDate: wo.needDate || null,
+//           requiredQty: remainingRequired,
+//         });
+
+//         mpnUsagePerMpn.set(mpnId, existing);
+//       }
+//     }
+
+//     // =========================================================
+//     // 9) FETCH SUPPLIERS
+//     // =========================================================
+
+//     const supplierIds = [
+//       ...new Set(
+//         Array.from(
+//           mpnUsagePerMpn.values()
+//         ).flatMap((row) =>
+//           Array.from(row.suppliers || [])
+//         )
+//       ),
+//     ];
+
+//     let supplierMap = new Map();
+
+//     if (supplierIds.length) {
+//       const supplierDocs =
+//         await Suppliers.find({
+//           _id: {
+//             $in: supplierIds,
+//           },
+//         })
+//           .select("companyName")
+//           .lean();
+
+//       supplierMap = new Map(
+//         supplierDocs.map((s) => [
+//           String(s._id),
+//           s.companyName,
+//         ])
+//       );
+//     }
+
+//     // =========================================================
+//     // 10) FINAL SHORTAGE LIST
+//     // =========================================================
+
+//     let list = [];
+
+//     for (const row of mpnUsagePerMpn.values()) {
+//       // console.log('------row', row)
+//       const mpnId = row.mpnId;
+
+//       const globalStock = Number(inventoryMap.get(mpnId) || 0);
+
+//       const totalRequired = Number(row.totalRequired || 0);
+
+//       const reservedPOQty = Number(poReservedMap.get(mpnId) || 0);
+
+//       // 🔥 FIXED SHORTAGE LOGIC (same as inventory API)
+//       const effectiveRequired = totalRequired;
+
+//       const finalShortage = Math.max(
+//         effectiveRequired - globalStock - reservedPOQty,
+//         0
+//       );
+
+//       if (finalShortage <= 0) continue;
+
+//       const lib = mpnLibMap.get(mpnId);
+//       const displayUOM = lib?.UOM?.code || "M";
+
+//       const shortageByWorkOrders = row.workOrders.map((wo) => ({
+//         ...wo,
+//         requiredQty: convertToBaseUOM(
+//           Number(wo.requiredQty || 0),
+//           "M",
+//           displayUOM
+//         ).toFixed(4),
+//         shortageQty: convertToBaseUOM(
+//           Math.max(Number(wo.requiredQty || 0), 0),
+//           "M",
+//           displayUOM
+//         ).toFixed(4),
+//       }));
+
+//       list.push({
+//         mpnId: row.mpnId,
+//         mpn: row.mpn,
+//         description: row.description,
+//         manufacturer: row.manufacturer,
+
+//         supplier: "", // same as your response (keep as is if already working)
+//         supplierId: [],
+
+//         uom: displayUOM,
+
+//         required: convertToBaseUOM(totalRequired, "M", displayUOM).toFixed(4),
+//         currentStock: convertToBaseUOM(globalStock, "M", displayUOM).toFixed(4),
+//         shortage: convertToBaseUOM(finalShortage, "M", displayUOM).toFixed(4),
+
+//         shortageByWorkOrders,
+//       });
+//     }
+
+//     // =========================================================
+//     // 11) FILTER MANUFACTURER
+//     // =========================================================
+
+//     if (manufacturer) {
+//       const lower =
+//         manufacturer
+//           .toString()
+//           .toLowerCase();
+
+//       list = list.filter((x) =>
+//         x.manufacturer
+//           ?.toLowerCase()
+//           ?.includes(lower)
+//       );
+//     }
+
+//     // =========================================================
+//     // 12) FILTER SUPPLIER
+//     // =========================================================
+
+//     if (supplier) {
+//       const lower =
+//         supplier.toString();
+
+//       list = list.filter((x) =>
+//         x.supplier
+//           ?.toLowerCase()
+//           ?.includes(
+//             lower.toLowerCase()
+//           )
+//       );
+//     }
+
+//     // =========================================================
+//     // 13) SORT BY SHORTAGE DESC
+//     // =========================================================
+
+//     list.sort(
+//       (a, b) =>
+//         Number(b.shortage) -
+//         Number(a.shortage)
+//     );
+
+//     // =========================================================
+//     // 14) PAGINATION
+//     // =========================================================
+
+//     const totalItems = list.length;
+
+//     const totalPages = Math.ceil(
+//       totalItems / limit
+//     );
+
+//     const startIndex =
+//       (page - 1) * limit;
+
+//     const paginatedData = list.slice(
+//       startIndex,
+//       startIndex + limit
+//     );
+
+//     return res.json({
+//       status: true,
+
+//       statusCode: 200,
+
+//       message:
+//         "Purchase shortage list fetched successfully",
+
+//       data: paginatedData,
+
+//       pagination: {
+//         currentPage: page,
+//         pageSize: limit,
+//         totalItems,
+//         totalPages,
+//       },
+//     });
+//   } catch (error) {
+//     console.error(
+//       "getPurchaseShortageList error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       status: false,
+//       message: error.message,
+//       data: [],
+//     });
+//   }
+// };
 
 
 // export const getPurchaseShortageList = async (req, res) => {

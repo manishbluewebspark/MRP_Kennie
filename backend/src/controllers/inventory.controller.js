@@ -84,6 +84,7 @@ const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
 async function buildDemandMap() {
   const workOrders = await WorkOrder.find({
     isProductionComplete: false,
+    isInProduction:true
   })
     .select("_id drawingId quantity")
     .lean();
@@ -148,6 +149,7 @@ async function buildDemandMap() {
 export const buildLowStockDemandMap = async () => {
   const workOrders = await WorkOrder.find({
     isProductionComplete: false,
+    isInProduction:true
   })
     .select("_id drawingId workOrderNo quantity needDate")
     .lean();
@@ -268,6 +270,7 @@ export const buildLowStockDemandMap = async () => {
 const buildPickedMap = async () => {
   const workOrders = await WorkOrder.find({
     isProductionComplete: false,
+    isInProduction:true
   }).lean();
 
   const pickedMap = new Map();
@@ -610,7 +613,7 @@ export const getInventoryList = async (req, res) => {
         UOM: mpnData?.UOM?.code || "",
 
         balanceQuantity: balanceQty.toFixed(6),
-        IncomingQty: incomingQty,
+        IncomingQty: incomingQty ? incomingQty.toFixed(3) : 0,
         DemandQty: effectiveDemand,
         PickedQty: pickedQty,
         EffectiveDemandQty: effectiveDemand,
@@ -641,7 +644,11 @@ export const getInventoryList = async (req, res) => {
     if (view === "shortage") transformedData = transformedData.filter((x) => x.NetQty < 0);   // negative only
     if (view === "incoming") transformedData = transformedData.filter((x) => x.IncomingQty > 0);
     if (view === "low") transformedData = transformedData.filter((x) => x.NetQty >= 0);      // zero or positive
-
+if (view === "demand") {
+  transformedData = transformedData.filter(
+    (x) => x.EffectiveDemandQty > 0
+  );
+}
 
     // ✅ FIX: total should match returned data set
     if (isViewFiltered) {
@@ -1113,9 +1120,13 @@ export const getLowStockAlerts = async (req, res) => {
           // console.log('------demandMap------', demandMap.get(mpnId))
           const demandRows = demandMap.get(mpnId) || [];
 
-          if (!demandRows.length) {
-            return null;
-          }
+          // if (!demandRows.length) {
+          //   return null;
+          // }
+
+          if (!demandRows.length && currentStock > 0) {
+  return null;
+}
 
           const incomingQty = Number(
             poMap.get(mpnId) || 0

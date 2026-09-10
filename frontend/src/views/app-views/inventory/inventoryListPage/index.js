@@ -655,6 +655,7 @@ const InventoryListPage = () => {
       placeholder: "Select filter",
       options: [
         { label: "All", value: "all" },
+        { label: "Show Demand Qty Only", value: "demand" },
         { label: "Show Shortage Only", value: "shortage" },
         { label: "Show Incoming Qty Only", value: "incoming" },
         { label: "Show Low Stock Only", value: "low" }, // optional

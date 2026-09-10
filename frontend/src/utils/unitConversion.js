@@ -109,7 +109,7 @@ export const fromMeter = (meterQty, toUom) => {
     return Number(meterQty);
   }
 
-  return Number((Number(meterQty) / factor).toFixed(4));
+  return Number((Number(meterQty) / factor).toFixed(3));
 };
 
 /* ============================

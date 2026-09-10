@@ -304,12 +304,12 @@ const ProductionPage = () => {
         //     key: "posNumber",
         //     render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
         // },
-        // {
-        //     title: "Qty",
-        //     dataIndex: "qty",
-        //     key: "qty",
-        //     render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
-        // },
+        {
+            title: "Order Qty",
+            dataIndex: "quantity",
+            key: "quantity",
+            render: (text) => <span style={{ fontSize: '13px', color: '#666' }}>{text}</span>
+        },
         {
             title: "Need Date",
             dataIndex: "needDate",

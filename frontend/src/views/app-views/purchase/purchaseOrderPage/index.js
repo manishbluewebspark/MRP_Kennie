@@ -804,50 +804,65 @@ const PurchaseOrderPage = () => {
                             flexWrap: "wrap",
                         }}
                     >
-                        {shortList.map((s, idx) => (
-                            <div
-                                key={idx}
-                                style={{
-                                    padding: "6px 10px",
-                                    borderRadius: 8,
-                                    background: "#FFF",
-                                    border: "1px dashed #F5D0D0",
-                                    display: "flex",
-                                    gap: 10,
-                                    alignItems: "center",
-                                }}
-                            >
-                                <div>
-                                    <div style={{ fontSize: 11, fontWeight: 800, color: "green" }}>
-                                        {s.label || `Demand#${idx + 1}`}
-                                    </div>
-                                    <div style={{ fontSize: 10, color: "#6B7280" }}>
-                                        {fmtDate(s.needDate)}
-                                    </div>
-                                </div>
+                      {shortList.map((s, idx) => (
+    <div
+        key={idx}
+        style={{
+            padding: "6px 10px",
+            borderRadius: 8,
+            background: "#FFF",
 
-                                <div
-                                    style={{
-                                        fontSize: 12,
-                                        fontWeight: 800,
-                                        color: "green",
-                                    }}
-                                >
-                                    {s.shortageQty}
-                                </div>
+            // 👇 Work order ki need-date ke according border
+            border: `4px dashed ${s.colorCode || "#F5D0D0"}`,
 
-                                <div
-                                    style={{
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                        whiteSpace: "nowrap",
-                                    }}
-                                    title={s.workOrderNo}
-                                >
-                                    {s.workOrderNo}
-                                </div>
-                            </div>
-                        ))}
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+        }}
+    >
+        <div>
+            <div
+                style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: s.colorCode || "green",
+                }}
+            >
+                {s.label || `Demand#${idx + 1}`}
+            </div>
+
+            <div
+                style={{
+                    fontSize: 10,
+                    color: "#6B7280",
+                }}
+            >
+                {fmtDate(s.needDate)}
+            </div>
+        </div>
+
+        <div
+            style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: s.colorCode || "green",
+            }}
+        >
+            {s.shortageQty}
+        </div>
+
+        <div
+            style={{
+                fontSize: 11,
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+            }}
+            title={s.workOrderNo}
+        >
+            {s.workOrderNo}
+        </div>
+    </div>
+))}
                     </div>
                 )}
             </div>

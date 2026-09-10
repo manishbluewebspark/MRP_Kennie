@@ -8,9 +8,13 @@
   return `${dd}/${mm}/${yyyy}`;
   };
 
- const money = (value) => {
+const money = (value) => {
   const amount = Number(value || 0);
-  return (Math.round((amount + 1e-9) * 100) / 100).toFixed(2);
+
+  return amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 };
 
   const poNo = po?.poNumber || "-";
@@ -438,13 +442,13 @@
                       <%= it?.uomText || it?.uom?.code || "-" %>
                     </td>
                     <td class="num">
-                      <%= money(it?.unitPrice) %>
+                <%= money(it?.unitPrice) %>
                     </td>
                     <!-- <td class="num">
                       <%= Number(it?.discount || 0).toFixed(2) %>
                     </td> -->
                     <td class="num">
-                      <%= Number(it?.extPrice || 0).toFixed(2) %>
+                      <%= money(it?.extPrice) %>
                     </td>
                     </td>
                   </tr>
