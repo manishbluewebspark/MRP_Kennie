@@ -813,7 +813,7 @@ const PurchaseOrderPage = () => {
             background: "#FFF",
 
             // 👇 Work order ki need-date ke according border
-            border: `4px dashed ${s.colorCode || "#F5D0D0"}`,
+            border: `1px dashed ${s.colorCode || "#F5D0D0"}`,
 
             display: "flex",
             gap: 10,
