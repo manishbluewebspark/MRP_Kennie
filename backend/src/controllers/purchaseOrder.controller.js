@@ -4993,21 +4993,25 @@ const buildPickedMap = (workOrders = []) => {
     const woId = String(wo._id);
 
     for (const ph of wo.processHistory || []) {
-      if (ph.process !== "picking") continue;
+      if (
+        String(ph?.process || "").toLowerCase() !== "picking"
+      ) {
+        continue;
+      }
 
       for (const d of ph.details || []) {
-        const mpnId = String(d.mpnId || "");
+        const mpnId = String(d?.mpnId || "");
 
         if (!mpnId) continue;
 
-        const rawQty = Number(d.pickedQty || 0);
+        const pickedQty = Number(d?.pickedQty || 0);
 
-        if (rawQty <= 0) continue;
+        if (pickedQty <= 0) continue;
 
-        const fromUOM = d.uom || "M";
+        const fromUOM = d?.uom || "M";
 
         const qtyInMeter = convertToBaseUOM(
-          rawQty,
+          pickedQty,
           fromUOM,
           "M"
         );
@@ -5016,14 +5020,269 @@ const buildPickedMap = (workOrders = []) => {
 
         pickedMap.set(
           key,
-          (pickedMap.get(key) || 0) + qtyInMeter
+          Number(
+            (
+              Number(pickedMap.get(key) || 0) +
+              qtyInMeter
+            ).toFixed(6)
+          )
         );
+
+        console.log("PICKED FOUND:", {
+          workOrderId: woId,
+          workOrderNo: wo.workOrderNo,
+          mpnId,
+          pickedQty,
+          fromUOM,
+          qtyInMeter,
+          key,
+        });
       }
     }
   }
 
+  console.log(
+    "================ PICKED MAP ================"
+  );
+
+  console.log(
+    Array.from(pickedMap.entries())
+  );
+
+  console.log(
+    "============================================="
+  );
+
   return pickedMap;
 };
+
+async function buildDemandMap(workOrders = []) {
+  if (!workOrders.length) {
+    return {
+      demandMap: new Map(),
+      demandDetailsMap: new Map(),
+    };
+  }
+
+  const drawingIds = [
+    ...new Set(
+      workOrders
+        .filter((wo) => wo.drawingId)
+        .map((wo) => String(wo.drawingId))
+    ),
+  ];
+
+  if (!drawingIds.length) {
+    return {
+      demandMap: new Map(),
+      demandDetailsMap: new Map(),
+    };
+  }
+
+  const costingItems = await CostingItems.find({
+    drawingId: {
+      $in: drawingIds,
+    },
+    quoteType: "material",
+  })
+    .populate({
+      path: "mpn",
+      populate: {
+        path: "UOM",
+        select: "code name",
+      },
+    })
+    .populate("uom", "code name")
+    .lean();
+
+  if (!costingItems.length) {
+    return {
+      demandMap: new Map(),
+      demandDetailsMap: new Map(),
+    };
+  }
+
+  const costingByDrawing = new Map();
+
+  for (const ci of costingItems) {
+    if (!ci.drawingId) continue;
+
+    const drawingId = String(ci.drawingId);
+
+    if (!costingByDrawing.has(drawingId)) {
+      costingByDrawing.set(drawingId, []);
+    }
+
+    costingByDrawing
+      .get(drawingId)
+      .push(ci);
+  }
+
+  // IMPORTANT:
+  // Picked quantity is calculated PER WORK ORDER + MPN
+  const pickedMap = buildPickedMap(workOrders);
+
+  const demandMap = new Map();
+  const demandDetailsMap = new Map();
+
+  for (const wo of workOrders) {
+    if (!wo.drawingId) continue;
+
+    const drawingId = String(wo.drawingId);
+
+    const costingArr =
+      costingByDrawing.get(drawingId);
+
+    if (!costingArr?.length) continue;
+
+    for (const ci of costingArr) {
+      if (!ci.mpn) continue;
+
+      const mpnId = String(
+        ci?.mpn?._id || ci.mpn
+      );
+
+      if (!mpnId) continue;
+
+      // ==============================================
+      // COSTING QTY -> METER
+      // ==============================================
+
+      const fromUOM =
+        ci?.uom?.code ||
+        ci?.mpn?.UOM?.code ||
+        "M";
+
+      const qtyInMeter =
+        convertToBaseUOM(
+          Number(ci.quantity || 0),
+          fromUOM,
+          "M"
+        );
+
+      // ==============================================
+      // ORIGINAL REQUIREMENT FOR THIS WO
+      // ==============================================
+
+      const originalRequired =
+        qtyInMeter *
+        Number(wo.quantity || 0);
+
+      if (originalRequired <= 0) {
+        continue;
+      }
+
+      // ==============================================
+      // PICKED FOR THIS EXACT WO + MPN
+      // ==============================================
+
+      const pickedKey =
+        `${String(wo._id)}_${mpnId}`;
+
+      const pickedQty =
+        Number(
+          pickedMap.get(pickedKey) || 0
+        );
+
+      // ==============================================
+      // REMAINING REQUIREMENT
+      // ==============================================
+
+      const remainingDemand =
+        Math.max(
+          originalRequired -
+            pickedQty,
+          0
+        );
+
+      console.log(
+        "DEMAND CALCULATION:",
+        {
+          workOrderNo:
+            wo.workOrderNo,
+
+          workOrderId:
+            String(wo._id),
+
+          mpnId,
+
+          originalRequired,
+
+          pickedQty,
+
+          remainingDemand,
+
+          pickedKey,
+        }
+      );
+
+      // ==============================================
+      // TOTAL DEMAND FOR MPN
+      // ==============================================
+
+      if (remainingDemand > 0) {
+        const previousDemand =
+          Number(
+            demandMap.get(mpnId) || 0
+          );
+
+        demandMap.set(
+          mpnId,
+          Number(
+            (
+              previousDemand +
+              remainingDemand
+            ).toFixed(6)
+          )
+        );
+      }
+
+      // ==============================================
+      // WORK ORDER DETAILS
+      // ==============================================
+
+      if (!demandDetailsMap.has(mpnId)) {
+        demandDetailsMap.set(
+          mpnId,
+          []
+        );
+      }
+
+      demandDetailsMap
+        .get(mpnId)
+        .push({
+          workOrderId:
+            wo._id,
+
+          workOrderNo:
+            wo.workOrderNo || "",
+
+          needDate:
+            wo.needDate || null,
+
+          originalRequired:
+            Number(
+              originalRequired.toFixed(6)
+            ),
+
+          pickedQty:
+            Number(
+              pickedQty.toFixed(6)
+            ),
+
+          requiredQty:
+            Number(
+              remainingDemand.toFixed(6)
+            ),
+        });
+    }
+  }
+
+  return {
+    demandMap,
+    demandDetailsMap,
+  };
+}
 
 // const buildPickedMap = async () => {
 //   const workOrders = await WorkOrder.find({
@@ -5156,12 +5415,22 @@ export const getPurchaseShortageList = async (req, res) => {
     // =========================================================
     // 2) FETCH WORK ORDERS
     // =========================================================
-
     const workOrders = await WorkOrder.find({
       isDeleted: { $ne: true },
       isProductionComplete: { $ne: true },
-      isInProduction: true,
-      status: "Picking In Progress",
+
+      $or: [
+        // Production me hai → status Picking In Progress hona chahiye
+        {
+          isInProduction: true,
+          status: "Picking In Progress",
+        },
+
+        // Production me nahi hai → status kuch bhi ho sakta hai
+        {
+          isInProduction: { $ne: true },
+        },
+      ],
     }).lean();
 
     if (!workOrders.length) {
@@ -5199,7 +5468,10 @@ export const getPurchaseShortageList = async (req, res) => {
     // =========================================================
 
     const pickedMap = await buildPickedMap(workOrders);
-
+    const {
+      demandMap,
+      demandDetailsMap,
+    } = await buildDemandMap(workOrders);
     const costingItems =
       await CostingItems.find({
         drawingId: {
@@ -5281,14 +5553,18 @@ export const getPurchaseShortageList = async (req, res) => {
     // =========================================================
 
     const mpnIds = [
-      ...new Set(
-        costingItems.map((ci) =>
-          String(
-            ci?.mpn?._id ||
-            ci?.mpn
-          )
-        )
-      ),
+      ...new Set([
+        ...costingItems
+          .filter((ci) => ci?.mpn)
+          .map((ci) =>
+            String(
+              ci?.mpn?._id ||
+              ci.mpn
+            )
+          ),
+
+        ...demandMap.keys(),
+      ]),
     ];
 
     const mpnObjectIds = mpnIds
@@ -5377,109 +5653,72 @@ export const getPurchaseShortageList = async (req, res) => {
     // 10) BUILD MPN REQUIREMENTS
     // =========================================================
 
+    // =========================================================
+    // 10) BUILD MPN REQUIREMENTS FROM DEMAND MAP
+    // =========================================================
+
     const mpnUsagePerMpn = new Map();
 
-    for (const wo of workOrders) {
-      if (!wo.drawingId) continue;
+    for (const [
+      mpnId,
+      totalDemand,
+    ] of demandMap.entries()) {
+      if (totalDemand <= 0) continue;
 
-      const costingArr =
-        costingByDrawing.get(
-          String(wo.drawingId)
+      const lib =
+        mpnLibMap.get(mpnId);
+
+      // Find costing item for fallback description/manufacturer
+      const costingItem =
+        costingItems.find(
+          (ci) =>
+            String(
+              ci?.mpn?._id ||
+              ci?.mpn
+            ) === mpnId
         );
 
-      if (!costingArr?.length) continue;
+      const workOrdersForMpn =
+        demandDetailsMap.get(
+          mpnId
+        ) || [];
 
-      for (const ci of costingArr) {
-        if (!ci.mpn) continue;
+      mpnUsagePerMpn.set(
+        mpnId,
+        {
+          mpnId,
 
-        const mpnId = String(
-          ci?.mpn?._id ||
-          ci.mpn
-        );
-
-        const lib =
-          mpnLibMap.get(mpnId);
-
-        const fromUOM =
-          ci?.uom?.code ||
-          ci?.mpn?.UOM?.code ||
-          "M";
-
-        const qtyInMeter =
-          convertToBaseUOM(
-            Number(ci.quantity || 0),
-            fromUOM,
-            "M"
-          );
-
-        const totalRequired =
-          qtyInMeter *
-          Number(
-            wo.quantity || 0
-          );
-
-        const key =
-          `${wo._id}_${mpnId}`;
-
-        const pickedQty =
-          Number(
-            pickedMap.get(key) || 0
-          );
-
-        const remainingRequired =
-          Math.max(
-            totalRequired -
-            pickedQty,
-            0
-          );
-
-        const existing =
-          mpnUsagePerMpn.get(
-            mpnId
-          ) || {
-            mpnId,
-            mpn:
-              lib?.MPN ||
-              lib?.mpn ||
-              "",
-            description:
-              lib?.description ||
-              ci?.description ||
-              "",
-            manufacturer:
-              lib?.manufacturer ||
-              ci?.manufacturer ||
-              "",
-            suppliers:
-              new Set(),
-            totalRequired: 0,
-            workOrders: [],
-          };
-
-        existing.totalRequired +=
-          remainingRequired;
-
-        existing.workOrders.push({
-          workOrderId:
-            wo._id,
-
-          workOrderNo:
-            wo.workOrderNo ||
+          mpn:
+            lib?.MPN ||
+            lib?.mpn ||
+            costingItem?.mpn?.MPN ||
+            costingItem?.mpn?.mpn ||
             "",
 
-          needDate:
-            wo.needDate ||
-            null,
+          description:
+            lib?.description ||
+            costingItem?.description ||
+            "",
 
-          requiredQty:
-            remainingRequired,
-        });
+          manufacturer:
+            lib?.manufacturer ||
+            costingItem?.manufacturer ||
+            "",
 
-        mpnUsagePerMpn.set(
-          mpnId,
-          existing
-        );
-      }
+          suppliers:
+            new Set(),
+
+          // IMPORTANT:
+          // This is already AFTER picked deduction
+          totalRequired:
+            Number(
+              totalDemand.toFixed(6)
+            ),
+
+          workOrders:
+            workOrdersForMpn,
+        }
+      );
     }
 
     // =========================================================
@@ -5543,74 +5782,25 @@ export const getPurchaseShortageList = async (req, res) => {
 
       const totalRequired =
         Number(
-          row.totalRequired ||
-          0
+          demandMap.get(mpnId) || 0
         );
 
       const reservedPOQty =
         Number(
-          poReservedMap.get(
-            mpnId
-          ) || 0
+          poReservedMap.get(mpnId) || 0
         );
-
-      // =====================================================
-      // SHORTAGE CALCULATION
-      // =====================================================
-
-      const effectiveRequired =
-        totalRequired;
-
-
-      console.log("========================================");
-      console.log("PURCHASE SHORTAGE DEBUG");
-
-      for (const wo of workOrders) {
-        console.log("WO:", {
-          id: String(wo._id),
-          workOrderNo: wo.workOrderNo,
-          status: wo.status,
-          isInProduction: wo.isInProduction,
-          isProductionComplete: wo.isProductionComplete,
-          quantity: wo.quantity,
-          drawingId: String(wo.drawingId),
-        });
-      }
-
-      console.log(
-        "MPN USAGE:",
-        Array.from(mpnUsagePerMpn.values()).map((x) => ({
-          mpnId: x.mpnId,
-          mpn: x.mpn,
-          totalRequired: x.totalRequired,
-          workOrders: x.workOrders,
-        }))
-      );
-
-      console.log(
-        "INVENTORY:",
-        Array.from(inventoryMap.entries())
-      );
-
-      console.log(
-        "PO RESERVED:",
-        Array.from(poReservedMap.entries())
-      );
 
       const finalShortage =
         Math.max(
-          effectiveRequired -
+          totalRequired -
           globalStock -
           reservedPOQty,
           0
         );
-
       if (finalShortage <= 0)
         continue;
 
-      if (effectiveRequired <= 0) {
-        continue;
-      }
+
 
       const lib =
         mpnLibMap.get(

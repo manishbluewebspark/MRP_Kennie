@@ -82,19 +82,30 @@ const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
 // }
 
 async function buildDemandMap() {
-  // const workOrders = await WorkOrder.find({
-  //   isProductionComplete: false,
-  //   isInProduction: true
-  // })
-  //   .select("_id drawingId quantity")
-  //   .lean();
-
   const workOrders = await WorkOrder.find({
     isDeleted: { $ne: true },
     isProductionComplete: { $ne: true },
-    isInProduction: true,
-    status: "Picking In Progress",
-  }).select("_id drawingId quantity").lean();
+
+    $or: [
+      // Production me hai → status Picking In Progress hona chahiye
+      {
+        isInProduction: true,
+        status: "Picking In Progress",
+      },
+
+      // Production me nahi hai → status kuch bhi ho sakta hai
+      {
+        isInProduction: { $ne: true },
+      },
+    ],
+  }).lean();
+
+  // const workOrders = await WorkOrder.find({
+  //   isDeleted: { $ne: true },
+  //   isProductionComplete: { $ne: true },
+  //   isInProduction: true,
+  //   status: "Picking In Progress",
+  // }).select("_id drawingId quantity").lean();
 
   if (!workOrders.length) return new Map();
 
