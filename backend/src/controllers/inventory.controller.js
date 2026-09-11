@@ -82,12 +82,19 @@ const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
 // }
 
 async function buildDemandMap() {
+  // const workOrders = await WorkOrder.find({
+  //   isProductionComplete: false,
+  //   isInProduction: true
+  // })
+  //   .select("_id drawingId quantity")
+  //   .lean();
+
   const workOrders = await WorkOrder.find({
-    isProductionComplete: false,
-    isInProduction:true
-  })
-    .select("_id drawingId quantity")
-    .lean();
+    isDeleted: { $ne: true },
+    isProductionComplete: { $ne: true },
+    isInProduction: true,
+    status: "Picking In Progress",
+  }).select("_id drawingId quantity").lean();
 
   if (!workOrders.length) return new Map();
 
@@ -149,7 +156,7 @@ async function buildDemandMap() {
 export const buildLowStockDemandMap = async () => {
   const workOrders = await WorkOrder.find({
     isProductionComplete: false,
-    isInProduction:true
+    isInProduction: true
   })
     .select("_id drawingId workOrderNo quantity needDate")
     .lean();
@@ -268,9 +275,16 @@ export const buildLowStockDemandMap = async () => {
 };
 
 const buildPickedMap = async () => {
+  // const workOrders = await WorkOrder.find({
+  //   isProductionComplete: false,
+  //   isInProduction: true
+  // }).lean();
+
   const workOrders = await WorkOrder.find({
-    isProductionComplete: false,
-    isInProduction:true
+    isDeleted: { $ne: true },
+    isProductionComplete: { $ne: true },
+    isInProduction: true,
+    status: "Picking In Progress",
   }).lean();
 
   const pickedMap = new Map();
@@ -641,14 +655,22 @@ export const getInventoryList = async (req, res) => {
 
 
     // ✅ view filters
-    if (view === "shortage") transformedData = transformedData.filter((x) => x.NetQty < 0);   // negative only
+    if (view === "shortage") {
+      transformedData = transformedData.filter((x) => x.NetQty < 0);
+    }
+
+    if (view === "low") {
+      transformedData = transformedData.filter(
+        (x) => x.NetQty >= 0 && x.NetQty <= 10
+      );
+    }
     if (view === "incoming") transformedData = transformedData.filter((x) => x.IncomingQty > 0);
-    if (view === "low") transformedData = transformedData.filter((x) => x.NetQty >= 0);      // zero or positive
-if (view === "demand") {
-  transformedData = transformedData.filter(
-    (x) => x.EffectiveDemandQty > 0
-  );
-}
+
+    if (view === "demand") {
+      transformedData = transformedData.filter(
+        (x) => x.EffectiveDemandQty > 0
+      );
+    }
 
     // ✅ FIX: total should match returned data set
     if (isViewFiltered) {
@@ -1008,15 +1030,15 @@ export const getLowStockAlerts = async (req, res) => {
 
     const pendingPOs = await PurchaseOrders.find({
       $or: [
-      {
-        status: {
-          $in: ["Emailed", "Acknowledged"],
+        {
+          status: {
+            $in: ["Emailed", "Acknowledged"],
+          },
         },
-      },
-      {
-        partiallyReceived: true,
-      },
-    ],
+        {
+          partiallyReceived: true,
+        },
+      ],
       "items.mpn": { $in: mpnIdsOnList },
     })
       .select(
@@ -1125,8 +1147,8 @@ export const getLowStockAlerts = async (req, res) => {
           // }
 
           if (!demandRows.length && currentStock > 0) {
-  return null;
-}
+            return null;
+          }
 
           const incomingQty = Number(
             poMap.get(mpnId) || 0
@@ -1489,15 +1511,15 @@ export const exportExcel = async (req, res) => {
     if (mpnIds.length) {
       pendingPOs = await PurchaseOrders.find({
         $or: [
-      {
-        status: {
-          $in: ["Pending", "Approved"],
-        },
-      },
-      {
-        partiallyReceived: true,
-      },
-    ],
+          {
+            status: {
+              $in: ["Pending", "Approved"],
+            },
+          },
+          {
+            partiallyReceived: true,
+          },
+        ],
         "items.mpn": { $in: mpnIds },
       })
         .select("poNumber supplier items.mpn items.qty items.receivedQty items.commitDate items.needDate status createdAt updatedAt")
@@ -1779,15 +1801,15 @@ export const exportInventoryListExcel = async (req, res) => {
     if (mpnIdsOnList.length) {
       pendingPOs = await PurchaseOrders.find({
         $or: [
-      {
-        status: {
-          $in: ["Pending", "Approved"],
-        },
-      },
-      {
-        partiallyReceived: true,
-      },
-    ],
+          {
+            status: {
+              $in: ["Pending", "Approved"],
+            },
+          },
+          {
+            partiallyReceived: true,
+          },
+        ],
         "items.mpn": { $in: mpnIdsOnList },
       })
         .select("poNumber items.mpn items.qty items.receivedQty items.commitDate")

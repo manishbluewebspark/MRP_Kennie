@@ -428,9 +428,9 @@ export const updatePurchaseOrder = async (req, res) => {
         po.items.findIndex(
           (it) =>
             String(it.idNumber).trim() ===
-              String(data.idNumber).trim() &&
+            String(data.idNumber).trim() &&
             String(it.mpn) ===
-              String(data.mpn)
+            String(data.mpn)
         );
 
       if (idx === -1) {
@@ -575,7 +575,7 @@ export const updatePurchaseOrder = async (req, res) => {
 
         discount: num(
           item.discount ??
-            item.discPercentage
+          item.discPercentage
         ),
 
         extPrice: num(
@@ -772,8 +772,8 @@ export const updatePurchaseOrder = async (req, res) => {
       const maxHistoryRevision =
         historyRevisionNumbers.length
           ? Math.max(
-              ...historyRevisionNumbers
-            )
+            ...historyRevisionNumbers
+          )
           : 0;
 
       revisionNo =
@@ -796,7 +796,7 @@ export const updatePurchaseOrder = async (req, res) => {
       const basePoNumber =
         String(
           existingPO.poNumber ||
-            ""
+          ""
         ).replace(
           /R\d+$/i,
           ""
@@ -870,10 +870,10 @@ export const updatePurchaseOrder = async (req, res) => {
     const inventories =
       mpnIds.length
         ? await Inventory.find({
-            mpnId: {
-              $in: mpnIds,
-            },
-          }).lean()
+          mpnId: {
+            $in: mpnIds,
+          },
+        }).lean()
         : [];
 
     const inventoryMap =
@@ -914,7 +914,7 @@ export const updatePurchaseOrder = async (req, res) => {
           const discount =
             num(
               item.discount ??
-                item.discPercentage
+              item.discPercentage
             );
 
           const extPrice =
@@ -923,7 +923,7 @@ export const updatePurchaseOrder = async (req, res) => {
             (
               1 -
               discount /
-                100
+              100
             );
 
           // ===================================================
@@ -942,9 +942,9 @@ export const updatePurchaseOrder = async (req, res) => {
                   String(
                     old._id
                   ) ===
-                    String(
-                      item._id
-                    )
+                  String(
+                    item._id
+                  )
                 ) {
                   return true;
                 }
@@ -953,11 +953,11 @@ export const updatePurchaseOrder = async (req, res) => {
                   item.idNumber &&
                   String(
                     old.idNumber ||
-                      ""
+                    ""
                   ) ===
-                    String(
-                      item.idNumber
-                    )
+                  String(
+                    item.idNumber
+                  )
                 ) {
                   return true;
                 }
@@ -982,8 +982,8 @@ export const updatePurchaseOrder = async (req, res) => {
               ? oldItem.toObject
                 ? oldItem.toObject()
                 : {
-                    ...oldItem,
-                  }
+                  ...oldItem,
+                }
               : {};
 
           // ===================================================
@@ -1064,9 +1064,8 @@ export const updatePurchaseOrder = async (req, res) => {
                 qty
               ) {
                 throw new Error(
-                  `${
-                    item.description ||
-                    item.mpn
+                  `${item.description ||
+                  item.mpn
                   }: Qty cannot be reduced below already received quantity (${receivedQtyTotal})`
                 );
               }
@@ -1080,10 +1079,10 @@ export const updatePurchaseOrder = async (req, res) => {
           const pendingQty =
             Math.max(
               qty -
-                (
-                  receivedQtyTotal +
-                  rejectedQtyTotal
-                ),
+              (
+                receivedQtyTotal +
+                rejectedQtyTotal
+              ),
               0
             );
 
@@ -1149,9 +1148,9 @@ export const updatePurchaseOrder = async (req, res) => {
 
             ...(oldItemData._id
               ? {
-                  _id:
-                    oldItemData._id,
-                }
+                _id:
+                  oldItemData._id,
+              }
               : {}),
           };
         }
@@ -1165,7 +1164,7 @@ export const updatePurchaseOrder = async (req, res) => {
       num(
         data.totals
           ?.freightAmount ??
-          data.freightAmount
+        data.freightAmount
       );
 
     const subTotalAmount =
@@ -1207,7 +1206,7 @@ export const updatePurchaseOrder = async (req, res) => {
       Number(
         purchaseSetting
           ?.secondLevelApprovalAmountLimit ||
-          5000
+        5000
       );
 
     if (
@@ -1238,7 +1237,7 @@ export const updatePurchaseOrder = async (req, res) => {
 
       for (
         const user of
-          approvalUsers
+        approvalUsers
       ) {
         await createAlertOnce({
           title:
@@ -1269,9 +1268,9 @@ export const updatePurchaseOrder = async (req, res) => {
 
     let poStatus =
       existingPO.status;
-   let partiallyReceived = Boolean(
-  existingPO.partiallyReceived
-);
+    let partiallyReceived = Boolean(
+      existingPO.partiallyReceived
+    );
 
 
     // =========================================================
@@ -1281,7 +1280,7 @@ export const updatePurchaseOrder = async (req, res) => {
     if (isRevision) {
       poStatus =
         "Pending";
-        partiallyReceived = false;
+      partiallyReceived = false;
     }
 
     // =========================================================
@@ -1300,8 +1299,8 @@ export const updatePurchaseOrder = async (req, res) => {
     // =========================================================
 
     if (!isRevision && existingPO.partiallyReceived) {
-  partiallyReceived = true;
-}
+      partiallyReceived = true;
+    }
 
     // =========================================================
     // CLOSED
@@ -1343,8 +1342,8 @@ export const updatePurchaseOrder = async (req, res) => {
         isRevision
           ? true
           : Boolean(
-              existingPO.isRevised
-            ),
+            existingPO.isRevised
+          ),
 
       // =======================================================
       // APPROVAL
@@ -1358,7 +1357,7 @@ export const updatePurchaseOrder = async (req, res) => {
 
       status:
         poStatus,
-partiallyReceived,
+      partiallyReceived,
       // =======================================================
       // ITEMS
       // =======================================================
@@ -1658,7 +1657,7 @@ partiallyReceived,
 //           return obj;
 //         }) || []
 //       );
-      
+
 
 //       const newItems = normalizeForCompare(
 //         data.items.map((item) => {
@@ -3349,45 +3348,45 @@ export const getAllPurchaseOrders = async (req, res) => {
         .filter(Boolean);
     }
 
-const hasStatusFilter =
-  Array.isArray(statusArray) && statusArray.length > 0;
+    const hasStatusFilter =
+      Array.isArray(statusArray) && statusArray.length > 0;
 
-const hasPartiallyReceived =
-  partiallyReceived !== undefined &&
-  partiallyReceived !== null &&
-  partiallyReceived !== "";
+    const hasPartiallyReceived =
+      partiallyReceived !== undefined &&
+      partiallyReceived !== null &&
+      partiallyReceived !== "";
 
-if (hasStatusFilter) {
-  const statusFilter = {
-    status: { $in: statusArray },
-  };
+    if (hasStatusFilter) {
+      const statusFilter = {
+        status: { $in: statusArray },
+      };
 
-  if (hasPartiallyReceived) {
-    const partialValue =
-      partiallyReceived === true ||
-      partiallyReceived === "true";
+      if (hasPartiallyReceived) {
+        const partialValue =
+          partiallyReceived === true ||
+          partiallyReceived === "true";
 
-    if (partialValue === true) {
-      // Status wale + partially received wale
-      filter.$or = [
-        statusFilter,
-        {
-          partiallyReceived: true,
-        },
-      ];
-    } else {
-      // FALSE => only requested statuses
-      filter.status = { $in: statusArray };
-      filter.partiallyReceived = false;
+        if (partialValue === true) {
+          // Status wale + partially received wale
+          filter.$or = [
+            statusFilter,
+            {
+              partiallyReceived: true,
+            },
+          ];
+        } else {
+          // FALSE => only requested statuses
+          filter.status = { $in: statusArray };
+          filter.partiallyReceived = false;
+        }
+      } else {
+        filter.status = { $in: statusArray };
+      }
+    } else if (hasPartiallyReceived) {
+      filter.partiallyReceived =
+        partiallyReceived === true ||
+        partiallyReceived === "true";
     }
-  } else {
-    filter.status = { $in: statusArray };
-  }
-} else if (hasPartiallyReceived) {
-  filter.partiallyReceived =
-    partiallyReceived === true ||
-    partiallyReceived === "true";
-}
 
     const total =
       await PurchaseOrders.countDocuments(filter);
@@ -4339,162 +4338,162 @@ export const getPurchaseOrdersHistory = async (req, res) => {
     // ============================================
     // STATUS
     // ============================================
-// =========================================================
-// STATUS FILTER
-// =========================================================
+    // =========================================================
+    // STATUS FILTER
+    // =========================================================
 
-const baseStatuses = [
-  "Pending",
-  "Emailed",
-  "Acknowledged",
-  "Completed",
-  "Closed",
-  "Pending Approval",
-];
+    const baseStatuses = [
+      "Pending",
+      "Emailed",
+      "Acknowledged",
+      "Completed",
+      "Closed",
+      "Pending Approval",
+    ];
 
-// console.log("========== STATUS FILTER ==========");
-// console.log("RAW status:", status);
-// console.log("isArray:", Array.isArray(status));
+    // console.log("========== STATUS FILTER ==========");
+    // console.log("RAW status:", status);
+    // console.log("isArray:", Array.isArray(status));
 
-// =========================================================
-// NORMALIZE STATUS
-// =========================================================
+    // =========================================================
+    // NORMALIZE STATUS
+    // =========================================================
 
-let statusArray = [];
+    let statusArray = [];
 
-if (Array.isArray(status)) {
-  statusArray = status;
-} else if (
-  typeof status === "string" &&
-  status.trim() !== ""
-) {
-  statusArray = [status];
-}
+    if (Array.isArray(status)) {
+      statusArray = status;
+    } else if (
+      typeof status === "string" &&
+      status.trim() !== ""
+    ) {
+      statusArray = [status];
+    }
 
-statusArray = statusArray
-  .map((item) => String(item).trim())
-  .filter(Boolean);
+    statusArray = statusArray
+      .map((item) => String(item).trim())
+      .filter(Boolean);
 
-// console.log("statusArray:", statusArray);
+    // console.log("statusArray:", statusArray);
 
-// =========================================================
-// PARTIALLY RECEIVED
-// =========================================================
+    // =========================================================
+    // PARTIALLY RECEIVED
+    // =========================================================
 
-const hasPartiallyReceived =
-  statusArray.includes("Partially Received");
+    const hasPartiallyReceived =
+      statusArray.includes("Partially Received");
 
-// console.log(
-//   "hasPartiallyReceived:",
-//   hasPartiallyReceived
-// );
+    // console.log(
+    //   "hasPartiallyReceived:",
+    //   hasPartiallyReceived
+    // );
 
-// =========================================================
-// NORMAL STATUSES
-// =========================================================
+    // =========================================================
+    // NORMAL STATUSES
+    // =========================================================
 
-const normalStatuses =
-  statusArray.filter(
-    (item) => item !== "Partially Received"
-  );
+    const normalStatuses =
+      statusArray.filter(
+        (item) => item !== "Partially Received"
+      );
 
-// console.log(
-//   "normalStatuses:",
-//   normalStatuses
-// );
+    // console.log(
+    //   "normalStatuses:",
+    //   normalStatuses
+    // );
 
-// =========================================================
-// IMPORTANT:
-// REMOVE ANY OLD STATUS FILTER
-// =========================================================
+    // =========================================================
+    // IMPORTANT:
+    // REMOVE ANY OLD STATUS FILTER
+    // =========================================================
 
-delete filter.status;
-delete filter.partiallyReceived;
+    delete filter.status;
+    delete filter.partiallyReceived;
 
-// =========================================================
-// CASE 1:
-// ONLY PARTIALLY RECEIVED
-// =========================================================
+    // =========================================================
+    // CASE 1:
+    // ONLY PARTIALLY RECEIVED
+    // =========================================================
 
-if (
-  hasPartiallyReceived &&
-  normalStatuses.length === 0
-) {
-  filter.partiallyReceived = true;
+    if (
+      hasPartiallyReceived &&
+      normalStatuses.length === 0
+    ) {
+      filter.partiallyReceived = true;
 
-  // console.log(
-  //   "FILTER => partiallyReceived: true"
-  // );
-}
+      // console.log(
+      //   "FILTER => partiallyReceived: true"
+      // );
+    }
 
-// =========================================================
-// CASE 2:
-// PARTIALLY RECEIVED + NORMAL STATUSES
-// =========================================================
+    // =========================================================
+    // CASE 2:
+    // PARTIALLY RECEIVED + NORMAL STATUSES
+    // =========================================================
 
-else if (
-  hasPartiallyReceived &&
-  normalStatuses.length > 0
-) {
-  filter.$or = [
-    {
-      status: {
+    else if (
+      hasPartiallyReceived &&
+      normalStatuses.length > 0
+    ) {
+      filter.$or = [
+        {
+          status: {
+            $in: normalStatuses,
+          },
+        },
+        {
+          partiallyReceived: true,
+        },
+      ];
+
+      // console.log(
+      //   "FILTER => normal statuses OR partiallyReceived"
+      // );
+    }
+
+    // =========================================================
+    // CASE 3:
+    // ONLY NORMAL STATUSES
+    // =========================================================
+
+    else if (
+      normalStatuses.length > 0
+    ) {
+      filter.status = {
         $in: normalStatuses,
-      },
-    },
-    {
-      partiallyReceived: true,
-    },
-  ];
+      };
 
-  // console.log(
-  //   "FILTER => normal statuses OR partiallyReceived"
-  // );
-}
+      // console.log(
+      //   "FILTER => normal statuses only"
+      // );
+    }
 
-// =========================================================
-// CASE 3:
-// ONLY NORMAL STATUSES
-// =========================================================
+    // =========================================================
+    // CASE 4:
+    // NO STATUS
+    // =========================================================
 
-else if (
-  normalStatuses.length > 0
-) {
-  filter.status = {
-    $in: normalStatuses,
-  };
+    else {
+      filter.$or = [
+        {
+          status: {
+            $in: baseStatuses,
+          },
+        },
+        {
+          partiallyReceived: true,
+        },
+      ];
 
-  // console.log(
-  //   "FILTER => normal statuses only"
-  // );
-}
+      // console.log(
+      //   "FILTER => default statuses OR partiallyReceived"
+      // );
+    }
 
-// =========================================================
-// CASE 4:
-// NO STATUS
-// =========================================================
-
-else {
-  filter.$or = [
-    {
-      status: {
-        $in: baseStatuses,
-      },
-    },
-    {
-      partiallyReceived: true,
-    },
-  ];
-
-  // console.log(
-  //   "FILTER => default statuses OR partiallyReceived"
-  // );
-}
-
-// console.log(
-//   "FINAL FILTER:",
-//   JSON.stringify(filter, null, 2)
-// );
+    // console.log(
+    //   "FINAL FILTER:",
+    //   JSON.stringify(filter, null, 2)
+    // );
 
     // ============================================
     // PERIOD
@@ -4597,7 +4596,7 @@ else {
         poDate: po.poDate,
 
         status: po.status,
-        partiallyReceived:po.partiallyReceived,
+        partiallyReceived: po.partiallyReceived,
         revisionNo: revisionNo,
 
         isRevised: isRevised,
@@ -4785,160 +4784,160 @@ export const getPurchaseOrdersSummary = async (req, res) => {
     const filter = buildFilter({ year, month, supplier, status });
     if (search) filter.poNumber = { $regex: search, $options: "i" };
 
- 
+
 
     const baseStatuses = [
-  "Pending",
-  "Emailed",
-  "Acknowledged",
-  "Completed",
-  "Closed",
-  "Pending Approval",
-];
+      "Pending",
+      "Emailed",
+      "Acknowledged",
+      "Completed",
+      "Closed",
+      "Pending Approval",
+    ];
 
-// console.log("========== STATUS FILTER ==========");
-// console.log("RAW status:", status);
-// console.log("isArray:", Array.isArray(status));
+    // console.log("========== STATUS FILTER ==========");
+    // console.log("RAW status:", status);
+    // console.log("isArray:", Array.isArray(status));
 
-// =========================================================
-// NORMALIZE STATUS
-// =========================================================
+    // =========================================================
+    // NORMALIZE STATUS
+    // =========================================================
 
-let statusArray = [];
+    let statusArray = [];
 
-if (Array.isArray(status)) {
-  statusArray = status;
-} else if (
-  typeof status === "string" &&
-  status.trim() !== ""
-) {
-  statusArray = [status];
-}
+    if (Array.isArray(status)) {
+      statusArray = status;
+    } else if (
+      typeof status === "string" &&
+      status.trim() !== ""
+    ) {
+      statusArray = [status];
+    }
 
-statusArray = statusArray
-  .map((item) => String(item).trim())
-  .filter(Boolean);
+    statusArray = statusArray
+      .map((item) => String(item).trim())
+      .filter(Boolean);
 
-// console.log("statusArray:", statusArray);
+    // console.log("statusArray:", statusArray);
 
-// =========================================================
-// PARTIALLY RECEIVED
-// =========================================================
+    // =========================================================
+    // PARTIALLY RECEIVED
+    // =========================================================
 
-const hasPartiallyReceived =
-  statusArray.includes("Partially Received");
+    const hasPartiallyReceived =
+      statusArray.includes("Partially Received");
 
-// console.log(
-//   "hasPartiallyReceived:",
-//   hasPartiallyReceived
-// );
+    // console.log(
+    //   "hasPartiallyReceived:",
+    //   hasPartiallyReceived
+    // );
 
-// =========================================================
-// NORMAL STATUSES
-// =========================================================
+    // =========================================================
+    // NORMAL STATUSES
+    // =========================================================
 
-const normalStatuses =
-  statusArray.filter(
-    (item) => item !== "Partially Received"
-  );
+    const normalStatuses =
+      statusArray.filter(
+        (item) => item !== "Partially Received"
+      );
 
-// console.log(
-//   "normalStatuses:",
-//   normalStatuses
-// );
+    // console.log(
+    //   "normalStatuses:",
+    //   normalStatuses
+    // );
 
-// =========================================================
-// IMPORTANT:
-// REMOVE ANY OLD STATUS FILTER
-// =========================================================
+    // =========================================================
+    // IMPORTANT:
+    // REMOVE ANY OLD STATUS FILTER
+    // =========================================================
 
-delete filter.status;
-delete filter.partiallyReceived;
+    delete filter.status;
+    delete filter.partiallyReceived;
 
-// =========================================================
-// CASE 1:
-// ONLY PARTIALLY RECEIVED
-// =========================================================
+    // =========================================================
+    // CASE 1:
+    // ONLY PARTIALLY RECEIVED
+    // =========================================================
 
-if (
-  hasPartiallyReceived &&
-  normalStatuses.length === 0
-) {
-  filter.partiallyReceived = true;
+    if (
+      hasPartiallyReceived &&
+      normalStatuses.length === 0
+    ) {
+      filter.partiallyReceived = true;
 
-  // console.log(
-  //   "FILTER => partiallyReceived: true"
-  // );
-}
+      // console.log(
+      //   "FILTER => partiallyReceived: true"
+      // );
+    }
 
-// =========================================================
-// CASE 2:
-// PARTIALLY RECEIVED + NORMAL STATUSES
-// =========================================================
+    // =========================================================
+    // CASE 2:
+    // PARTIALLY RECEIVED + NORMAL STATUSES
+    // =========================================================
 
-else if (
-  hasPartiallyReceived &&
-  normalStatuses.length > 0
-) {
-  filter.$or = [
-    {
-      status: {
+    else if (
+      hasPartiallyReceived &&
+      normalStatuses.length > 0
+    ) {
+      filter.$or = [
+        {
+          status: {
+            $in: normalStatuses,
+          },
+        },
+        {
+          partiallyReceived: true,
+        },
+      ];
+
+      // console.log(
+      //   "FILTER => normal statuses OR partiallyReceived"
+      // );
+    }
+
+    // =========================================================
+    // CASE 3:
+    // ONLY NORMAL STATUSES
+    // =========================================================
+
+    else if (
+      normalStatuses.length > 0
+    ) {
+      filter.status = {
         $in: normalStatuses,
-      },
-    },
-    {
-      partiallyReceived: true,
-    },
-  ];
+      };
 
-  // console.log(
-  //   "FILTER => normal statuses OR partiallyReceived"
-  // );
-}
+      // console.log(
+      //   "FILTER => normal statuses only"
+      // );
+    }
 
-// =========================================================
-// CASE 3:
-// ONLY NORMAL STATUSES
-// =========================================================
+    // =========================================================
+    // CASE 4:
+    // NO STATUS
+    // =========================================================
 
-else if (
-  normalStatuses.length > 0
-) {
-  filter.status = {
-    $in: normalStatuses,
-  };
+    else {
+      filter.$or = [
+        {
+          status: {
+            $in: baseStatuses,
+          },
+        },
+        {
+          partiallyReceived: true,
+        },
+      ];
 
-  // console.log(
-  //   "FILTER => normal statuses only"
-  // );
-}
+      // console.log(
+      //   "FILTER => default statuses OR partiallyReceived"
+      // );
+    }
 
-// =========================================================
-// CASE 4:
-// NO STATUS
-// =========================================================
-
-else {
-  filter.$or = [
-    {
-      status: {
-        $in: baseStatuses,
-      },
-    },
-    {
-      partiallyReceived: true,
-    },
-  ];
-
-  // console.log(
-  //   "FILTER => default statuses OR partiallyReceived"
-  // );
-}
-
-// console.log(
-//   "FINAL FILTER:",
-//   JSON.stringify(filter, null, 2)
-// );
+    // console.log(
+    //   "FINAL FILTER:",
+    //   JSON.stringify(filter, null, 2)
+    // );
 
     const summary = await PurchaseOrders.aggregate([
       { $match: filter },
@@ -4987,11 +4986,7 @@ else {
   }
 };
 
-const buildPickedMap = async () => {
-  const workOrders = await WorkOrder.find({
-    isDeleted: { $ne: true },
-  }).lean();
-
+const buildPickedMap = (workOrders = []) => {
   const pickedMap = new Map();
 
   for (const wo of workOrders) {
@@ -5002,14 +4997,22 @@ const buildPickedMap = async () => {
 
       for (const d of ph.details || []) {
         const mpnId = String(d.mpnId || "");
+
         if (!mpnId) continue;
 
-        const key = `${woId}_${mpnId}`;
-
         const rawQty = Number(d.pickedQty || 0);
+
+        if (rawQty <= 0) continue;
+
         const fromUOM = d.uom || "M";
 
-        const qtyInMeter = convertToBaseUOM(rawQty, fromUOM, "M");
+        const qtyInMeter = convertToBaseUOM(
+          rawQty,
+          fromUOM,
+          "M"
+        );
+
+        const key = `${woId}_${mpnId}`;
 
         pickedMap.set(
           key,
@@ -5021,6 +5024,41 @@ const buildPickedMap = async () => {
 
   return pickedMap;
 };
+
+// const buildPickedMap = async () => {
+//   const workOrders = await WorkOrder.find({
+//     isDeleted: { $ne: true },
+//   }).lean();
+
+//   const pickedMap = new Map();
+
+//   for (const wo of workOrders) {
+//     const woId = String(wo._id);
+
+//     for (const ph of wo.processHistory || []) {
+//       if (ph.process !== "picking") continue;
+
+//       for (const d of ph.details || []) {
+//         const mpnId = String(d.mpnId || "");
+//         if (!mpnId) continue;
+
+//         const key = `${woId}_${mpnId}`;
+
+//         const rawQty = Number(d.pickedQty || 0);
+//         const fromUOM = d.uom || "M";
+
+//         const qtyInMeter = convertToBaseUOM(rawQty, fromUOM, "M");
+
+//         pickedMap.set(
+//           key,
+//           (pickedMap.get(key) || 0) + qtyInMeter
+//         );
+//       }
+//     }
+//   }
+
+//   return pickedMap;
+// };
 
 
 export const getPurchaseShortageList = async (req, res) => {
@@ -5051,69 +5089,69 @@ export const getPurchaseShortageList = async (req, res) => {
       Number(settings?.inventoryAlerts?.normalWeeksLeft ?? 6);
 
 
-     
+
     // =========================================================
     // HELPER: GET COLOR BASED ON NEED DATE
     // =========================================================
 
-const getNeedDateColor = (needDate) => {
-    if (!needDate) {
+    const getNeedDateColor = (needDate) => {
+      if (!needDate) {
         return "#52c41a";
-    }
+      }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    const targetDate = new Date(needDate);
-    targetDate.setHours(0, 0, 0, 0);
+      const targetDate = new Date(needDate);
+      targetDate.setHours(0, 0, 0, 0);
 
-    const daysLeft =
+      const daysLeft =
         (targetDate.getTime() - today.getTime()) /
         (1000 * 60 * 60 * 24);
 
-    const weeksLeft = daysLeft / 7;
+      const weeksLeft = daysLeft / 7;
 
-  
 
-    // Overdue
-    if (weeksLeft <= 0) {
+
+      // Overdue
+      if (weeksLeft <= 0) {
         return "#ff4d4f";
-    }
+      }
 
-    // Sort thresholds from LOWEST to HIGHEST.
-    // If values overlap, the earliest threshold wins.
-    const thresholds = [
+      // Sort thresholds from LOWEST to HIGHEST.
+      // If values overlap, the earliest threshold wins.
+      const thresholds = [
         {
-            weeks: criticalWeeksLeft,
-            color: "#ff4d4f",
-            name: "CRITICAL",
+          weeks: criticalWeeksLeft,
+          color: "#ff4d4f",
+          name: "CRITICAL",
         },
         {
-            weeks: urgentWeeksLeft,
-            color: "#fa8c16",
-            name: "URGENT",
+          weeks: urgentWeeksLeft,
+          color: "#fa8c16",
+          name: "URGENT",
         },
         {
-            weeks: normalWeeksLeft,
-            color: "#faad14",
-            name: "NORMAL",
+          weeks: normalWeeksLeft,
+          color: "#faad14",
+          name: "NORMAL",
         },
-    ]
+      ]
         .filter((x) => Number.isFinite(x.weeks) && x.weeks >= 0)
         .sort((a, b) => a.weeks - b.weeks);
 
-    for (const threshold of thresholds) {
+      for (const threshold of thresholds) {
         if (weeksLeft <= threshold.weeks) {
-           
 
-            return threshold.color;
+
+          return threshold.color;
         }
-    }
+      }
 
-    // console.log("COLOR MATCH: SAFE");
+      // console.log("COLOR MATCH: SAFE");
 
-    return "#52c41a";
-};
+      return "#52c41a";
+    };
 
     // =========================================================
     // 2) FETCH WORK ORDERS
@@ -5122,6 +5160,8 @@ const getNeedDateColor = (needDate) => {
     const workOrders = await WorkOrder.find({
       isDeleted: { $ne: true },
       isProductionComplete: { $ne: true },
+      isInProduction: true,
+      status: "Picking In Progress",
     }).lean();
 
     if (!workOrders.length) {
@@ -5158,7 +5198,7 @@ const getNeedDateColor = (needDate) => {
     // 4) FETCH COSTING ITEMS
     // =========================================================
 
-    const pickedMap = await buildPickedMap();
+    const pickedMap = await buildPickedMap(workOrders);
 
     const costingItems =
       await CostingItems.find({
@@ -5231,7 +5271,7 @@ const getNeedDateColor = (needDate) => {
         poReservedMap.set(
           mpnId,
           (poReservedMap.get(mpnId) || 0) +
-            remainingQty
+          remainingQty
         );
       }
     }
@@ -5307,9 +5347,9 @@ const getNeedDateColor = (needDate) => {
       inventoryMap.set(
         key,
         current +
-          Number(
-            inv.balanceQuantity || 0
-          )
+        Number(
+          inv.balanceQuantity || 0
+        )
       );
     }
 
@@ -5389,7 +5429,7 @@ const getNeedDateColor = (needDate) => {
         const remainingRequired =
           Math.max(
             totalRequired -
-              pickedQty,
+            pickedQty,
             0
           );
 
@@ -5504,7 +5544,7 @@ const getNeedDateColor = (needDate) => {
       const totalRequired =
         Number(
           row.totalRequired ||
-            0
+          0
         );
 
       const reservedPOQty =
@@ -5521,16 +5561,56 @@ const getNeedDateColor = (needDate) => {
       const effectiveRequired =
         totalRequired;
 
+
+      console.log("========================================");
+      console.log("PURCHASE SHORTAGE DEBUG");
+
+      for (const wo of workOrders) {
+        console.log("WO:", {
+          id: String(wo._id),
+          workOrderNo: wo.workOrderNo,
+          status: wo.status,
+          isInProduction: wo.isInProduction,
+          isProductionComplete: wo.isProductionComplete,
+          quantity: wo.quantity,
+          drawingId: String(wo.drawingId),
+        });
+      }
+
+      console.log(
+        "MPN USAGE:",
+        Array.from(mpnUsagePerMpn.values()).map((x) => ({
+          mpnId: x.mpnId,
+          mpn: x.mpn,
+          totalRequired: x.totalRequired,
+          workOrders: x.workOrders,
+        }))
+      );
+
+      console.log(
+        "INVENTORY:",
+        Array.from(inventoryMap.entries())
+      );
+
+      console.log(
+        "PO RESERVED:",
+        Array.from(poReservedMap.entries())
+      );
+
       const finalShortage =
         Math.max(
           effectiveRequired -
-            globalStock -
-            reservedPOQty,
+          globalStock -
+          reservedPOQty,
           0
         );
 
       if (finalShortage <= 0)
         continue;
+
+      if (effectiveRequired <= 0) {
+        continue;
+      }
 
       const lib =
         mpnLibMap.get(
@@ -5555,7 +5635,7 @@ const getNeedDateColor = (needDate) => {
               convertToBaseUOM(
                 Number(
                   wo.requiredQty ||
-                    0
+                  0
                 ),
                 "M",
                 displayUOM
@@ -5566,7 +5646,7 @@ const getNeedDateColor = (needDate) => {
                 Math.max(
                   Number(
                     wo.requiredQty ||
-                      0
+                    0
                   ),
                   0
                 ),
