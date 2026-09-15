@@ -17,6 +17,7 @@ import mongoose from "mongoose";
 import CostingItems from "../models/CostingItem.js";
 import { convertFromMeter, convertQty, convertToBaseUOM, convertToMeter, convertUom } from "../utils/uomController.js";
 import { round } from "../utils/currency.js";
+import Child from "../models/library/Child.js";
 
 
 const calcShortageQty = (balanceQty = 0, incomingQty = 0, demandQty = 0) => {
@@ -346,20 +347,73 @@ export const getInventoryList = async (req, res) => {
     const isViewFiltered = view && view !== "all";
 
     // ✅ Search fix (MPNLibrary -> mpnIds -> Inventory filter)
+    // if (search && String(search).trim()) {
+    //   const s = String(search).trim();
+
+    //   const mpnDocs = await MPN.find({
+    //     $or: [
+    //       { MPN: { $regex: s, $options: "i" } },
+    //       { Description: { $regex: s, $options: "i" } },
+    //       { Manufacturer: { $regex: s, $options: "i" } },
+    //     ],
+    //   })
+    //     .select("_id")
+    //     .lean();
+
+    //   const mpnIds = mpnDocs.map((d) => d._id);
+
+    //   if (!mpnIds.length) {
+    //     return res.json({
+    //       success: true,
+    //       data: [],
+    //       total: 0,
+    //       page: pageNum,
+    //       limit: limitNum,
+    //       totalPages: 0,
+    //     });
+    //   }
+
+    //   filter.mpnId = { $in: mpnIds };
+    // }
+
     if (search && String(search).trim()) {
       const s = String(search).trim();
 
-      const mpnDocs = await MPN.find({
-        $or: [
-          { MPN: { $regex: s, $options: "i" } },
-          { Description: { $regex: s, $options: "i" } },
-          { Manufacturer: { $regex: s, $options: "i" } },
-        ],
+      // 1. Exact Child Part search FIRST
+      const exactChild = await Child.findOne({
+        ChildPartNo: s,
+        isDeleted: { $ne: true },
+        status: "Active",
       })
-        .select("_id")
+        .select("mpn")
         .lean();
 
-      const mpnIds = mpnDocs.map((d) => d._id);
+      let mpnIds = [];
+
+      if (exactChild?.mpn) {
+        // Child Part mila hai
+        // Sirf uske parent MPN ki inventory dikhao
+        mpnIds = [exactChild.mpn];
+
+        console.log("EXACT CHILD FOUND:", s);
+        console.log("PARENT MPN ID:", exactChild.mpn);
+      } else {
+        // 2. Child Part nahi mila -> normal MPN search
+        const mpnDocs = await MPN.find({
+          $or: [
+            { MPN: { $regex: s, $options: "i" } },
+            { Description: { $regex: s, $options: "i" } },
+            { Manufacturer: { $regex: s, $options: "i" } },
+          ],
+        })
+          .select("_id")
+          .lean();
+
+        mpnIds = mpnDocs.map((d) => d._id);
+
+        console.log("MPN SEARCH:", s);
+        console.log("MPN IDS:", mpnIds);
+      }
 
       if (!mpnIds.length) {
         return res.json({
@@ -372,8 +426,14 @@ export const getInventoryList = async (req, res) => {
         });
       }
 
-      filter.mpnId = { $in: mpnIds };
+      // IMPORTANT:
+      // Inventory sirf mpnId se filter hogi
+      filter.mpnId = {
+        $in: mpnIds,
+      };
     }
+
+
 
     // ✅ demand map (ONE TIME)
     const demandMap = await buildDemandMap();
@@ -619,11 +679,14 @@ export const getInventoryList = async (req, res) => {
       const surplusQty = netQty > 0 ? netQty : 0;
 
 
+
+
+
       let status = "In Stock";
 
-      if (netQty < 0) {
+      if (balanceQty <= 0) {
         status = "Out of Stock";
-      } else if (netQty <= 10) {
+      } else if (balanceQty < effectiveDemand) {
         status = "Low Stock";
       }
 
@@ -672,7 +735,7 @@ export const getInventoryList = async (req, res) => {
 
     if (view === "low") {
       transformedData = transformedData.filter(
-        (x) => x.NetQty >= 0 && x.NetQty <= 10
+        (x) => x.NetQty > 0 && x.NetQty <= 10
       );
     }
     if (view === "incoming") transformedData = transformedData.filter((x) => x.IncomingQty > 0);

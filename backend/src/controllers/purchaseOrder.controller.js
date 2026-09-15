@@ -5829,7 +5829,7 @@ export const getPurchaseShortageList = async (req, res) => {
                 ),
                 "M",
                 displayUOM
-              ).toFixed(4),
+              ).toFixed(3),
 
             shortageQty:
               convertToBaseUOM(
@@ -5842,7 +5842,7 @@ export const getPurchaseShortageList = async (req, res) => {
                 ),
                 "M",
                 displayUOM
-              ).toFixed(4),
+              ).toFixed(3),
 
             // ===============================================
             // NEED DATE COLOR
@@ -5884,21 +5884,21 @@ export const getPurchaseShortageList = async (req, res) => {
             totalRequired,
             "M",
             displayUOM
-          ).toFixed(4),
+          ).toFixed(3),
 
         currentStock:
           convertToBaseUOM(
             globalStock,
             "M",
             displayUOM
-          ).toFixed(4),
+          ).toFixed(3),
 
         shortage:
           convertToBaseUOM(
             finalShortage,
             "M",
             displayUOM
-          ).toFixed(4),
+          ).toFixed(3),
 
         shortageByWorkOrders,
       });
