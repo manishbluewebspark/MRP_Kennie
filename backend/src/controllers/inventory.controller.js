@@ -728,38 +728,51 @@ export const getInventoryList = async (req, res) => {
     });
 
 
-    // ✅ view filters
-    if (view === "shortage") {
-      transformedData = transformedData.filter((x) => x.balanceQuantity < 0);
-    }
+  // =========================
+// VIEW FILTERS
+// =========================
 
-    if (view === "low") {
-      transformedData = transformedData.filter(
-        (x) =>
-          Number(x.balanceQuantity) > 0 &&
-          Number(x.balanceQuantity) < Number(x.EffectiveDemandQty)
-      );
-    }
+// Shortage
+// Demand ko fulfill karne ke baad stock negative hai
+if (view === "shortage") {
+  transformedData = transformedData.filter(
+    (x) => Number(x.ShortageQty) > 0
+  );
+}
 
+// Low Stock
+// Balance available hai, lekin effective demand se kam hai
+if (view === "low") {
+  transformedData = transformedData.filter(
+    (x) =>
+      Number(x.balanceQuantity) > 0 &&
+      Number(x.balanceQuantity) < Number(x.EffectiveDemandQty)
+  );
+}
 
-    if (view === "out") {
-      transformedData = transformedData.filter(
-        (x) => Number(x.balanceQuantity) <= 0
-      );
-    }
+// Out of Stock
+// Actual balance zero ya negative hai
+if (view === "out") {
+  transformedData = transformedData.filter(
+    (x) => Number(x.balanceQuantity) <= 0
+  );
+}
 
-    if (view === "incoming") {
-      transformedData = transformedData.filter(
-        (x) => Number(x.IncomingQty) > 0
-      );
-    }
+// Incoming
+// Pending/incoming PO quantity available hai
+if (view === "incoming") {
+  transformedData = transformedData.filter(
+    (x) => Number(x.IncomingQty) > 0
+  );
+}
 
-    // Demand
-    if (view === "demand") {
-      transformedData = transformedData.filter(
-        (x) => Number(x.EffectiveDemandQty) > 0
-      );
-    }
+// Demand
+// Effective demand available hai
+if (view === "demand") {
+  transformedData = transformedData.filter(
+    (x) => Number(x.EffectiveDemandQty) > 0
+  );
+}
 
     // ✅ FIX: total should match returned data set
     if (isViewFiltered) {
