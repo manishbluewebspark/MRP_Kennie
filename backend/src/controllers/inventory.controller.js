@@ -347,73 +347,20 @@ export const getInventoryList = async (req, res) => {
     const isViewFiltered = view && view !== "all";
 
     // ✅ Search fix (MPNLibrary -> mpnIds -> Inventory filter)
-    // if (search && String(search).trim()) {
-    //   const s = String(search).trim();
-
-    //   const mpnDocs = await MPN.find({
-    //     $or: [
-    //       { MPN: { $regex: s, $options: "i" } },
-    //       { Description: { $regex: s, $options: "i" } },
-    //       { Manufacturer: { $regex: s, $options: "i" } },
-    //     ],
-    //   })
-    //     .select("_id")
-    //     .lean();
-
-    //   const mpnIds = mpnDocs.map((d) => d._id);
-
-    //   if (!mpnIds.length) {
-    //     return res.json({
-    //       success: true,
-    //       data: [],
-    //       total: 0,
-    //       page: pageNum,
-    //       limit: limitNum,
-    //       totalPages: 0,
-    //     });
-    //   }
-
-    //   filter.mpnId = { $in: mpnIds };
-    // }
-
     if (search && String(search).trim()) {
       const s = String(search).trim();
 
-      // 1. Exact Child Part search FIRST
-      const exactChild = await Child.findOne({
-        ChildPartNo: s,
-        isDeleted: { $ne: true },
-        status: "Active",
+      const mpnDocs = await MPN.find({
+        $or: [
+          { MPN: { $regex: s, $options: "i" } },
+          { Description: { $regex: s, $options: "i" } },
+          { Manufacturer: { $regex: s, $options: "i" } },
+        ],
       })
-        .select("mpn")
+        .select("_id")
         .lean();
 
-      let mpnIds = [];
-
-      if (exactChild?.mpn) {
-        // Child Part mila hai
-        // Sirf uske parent MPN ki inventory dikhao
-        mpnIds = [exactChild.mpn];
-
-        console.log("EXACT CHILD FOUND:", s);
-        console.log("PARENT MPN ID:", exactChild.mpn);
-      } else {
-        // 2. Child Part nahi mila -> normal MPN search
-        const mpnDocs = await MPN.find({
-          $or: [
-            { MPN: { $regex: s, $options: "i" } },
-            { Description: { $regex: s, $options: "i" } },
-            { Manufacturer: { $regex: s, $options: "i" } },
-          ],
-        })
-          .select("_id")
-          .lean();
-
-        mpnIds = mpnDocs.map((d) => d._id);
-
-        console.log("MPN SEARCH:", s);
-        console.log("MPN IDS:", mpnIds);
-      }
+      const mpnIds = mpnDocs.map((d) => d._id);
 
       if (!mpnIds.length) {
         return res.json({
@@ -426,12 +373,65 @@ export const getInventoryList = async (req, res) => {
         });
       }
 
-      // IMPORTANT:
-      // Inventory sirf mpnId se filter hogi
-      filter.mpnId = {
-        $in: mpnIds,
-      };
+      filter.mpnId = { $in: mpnIds };
     }
+
+    // if (search && String(search).trim()) {
+    //   const s = String(search).trim();
+
+    //   // 1. Exact Child Part search FIRST
+    //   const exactChild = await Child.findOne({
+    //     ChildPartNo: s,
+    //     isDeleted: { $ne: true },
+    //     status: "Active",
+    //   })
+    //     .select("mpn")
+    //     .lean();
+
+    //   let mpnIds = [];
+
+    //   if (exactChild?.mpn) {
+    //     // Child Part mila hai
+    //     // Sirf uske parent MPN ki inventory dikhao
+    //     mpnIds = [exactChild.mpn];
+
+    //     console.log("EXACT CHILD FOUND:", s);
+    //     console.log("PARENT MPN ID:", exactChild.mpn);
+    //   } else {
+    //     // 2. Child Part nahi mila -> normal MPN search
+    //     const mpnDocs = await MPN.find({
+    //       $or: [
+    //         { MPN: { $regex: s, $options: "i" } },
+    //         { Description: { $regex: s, $options: "i" } },
+    //         { Manufacturer: { $regex: s, $options: "i" } },
+    //       ],
+    //     })
+    //       .select("_id")
+    //       .lean();
+
+    //     mpnIds = mpnDocs.map((d) => d._id);
+
+    //     console.log("MPN SEARCH:", s);
+    //     console.log("MPN IDS:", mpnIds);
+    //   }
+
+    //   if (!mpnIds.length) {
+    //     return res.json({
+    //       success: true,
+    //       data: [],
+    //       total: 0,
+    //       page: pageNum,
+    //       limit: limitNum,
+    //       totalPages: 0,
+    //     });
+    //   }
+
+    //   // IMPORTANT:
+    //   // Inventory sirf mpnId se filter hogi
+    //   filter.mpnId = {
+    //     $in: mpnIds,
+    //   };
+    // }
 
 
 
@@ -730,19 +730,34 @@ export const getInventoryList = async (req, res) => {
 
     // ✅ view filters
     if (view === "shortage") {
-      transformedData = transformedData.filter((x) => x.NetQty < 0);
+      transformedData = transformedData.filter((x) => x.balanceQuantity < 0);
     }
 
     if (view === "low") {
       transformedData = transformedData.filter(
-        (x) => x.NetQty > 0 && x.NetQty <= 10
+        (x) =>
+          Number(x.balanceQuantity) > 0 &&
+          Number(x.balanceQuantity) < Number(x.EffectiveDemandQty)
       );
     }
-    if (view === "incoming") transformedData = transformedData.filter((x) => x.IncomingQty > 0);
 
+
+    if (view === "out") {
+      transformedData = transformedData.filter(
+        (x) => Number(x.balanceQuantity) <= 0
+      );
+    }
+
+    if (view === "incoming") {
+      transformedData = transformedData.filter(
+        (x) => Number(x.IncomingQty) > 0
+      );
+    }
+
+    // Demand
     if (view === "demand") {
       transformedData = transformedData.filter(
-        (x) => x.EffectiveDemandQty > 0
+        (x) => Number(x.EffectiveDemandQty) > 0
       );
     }
 

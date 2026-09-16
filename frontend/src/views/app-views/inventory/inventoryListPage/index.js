@@ -656,9 +656,10 @@ const InventoryListPage = () => {
       options: [
         { label: "All", value: "all" },
         { label: "Show Demand Qty Only", value: "demand" },
-        { label: "Show Shortage Only", value: "shortage" },
+        { label: "Show Shortage Qty Only", value: "shortage" },
         { label: "Show Incoming Qty Only", value: "incoming" },
-        { label: "Show Low Stock Only", value: "low" }, // optional
+        { label: "Show Low Stock Qty Only", value: "low" }, // optional
+        { label: "Show Out Of Stock Qty Only", value: "out" }, // optional
       ],
     },
   ];
