@@ -706,6 +706,7 @@ const InventoryListPage = () => {
           handleSearch(value); // ✅ debounce + reset page
         }}
         showExport={true}
+         filterActive={view !== "all"} 
         onExport={handleExport}
         showFilter={activeTab === "inventory_list"}
         onFilter={() => setIsFilterModalOpen(true)}

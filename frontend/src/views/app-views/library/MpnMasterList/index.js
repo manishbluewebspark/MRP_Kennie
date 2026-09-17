@@ -103,6 +103,8 @@ const MpnMasterList = () => {
     const { currencies } = useSelector((state) => state.currency);
     const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 
+    const [filterActive, setFilterActive] = useState(false);   // 👈 naya state
+const [appliedFilters, setAppliedFilters] = useState({});
 
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [deleteMode, setDeleteMode] = useState("single"); // "single" | "bulk"
@@ -361,6 +363,11 @@ const MpnMasterList = () => {
     };
 
     const handleFilterSubmit = async (filterData) => {
+ const hasFilter = !!filterData?.category || !!filterData?.status;
+
+  setFilterActive(hasFilter);
+  setAppliedFilters(hasFilter ? filterData : {});
+
         await fetchMpn({ page: 1, limit: 10, ...filterData });
         setFilterVisible(false);
     };
@@ -532,6 +539,7 @@ const MpnMasterList = () => {
                     handleSearch(value);
                 }}
                 showImport={hasPermission("library.mpn:import")}
+                filterActive={filterActive}
                 onImportLoader={importExcel}
                 onImport={(file) => handleMpnImport(file)}
                 showExport={hasPermission("library.mpn:export")}

@@ -26,6 +26,7 @@ const GlobalTableActions = ({
   exportText = "Export Excel",
   showFilter = false,
   onFilter,
+  filterActive = false,
   filterText = "Filter",
   showUpdatePurchaseHistory = false,
   onUpdatePurchaseHistory,
@@ -175,11 +176,32 @@ const GlobalTableActions = ({
           </Button>
         )}
 
-        {showFilter && (
+        {/* {showFilter && (
           <Button icon={<FilterOutlined />} type="default" onClick={onFilter}>
             {filterText}
           </Button>
-        )}
+        )} */}
+
+        {showFilter && (
+        <Button
+          icon={<FilterOutlined />}
+          type={filterActive ? "primary" : "default"}   // 👈 highlight
+          onClick={onFilter}
+          style={
+            filterActive
+              ? {
+                  background: "#3e79f7",
+                  borderColor: "#3e79f7",
+                  color: "#fff",
+                  fontWeight: 600,
+                }
+              : {}
+          }
+        >
+          {filterText}
+          {/* {filterActive && " ●"} */}
+        </Button>
+      )}
 
         {showProductSetting && (
           <Button icon={<SettingOutlined />} type="default" onClick={onProductSetting}>

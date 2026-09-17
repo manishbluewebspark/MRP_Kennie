@@ -215,6 +215,11 @@ const DeliveryOrderPage = () => {
         onChange: (keys) => setSelectedRowKeys(keys),
     };
 
+    const filterActive =
+  !!filters?.projectNo ||
+  !!filters?.posNo ||
+  !!filters?.drawingNo;
+
     const handleDeleteSelected = () => {
         if (!selectedRowKeys.length) {
             message.warning("Please select at least one work order");
@@ -867,6 +872,7 @@ const DeliveryOrderPage = () => {
     const handleFilterSubmit = async (filterData) => {
         // console.log("---------filterData", filterData);
 
+        
         // ✅ save filters in state
         setFilters(filterData);
         setFilterVisible(false)
@@ -945,6 +951,7 @@ const DeliveryOrderPage = () => {
                     handleSearch(value);
                 }}
                 showImport={false}
+                  filterActive={filterActive} 
                 // importText="Import work order"
                 exportText="Export"
                 // onImport={(file) => handleImport(file)}

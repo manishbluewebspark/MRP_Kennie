@@ -67,6 +67,8 @@ const MTOList = () => {
   const [limit, setLimit] = useState(10);
   const [pagination, setPagination] = useState(null)
 
+  const [filterActive, setFilterActive] = useState(false);   // 👈 naya state
+  const [appliedFilters, setAppliedFilters] = useState({});
 
   useEffect(() => {
     fetchData();
@@ -96,6 +98,21 @@ const MTOList = () => {
     try {
       setFilterVisible(false);
       // console.log("-------filter", filterData);
+
+
+      const hasFilter =
+        !!filterData?.drawingName ||
+        !!filterData?.project ||
+        !!filterData?.customer ||
+        !!filterData?.quoteStatus ||
+        !!filterData?.lastEditedBy ||
+        (Array.isArray(filterData?.drawingDateRange) &&
+          filterData.drawingDateRange.some(Boolean)) ||
+        (filterData?.min != null && filterData?.min !== "") ||
+        (filterData?.max != null && filterData?.max !== "");
+
+      setFilterActive(hasFilter);
+      setAppliedFilters(hasFilter ? filterData : {});
 
       // prepare params
       const queryParams = {};
@@ -478,8 +495,27 @@ const MTOList = () => {
                 allowClear
               />
             </Col>
-            <Col>
+            {/* <Col>
               <Button icon={<FilterOutlined />} onClick={() => setFilterVisible(true)}>Filter</Button>
+            </Col> */}
+            <Col>
+              <Button
+                icon={<FilterOutlined />}
+                type={filterActive ? "primary" : "default"}
+                onClick={() => setFilterVisible(true)}
+                style={
+                  filterActive
+                    ? {
+                      background: "#3e79f7",
+                      borderColor: "#3e79f7",
+                      color: "#fff",
+                      fontWeight: 600,
+                    }
+                    : {}
+                }
+              >
+                Filter
+              </Button>
             </Col>
             <Col>
               {hasPermission('sales.mto:create_edit_delete') && (<Button type="primary" icon={<PlusOutlined />} onClick={() => setQuoteModalVisible(true)}>

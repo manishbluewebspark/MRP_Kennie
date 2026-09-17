@@ -922,6 +922,11 @@ const ChildPartLibrary = () => {
     [categories, mpnOptions]
   );
 
+  const filterActive =
+  !!filters?.category ||
+  !!filters?.mpn ||
+  !!filters?.status;
+  
   return (
     <div>
       {/* Header */}
@@ -944,6 +949,7 @@ const ChildPartLibrary = () => {
         onSearch={onSearchChange}
         showImport={hasPermission("library.child:import")}
         onImport={handleMpnImport}
+        filterActive={filterActive}
         onImportLoader={importExcel}
         showExport={hasPermission("library.child:export")}
         onExport={handleExport}

@@ -29,7 +29,7 @@ const DeliveryOrderPage = () => {
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-
+const [appliedFilters, setAppliedFilters] = useState({});
   // local edit state for DO No. and Delivered
   const [doMap, setDoMap] = useState({}); // { [workOrderId]: "DO-123" }
   const [deliveredMap, setDeliveredMap] = useState({}); // { [workOrderId]: true/false }
@@ -512,9 +512,16 @@ const DeliveryOrderPage = () => {
       customer: data?.customer || null,
       project: data?.project || null,
     };
+
+      setAppliedFilters(nextFilters); 
     setIsFilterModalOpen(false);
     fetchWorkOrders({ page: 1, limit, search, filters: nextFilters });
   };
+
+  const filterActive =
+  !!appliedFilters?.drawingDate ||
+  !!appliedFilters?.customer ||
+  !!appliedFilters?.project;
 
   return (
     <div>
@@ -527,6 +534,7 @@ const DeliveryOrderPage = () => {
         </div>
       </div>
 
+
       <GlobalTableActions
         showSearch
         onSearch={(val) => {
@@ -536,6 +544,7 @@ const DeliveryOrderPage = () => {
         showExport={hasPermission("work_order.delivery_order:export")}
         showExportWord={hasPermission("work_order.delivery_order:export")}
         onExportWord={handleExportWork}
+        filterActive={filterActive}
         onExport={handleExportExcel}
         onExportPDF={handleExportPDF}
         showExportPDF={hasPermission("work_order.delivery_order:export")}

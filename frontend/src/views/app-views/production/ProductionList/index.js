@@ -720,6 +720,11 @@ const ProductionPage = () => {
         });
     };
 
+    const filterActive =
+  !!filters?.projectNo ||
+  !!filters?.posNo ||
+  !!filters?.drawingNo;
+
     return (
         <div>
             {/* Header Section */}
@@ -760,6 +765,7 @@ const ProductionPage = () => {
                 showImport={false}
                 // importText="Import work order"
                 exportText="Export"
+                filterActive={filterActive}
                 // onImport={(file) => handleImport(file)}
                 showExport={hasPermission("work_order.work_order_managment:export")}
                 onExport={() => { setExportModalOpen(true) }}

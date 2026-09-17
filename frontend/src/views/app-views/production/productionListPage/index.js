@@ -1275,6 +1275,12 @@ const SkillLevelCostingList = () => {
     }
   };
 
+  const filterActive =
+  !!filters?.projectNo ||
+  !!filters?.poNo ||
+  !!filters?.needDate ||
+  !!filters?.customerId;
+
   return (
     <div>
       {/* Header */}
@@ -1356,14 +1362,24 @@ const SkillLevelCostingList = () => {
               <Select.Option value="other">Others</Select.Option>
             </Select>
 
-            <Button
-              icon={<FilterOutlined />}
-              className="ml-4"
-              type="default"
-              onClick={() => setFilterVisible(true)}
-            >
-              Filter
-            </Button>
+           <Button
+  icon={<FilterOutlined />}
+  className="ml-4"
+  type={filterActive ? "primary" : "default"}
+  onClick={() => setFilterVisible(true)}
+  style={
+    filterActive
+      ? {
+          background: "#3e79f7",
+          borderColor: "#3e79f7",
+          color: "#fff",
+          fontWeight: 600,
+        }
+      : {}
+  }
+>
+  Filter
+</Button>
           </Col>
         )}
       </Row>
